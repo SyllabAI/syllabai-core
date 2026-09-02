@@ -1,0 +1,133 @@
+spring:
+  application:
+    name: syllabai-core
+
+  # Providers are constructed manually in LlmChainConfig (§26.1 chain, §26 abstraction).
+  # Disable ALL Spring AI autoconfiguration so missing API keys never fail startup.
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.image.GoogleGenAiImageConnectionAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.image.GoogleGenAiImageAutoConfiguration
+
+  datasource:
+    url: ${SYLLABAI_DATABASE_URL:jdbc:postgresql://localhost:5432/syllabai}
+    username: ${SYLLABAI_DATABASE_USERNAME:syllabai}
+    password: ${SYLLABAI_DATABASE_PASSWORD:syllabai}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate       # Flyway owns the schema; Hibernate only verifies
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /api/v1/api-docs
+  swagger-ui:
+    path: /api/v1/docs
+
+syllabai:
+  security:
+    jwt-secret: ${SYLLABAI_JWT_SECRET:}          # required; blank fails fast with a clear message
+    jwt-ttl: PT12H
+    cors-allowed-origins: ${SYLLABAI_CORS_ORIGINS:http://localhost:3000,https://syllabai.vercel.app}
+
+  llm:
+    groq:
+      enabled: ${SYLLABAI_GROQ_ENABLED:true}
+      api-key: ${SYLLABAI_GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai
+      model: llama-3.3-70b-versatile
+    gemini:
+      enabled: ${SYLLABAI_GEMINI_ENABLED:true}
+      api-key: ${SYLLABAI_GEMINI_API_KEY:}
+      model: gemini-2.5-flash
+    openrouter:
+      enabled: ${SYLLABAI_OPENROUTER_ENABLED:true}
+      api-key: ${SYLLABAI_OPENROUTER_API_KEY:}
+      base-url: https://openrouter.ai/api/v1
+      model: meta-llama/llama-3.3-70b-instruct:free
+    chain:
+      timeout-seconds: 30
+      cooldown-seconds: 60
+      failure-threshold: 3
+
+  learner:
+    bkt:
+      l0: 0.1          # Paper B §3.3 Cycle-1 research design
+      slip: 0.1
+      guess: 0.25
+      learn-rate: 0.1
+    decay:
+      tau-low-days: 30
+      tau-mid-days: 90
+      tau-high-days: 365
+      low-band-ceiling: 0.45
+      high-band-floor: 0.8
+      floor: 0.1
+      review-below: 0.6
+    bdt:
+      prior: 0.3
+      select-if-held: 0.7
+      select-if-not-held: 0.1
+      active-threshold: 0.5
+    decay-job:
+      enabled: false   # enable in production profile (nightly 03:00)
+      cron: "0 0 3 * * *"
+      idle-grace-period: 48h
+
+  storage:
+    type: ${SYLLABAI_STORAGE_TYPE:local}
+    local:
+      base-dir: ${SYLLABAI_STORAGE_DIR:./data/storage}
+    r2:
+      account-id: ${SYLLABAI_R2_ACCOUNT_ID:}
+      access-key-id: ${SYLLABAI_R2_ACCESS_KEY_ID:}
+      secret-access-key: ${SYLLABAI_R2_SECRET_ACCESS_KEY:}
+      bucket: ${SYLLABAI_R2_BUCKET:syllabai}
+      region: auto
+
+  seed:
+    demo-users:
+      enabled: false   # local profile only
+
+logging:
+  level:
+    com.syllabai: INFO

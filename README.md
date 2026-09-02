@@ -12,7 +12,8 @@ SyllabAI backend — the **Java modular monolith**. This is where the course pro
 - Spring Security (JWT + RBAC), JPA/Hibernate + native SQL, Flyway migrations
 - **Neon PostgreSQL + pgvector** (single data substrate: relational + KG graph tables + vectors)
 - Free-LLM chain behind `LlmProvider`: Groq `llama-3.3-70b-versatile` → Gemini 2.5 Flash → OpenRouter
-- In-process PDF extraction: `opendataloader-pdf` (Apache-2.0, Maven Central)
+- In-process PDF extraction: `opendataloader-pdf` (Apache-2.0, Maven Central) — lands in `syllabai-parser` / Wave 1
+- Object storage behind `ObjectStorage`: local dev filesystem / **Cloudflare R2** (S3 SDK)
 - Deploy: Docker on **Render free tier** (no state on local filesystem; cold starts accepted)
 
 ## Modules (packages, not microservices — ADR-012)
@@ -20,26 +21,92 @@ SyllabAI backend — the **Java modular monolith**. This is where the course pro
 ```text
 com.syllabai
 ├── identity          (auth, users, RBAC, consent)
-├── curriculum        (boards, subjects, units, topics, versions)
+├── curriculum        (boards, subjects, versions)
 ├── knowledge         (KG nodes/edges, misconceptions, traversal)
-├── content           (documents, canonical format, provenance)
-├── assessment        (question bank, mark schemes, attempts, evidence)
-├── smartmark         (AI marking, kappa gate, human overrides)
+├── assessment        (question bank, attempts, evidence contract)
+├── smartmark         (AI marking, kappa gate — Wave 2, placeholder)
 ├── learner           (BKT, BDT, Ebbinghaus decay, learner state)
-├── tutor             (KA-RAG orchestration, tutor policy, citations)
-├── diagnostic        (struggle inference, interventions)
-├── recommendation    (next-best-step)
-├── teacher           (class views, review queues)
-├── research          (learning-log telemetry, experiments, registries)
+├── tutor             (KA-RAG orchestration — Wave 3, placeholder)
+├── diagnostic        (struggle inference — Wave 3, placeholder)
+├── recommendation    (next-best-step — Wave 3, placeholder)
+├── teacher           (class views — Wave 4, placeholder)
+├── research          (learning-log telemetry, model/prompt/experiment registries)
 └── infrastructure    (LLM/vector/graph/storage adapters, jobs)
 ```
 
 Each module owns its application services, domain objects, ports, and persistence adapters. Cross-module communication via domain events and contracts — never direct repository access.
 
+## Implemented so far (Wave 0 + science core)
+
+| Task | Status | What |
+|------|--------|------|
+| T-001 | ✅ | Spring Boot 4.1.1 / Java 25 / Spring AI 2.0.1 skeleton, 13-module package map |
+| T-002 | ✅ | Flyway V1–V7 (identity, KG, assessment, learner, research + Edexcel IAL Chemistry seed), docker-compose Postgres 17 + pgvector |
+| T-003 | ✅ | Spring Security JWT (register/login/me), RBAC roles, CORS |
+| T-004 | ✅ | `/api/v1` DTO boundaries, springdoc OpenAPI, global error handling |
+| T-006 | ✅ | GitHub Actions CI (build + test, JDK 25) |
+| T-007 | ✅ | `ObjectStorage` port + local + R2 (S3 SDK) adapters |
+| T-012 | ✅ | `KnowledgeGraphRepository` with recursive-CTE prerequisite closure + tree + misconception traversal |
+| T-014 | ✅ | `AssessmentEvidenceRecordedEvent` evidence contract (Observer: learner model + telemetry react) |
+| T-015 | ✅ | BKT engine (L₀=0.1, slip=0.1, guess=0.25, T=0.1 — config + model registry versioned) |
+| T-016 | ✅ (v0) | Learner state aggregate: skill_states + misconception_states + read model with decay-adjusted mastery |
+| T-017 | ✅ (v0) | BDT misconception engine driven by distractor evidence (prior 0.3) |
+| T-018 | ✅ | Ebbinghaus decay service (τ=30/90/365 by band, floor, review threshold) + nightly `@Scheduled` job |
+| T-020 | ✅ (v0) | Append-only telemetry event store (JSONB) + model/prompt/experiment registries |
+| T-023 | ✅ (core) | `LlmProvider` port + Spring AI adapters + `FailoverLlmChain` (Groq→Gemini→OpenRouter, health/cooldown, admin health endpoint) |
+
+## Quickstart (local)
+
+```bash
+# 1. database
+docker compose up -d            # Postgres 17 + pgvector on :5432
+
+# 2. config
+export SYLLABAI_JWT_SECRET="$(openssl rand -base64 48)"
+# optional LLM keys (app boots fine without them):
+export SYLLABAI_GROQ_API_KEY=... SYLLABAI_GEMINI_API_KEY=...
+
+# 3. run (local profile = demo users + dev jwt secret)
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+# → demo users: teacher@syllabai.dev / teacher-demo-1234, student@syllabai.dev / student-demo-1234
+```
+
+### API tour
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"student@syllabai.dev","password":"student-demo-1234"}' | jq -r .accessToken)
+
+# curriculum + knowledge graph
+curl -s localhost:8080/api/v1/curriculum/subjects | jq
+curl -s -H "Authorization: Bearer $TOKEN" \
+  localhost:8080/api/v1/knowledge/nodes/20000000-0000-0000-0000-000000000001/tree?includeMisconceptions=true | jq
+
+# quiz flow: list questions → submit attempt → learner state
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/questions | jq
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  localhost:8080/api/v1/attempts \
+  -d '{"questionId":"40000000-0000-0000-0000-000000000001","chosenOptionId":"41000000-0000-0000-0000-000000000001","responseTimeMs":42000,"confidence":2,"selfDoubtFlag":true,"timedCondition":false}' | jq
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/learners/me/state | jq
+
+# OpenAPI
+open http://localhost:8080/api/v1/docs
+```
+
+Submitting the *wrong* option on question 1 picks the distractor tagged with the
+moles/grams misconception — watch `misconceptionStates.probability` jump from the
+0.3 prior in `/learners/me/state`, and BKT mastery drop on the topic.
+
+## Tests
+
+```bash
+mvn test    # 32 unit tests: BKT math, BDT Bayes, decay formula/bands/floor, chain failover, storage
+```
+
+Integration tests (Testcontainers PostgreSQL) land with T-002 follow-up; CI runs on
+GitHub Actions (`.github/workflows/ci.yml`).
+
 ## OOP expectations (graded course project)
 
 Strategy (retrieval, interventions, assessment), Factory/Provider (LLM/embedding/parser adapters), Observer (telemetry events), Adapter (external engines), Repository, Specification. Meaningful responsibilities only — no pattern theater. See Master Spec §23.
-
-## Status
-
-Not started. Bootstrap task: **T-001** in the main repo's `TODO.md` (Wave 0).

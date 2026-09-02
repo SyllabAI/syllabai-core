@@ -1,0 +1,11 @@
+# Production profile (Render): nightly decay job on, stricter logging.
+syllabai:
+  learner:
+    decay-job:
+      enabled: true
+  storage:
+    type: ${SYLLABAI_STORAGE_TYPE:r2}
+
+logging:
+  level:
+    com.syllabai: INFO

@@ -1,0 +1,17 @@
+# Local development profile: docker-compose Postgres + demo data.
+spring:
+  flyway:
+    clean-disabled: false
+
+syllabai:
+  security:
+    # DEV ONLY — replace with a generated secret in any real deployment.
+    jwt-secret: dev-only-secret-change-me-0123456789abcdef0123456789abcdef
+  seed:
+    demo-users:
+      enabled: true
+
+logging:
+  level:
+    com.syllabai: DEBUG
+    org.hibernate.SQL: DEBUG
