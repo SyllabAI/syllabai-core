@@ -55,10 +55,17 @@ public class SpringAiChatModelAdapter implements LlmProvider {
             Usage usage = response.getMetadata().getUsage();
             long latencyMs = (System.nanoTime() - started) / 1_000_000;
             health.recordSuccess();
+            // report the model actually used: an explicit request/pin model overrides
+            // the provider default (§19 reproducibility — telemetry must not claim the
+            // default model when an experiment pin routed to a specific one)
+            String effectiveModel = (request.model() != null && !request.model().isBlank())
+                    ? request.model()
+                    : (chatModel.getDefaultOptions() == null ? null
+                            : chatModel.getDefaultOptions().getModel());
             return new LlmResponse(
                     text,
                     providerName,
-                    chatModel.getDefaultOptions() == null ? null : chatModel.getDefaultOptions().getModel(),
+                    effectiveModel,
                     latencyMs,
                     usage == null ? null : usage.getPromptTokens(),
                     usage == null ? null : usage.getCompletionTokens());

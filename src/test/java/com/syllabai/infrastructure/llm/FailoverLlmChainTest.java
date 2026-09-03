@@ -204,7 +204,7 @@ class FailoverLlmChainTest {
 
     @Test
     @DisplayName("a pinned model overrides the provider default for the pinned request")
-    void pinnedModelOverridesRequestModel() {
+    void pinnedModelOverridesProviderDefault() {
         FakeProvider groq = new FakeProvider("groq", true, null);
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
                 id -> Optional.of(new ExperimentPin(id, "groq", "llama-3.3-70b-versatile-pinned")));
@@ -213,12 +213,25 @@ class FailoverLlmChainTest {
     }
 
     @Test
-    @DisplayName("an explicit request model is not replaced by the pin's model")
-    void explicitRequestModelWins() {
+    @DisplayName("§26.1 precedence: a caller-supplied model can NEVER override the experiment pin's model")
+    void pinnedModelBeatsCallerModel() {
         FakeProvider groq = new FakeProvider("groq", true, null);
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
                 id -> Optional.of(new ExperimentPin(id, "groq", "pinned-model")));
-        chain.generate(new LlmRequest("system", "user", null, null, "explicit-model", "exp-1"));
-        assertThat(groq.lastRequest().model()).isEqualTo("explicit-model");
+        // caller tries to drift the experiment to a different model — must be ignored
+        chain.generate(new LlmRequest("system", "user", null, null, "caller-model", "exp-1"));
+        assertThat(groq.lastRequest().model())
+                .as("experiment pin > caller model > provider default (§26.1)")
+                .isEqualTo("pinned-model");
+    }
+
+    @Test
+    @DisplayName("a pin without a model lets the caller model pass through (caller > provider default)")
+    void callerModelAppliesWhenPinHasNoModel() {
+        FakeProvider groq = new FakeProvider("groq", true, null);
+        FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
+                id -> Optional.of(new ExperimentPin(id, "groq", null)));
+        chain.generate(new LlmRequest("system", "user", null, null, "caller-model", "exp-1"));
+        assertThat(groq.lastRequest().model()).isEqualTo("caller-model");
     }
 }

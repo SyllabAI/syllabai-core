@@ -8,7 +8,10 @@ package com.syllabai.infrastructure.llm;
  * @param temperature   sampling temperature; null = provider default
  * @param maxTokens     response token cap; null = provider default
  * @param model         explicit model override; null = the provider's configured
- *                     default. Set automatically when an experiment pin names a model.
+ *                     default. For <em>experiment</em> requests a pin that names a
+ *                     model always replaces this value (§26.1 precedence:
+ *                     experiment pin &gt; caller model &gt; provider default);
+ *                     without a pinned model this value is used as-is.
  * @param experimentId  when set, the chain must pin to the provider/model registered
  *                     for that experiment — no silent drift mid-experiment (§26.1);
  *                     unpinned experiment ids fail loudly

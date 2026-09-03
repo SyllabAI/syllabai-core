@@ -13,12 +13,19 @@ import java.util.Map;
  * <p>Behaviour: iterate the chain in order; skip providers that are unconfigured or
  * in cooldown; on failure record health and continue; if every provider fails, throw.</p>
  *
- * <p>Per-experiment pinning (§26.1 provenance): when the request carries an
- * experiment id, the pin is resolved through the injected {@link ExperimentPinResolver}.
+ * <p>Per-experiment pinning (§26.1 provenance, §19 reproducibility): when the request
+ * carries an experiment id, the pin is resolved through the injected {@link ExperimentPinResolver}.
  * A pinned experiment is served <em>exclusively</em> by its pinned provider — there is
  * no failover, even when the pinned provider fails — and a request whose experiment
  * id resolves to no pin at all fails loudly with a clear message. Silent
  * provider/model drift mid-experiment would poison the research record.</p>
+ *
+ * <p>Model precedence for experiment requests is <strong>experiment pin &gt; caller
+ * model &gt; provider default</strong>: when a pin names an exact model, that model is
+ * used even if the caller supplied a different one — a caller must never be able to
+ * silently override a registered experiment's model. When the pin names no model,
+ * the caller's model (if any) applies, else the provider default. Ordinary
+ * non-experiment requests are unaffected (caller model &gt; provider default).</p>
  */
 public class FailoverLlmChain implements LlmProvider {
 
@@ -50,7 +57,10 @@ public class FailoverLlmChain implements LlmProvider {
         if (request.experimentId() != null && !request.experimentId().isBlank()) {
             ExperimentPin pin = resolvePin(request.experimentId());
             LlmProvider pinned = requirePinned(request.experimentId(), pin);
-            if (pin.model() != null && !pin.model().isBlank() && request.model() == null) {
+            // §26.1 research pinning: experiment pin > caller model > provider default.
+            // A pin that names a model always wins over a caller-supplied model — otherwise
+            // any caller could silently drift a registered experiment off its model.
+            if (pin.model() != null && !pin.model().isBlank()) {
                 effectiveRequest = request.withModel(pin.model());
             }
             candidates = List.of(pinned);
