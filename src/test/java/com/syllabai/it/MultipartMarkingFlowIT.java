@@ -159,24 +159,29 @@ class MultipartMarkingFlowIT {
                         List.of(new PartAnswerRequest(partId, "the correct content")),
                         30000L, 4, false, true));
         assertThat(timed.markingState()).isEqualTo("PENDING");
-        Attempt timedAttempt = attempts.findById(timed.attemptId()).orElseThrow();
-        assertThat(timedAttempt.evidenceEmitted()).isFalse();
+        assertThat(attempts.findById(timed.attemptId()).orElseThrow()
+                .evidenceEmitted()).isFalse();
+        // NOTE: each service call runs in its own transaction; always re-fetch
+        // entities before asserting (in-memory instances go stale).
 
         // 4. smart mark without LLM keys fails honestly — never fabricates marks
-        Answer timedAnswer = answers.findByAttemptIdOrderByQuestionPartId(
-                timedAttempt.id()).get(0);
-        SmartMarkResult failed = smartMarkService.markAnswer(timedAnswer.id());
+        UUID timedAnswerId = answers.findByAttemptIdOrderByQuestionPartId(
+                timed.attemptId()).get(0).id();
+        SmartMarkResult failed = smartMarkService.markAnswer(timedAnswerId);
         assertThat(failed.validationPassed()).isFalse();
         assertThat(failed.failureReason()).isEqualTo("PROVIDER_UNAVAILABLE");
-        assertThat(timedAnswer.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+        assertThat(answers.findWithPartAndAttempt(timedAnswerId).orElseThrow()
+                .markingState()).isEqualTo(Answer.MarkingState.PENDING);
 
         // 5. human mark: authoritative, fires evidence exactly once, BKT reacts
         Map<String, Integer> full = new LinkedHashMap<>();
         full.put(scheme.points().get(0).id().toString(), 1);
-        teacherMarkingService.recordHumanMark(timedAnswer.id(), marker, 2, full, "earned");
-        assertThat(timedAttempt.evidenceEmitted()).isTrue();
-        assertThat(timedAttempt.marksAwarded()).isEqualTo(2);
-        assertThat(timedAnswer.markingState()).isEqualTo(Answer.MarkingState.HUMAN_MARKED);
+        teacherMarkingService.recordHumanMark(timedAnswerId, marker, 2, full, "earned");
+        Attempt markedAttempt = attempts.findById(timed.attemptId()).orElseThrow();
+        assertThat(markedAttempt.evidenceEmitted()).isTrue();
+        assertThat(markedAttempt.marksAwarded()).isEqualTo(2);
+        assertThat(answers.findWithPartAndAttempt(timedAnswerId).orElseThrow()
+                .markingState()).isEqualTo(Answer.MarkingState.HUMAN_MARKED);
         SkillState state = skillStates
                 .findByLearnerIdAndNodeId(learner, question.primaryTopicNodeId()).orElseThrow();
         assertThat(state.attempts()).isEqualTo(1);
@@ -187,19 +192,20 @@ class MultipartMarkingFlowIT {
                 new StructuredSubmitRequest(question.id(),
                         List.of(new PartAnswerRequest(partId, "")),
                         20000L, 2, true, false));
-        Answer blankAnswer = answers.findByAttemptIdOrderByQuestionPartId(
-                untimed.attemptId()).get(0);
-        SmartMarkResult blankRun = smartMarkService.markAnswer(blankAnswer.id());
+        UUID blankAnswerId = answers.findByAttemptIdOrderByQuestionPartId(
+                untimed.attemptId()).get(0).id();
+        SmartMarkResult blankRun = smartMarkService.markAnswer(blankAnswerId);
         assertThat(blankRun.validationPassed()).isTrue();
         assertThat(blankRun.marksAwarded()).isZero();
-        assertThat(blankAnswer.markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
-        Attempt untimedAttempt = attempts.findById(untimed.attemptId()).orElseThrow();
-        assertThat(untimedAttempt.evidenceEmitted()).isFalse();   // gate closed
+        assertThat(answers.findWithPartAndAttempt(blankAnswerId).orElseThrow()
+                .markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
+        assertThat(attempts.findById(untimed.attemptId()).orElseThrow()
+                .evidenceEmitted()).isFalse();   // gate closed
 
         // 7. human mark on the blank answer + κ evaluation (gate passes, κ = 1)
         Map<String, Integer> empty = new LinkedHashMap<>();
         empty.put(scheme.points().get(0).id().toString(), 0);
-        teacherMarkingService.recordHumanMark(blankAnswer.id(), marker, 0, empty, "blank");
+        teacherMarkingService.recordHumanMark(blankAnswerId, marker, 0, empty, "blank");
         SmartMarkAgreementEvaluation evaluation =
                 teacherMarkingService.evaluateAgreement(null, marker);
         assertThat(evaluation.sampleSize()).isGreaterThanOrEqualTo(1);
@@ -216,11 +222,12 @@ class MultipartMarkingFlowIT {
                 new StructuredSubmitRequest(question.id(),
                         List.of(new PartAnswerRequest(partId, "")),
                         15000L, 3, false, true));
-        Answer releasedAnswer = answers.findByAttemptIdOrderByQuestionPartId(
-                released.attemptId()).get(0);
-        SmartMarkResult authoritative = smartMarkService.markAnswer(releasedAnswer.id());
+        UUID releasedAnswerId = answers.findByAttemptIdOrderByQuestionPartId(
+                released.attemptId()).get(0).id();
+        SmartMarkResult authoritative = smartMarkService.markAnswer(releasedAnswerId);
         assertThat(authoritative.validationPassed()).isTrue();
-        assertThat(releasedAnswer.markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
+        assertThat(answers.findWithPartAndAttempt(releasedAnswerId).orElseThrow()
+                .markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
         assertThat(attempts.findById(released.attemptId()).orElseThrow()
                 .evidenceEmitted()).isTrue();
 
