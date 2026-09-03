@@ -1,5 +1,6 @@
 package com.syllabai.learner;
 
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.bkt.BktEngine;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
@@ -37,6 +38,7 @@ public class LearnerModelService {
 
     private final SkillStateRepository skillStates;
     private final MisconceptionStateRepository misconceptionStates;
+    private final AttemptRepository attempts;
     private final BktEngine bktEngine;
     private final BdtEngine bdtEngine;
     private final LearnerProperties properties;
@@ -44,12 +46,14 @@ public class LearnerModelService {
 
     public LearnerModelService(SkillStateRepository skillStates,
                                MisconceptionStateRepository misconceptionStates,
+                               AttemptRepository attempts,
                                BktEngine bktEngine,
                                BdtEngine bdtEngine,
                                LearnerProperties properties,
                                ApplicationEventPublisher events) {
         this.skillStates = skillStates;
         this.misconceptionStates = misconceptionStates;
+        this.attempts = attempts;
         this.bktEngine = bktEngine;
         this.bdtEngine = bdtEngine;
         this.properties = properties;
@@ -61,6 +65,7 @@ public class LearnerModelService {
     public void onAssessmentEvidence(AssessmentEvidenceRecordedEvent event) {
         updateMastery(event);
         updateMisconceptions(event);
+        updateFluencyGaps(event);
     }
 
     private void updateMastery(AssessmentEvidenceRecordedEvent event) {
@@ -113,6 +118,36 @@ public class LearnerModelService {
             misconceptionStates.saveAll(toSave);
             log.debug("BDT updated for learner {} on {} misconception(s): correct={}",
                     event.learnerId(), toSave.size(), event.correctness());
+        }
+    }
+
+    /**
+     * Paper B §16 procedural fluency gap per affected node: untimed accuracy −
+     * timed accuracy over <em>graded</em> attempts; null until both conditions
+     * are observed. Derived metric — BKT mastery stays condition-agnostic.
+     */
+    private void updateFluencyGaps(AssessmentEvidenceRecordedEvent event) {
+        for (UUID node : event.topicNodeIds()) {
+            skillStates.findByLearnerIdAndNodeId(event.learnerId(), node).ifPresent(state -> {
+                Double timedAccuracy = null;
+                Double untimedAccuracy = null;
+                for (Object[] row : attempts.aggregateGradedCorrectnessByCondition(
+                        event.learnerId(), node)) {
+                    boolean timed = (Boolean) row[0];
+                    long total = ((Number) row[1]).longValue();
+                    long correct = ((Number) row[2]).longValue();
+                    double accuracy = total == 0 ? 0.0 : correct / (double) total;
+                    if (timed) {
+                        timedAccuracy = accuracy;
+                    } else {
+                        untimedAccuracy = accuracy;
+                    }
+                }
+                Double gap = (timedAccuracy == null || untimedAccuracy == null)
+                        ? null : untimedAccuracy - timedAccuracy;
+                state.setProceduralFluencyGap(gap);
+                skillStates.save(state);
+            });
         }
     }
 

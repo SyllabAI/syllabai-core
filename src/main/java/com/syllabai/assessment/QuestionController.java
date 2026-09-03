@@ -11,16 +11,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Learner-facing question endpoints (Master Spec §22).
+ * Learner-facing question endpoints (Master Spec §22). MCQs serve from the flat
+ * question projection; STRUCTURED questions serve the current version with parts.
  */
 @RestController
 @RequestMapping("/api/v1/questions")
 public class QuestionController {
 
     private final QuestionRepository questions;
+    private final QuestionVersionRepository questionVersions;
+    private final ServableQuestionSpec servable = new ServableQuestionSpec();
 
-    public QuestionController(QuestionRepository questions) {
+    public QuestionController(QuestionRepository questions,
+                              QuestionVersionRepository questionVersions) {
         this.questions = questions;
+        this.questionVersions = questionVersions;
     }
 
     @GetMapping
@@ -28,14 +33,27 @@ public class QuestionController {
         return (topicNodeId == null
                 ? questions.findAllActive()
                 : questions.findActiveByTopic(topicNodeId))
-                .stream().map(StudentQuestionView::from).toList();
+                .stream().map(this::project).filter(java.util.Objects::nonNull).toList();
     }
 
     @GetMapping("/{id}")
     public StudentQuestionView get(@PathVariable UUID id) {
         return questions.findWithOptions(id)
-                .filter(Question::active)
-                .map(StudentQuestionView::from)
+                .map(this::project)
+                .filter(java.util.Objects::nonNull)
                 .orElseThrow(() -> new NotFoundException("question", id));
+    }
+
+    /** null when the spec rejects the question (unvalidated content never serves) */
+    private StudentQuestionView project(Question question) {
+        if (question.type() != Question.Type.STRUCTURED) {
+            return servable.isSatisfiedBy(question, null)
+                    ? StudentQuestionView.from(question) : null;
+        }
+        return questionVersions.findByQuestionIdOrderByVersionDesc(question.id()).stream()
+                .findFirst()
+                .filter(version -> servable.isSatisfiedBy(question, version))
+                .map(version -> StudentQuestionView.structured(question, version))
+                .orElse(null);
     }
 }

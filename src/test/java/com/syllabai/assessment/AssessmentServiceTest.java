@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.TestIds;
 import com.syllabai.assessment.dto.SubmitAnswerRequest;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
 import java.util.ArrayList;
@@ -33,10 +34,13 @@ class AssessmentServiceTest {
 
     private final QuestionRepository questions = mock(QuestionRepository.class);
     private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
+    private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
+    private final AnswerRepository answers = mock(AnswerRepository.class);
     private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final List<Object> published = new ArrayList<>();
-    private final AssessmentService service =
-            new AssessmentService(questions, questionTopics, attempts, published::add);
+    private final AssessmentService service = new AssessmentService(
+            questions, questionTopics, questionVersions, answers, attempts,
+            new EvidencePublisher(published::add));
 
     private Question question() {
         // build child mocks first — Mockito forbids stubbing inside another when(...)
@@ -49,6 +53,17 @@ class AssessmentServiceTest {
         when(question.marks()).thenReturn(1);
         when(question.primaryTopicNodeId()).thenReturn(TOPIC_NODE);
         when(question.options()).thenReturn(List.of(correct, tagged, other));
+        return question;
+    }
+
+    private Question structuredQuestion() {
+        Question question = Mockito.mock(Question.class);
+        when(question.id()).thenReturn(QUESTION_ID);
+        when(question.active()).thenReturn(true);
+        when(question.type()).thenReturn(Question.Type.STRUCTURED);
+        when(question.marks()).thenReturn(4);
+        when(question.primaryTopicNodeId()).thenReturn(TOPIC_NODE);
+        when(question.options()).thenReturn(List.of());
         return question;
     }
 
@@ -109,5 +124,78 @@ class AssessmentServiceTest {
                 .filter(e -> e instanceof AssessmentEvidenceRecordedEvent)
                 .map(e -> (AssessmentEvidenceRecordedEvent) e)
                 .findFirst().orElseThrow();
+    }
+
+    @Test
+    @DisplayName("structured submit stores PENDING answers and defers evidence to marking")
+    void structuredSubmitDefersEvidence() {
+        Question question = structuredQuestion();
+        when(questions.findById(QUESTION_ID)).thenReturn(Optional.of(question));
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 4, 3, 240,
+                "Explain", QuestionVersion.ValidationState.VALIDATED, "doc-1", 0.9, "test");
+        QuestionPart partA = new QuestionPart(version, "a", "part a prompt", "State", 2, 0);
+        QuestionPart partB = new QuestionPart(version, "b", "part b prompt", "Explain", 2, 1);
+        version.addPart(partA);
+        version.addPart(partB);
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID))
+                .thenReturn(List.of(version));
+        when(questionTopics.findByQuestionId(QUESTION_ID)).thenReturn(List.of());
+        when(attempts.save(org.mockito.ArgumentMatchers.any(Attempt.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(answers.save(org.mockito.ArgumentMatchers.any(Answer.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.syllabai.assessment.dto.StructuredSubmitRequest(
+                QUESTION_ID,
+                List.of(new com.syllabai.assessment.dto.PartAnswerRequest(
+                                TestIds.withId(version.parts().get(0), UUID.randomUUID()).id(),
+                                "sodium chloride"),
+                        new com.syllabai.assessment.dto.PartAnswerRequest(
+                                TestIds.withId(version.parts().get(1), UUID.randomUUID()).id(),
+                                "because ions")),
+                5000L, 4, false, true);
+
+        var view = service.submitStructured(LEARNER, request);
+
+        assertThat(view.markingState()).isEqualTo("PENDING");
+        assertThat(view.marksPossible()).isEqualTo(4);
+        assertThat(view.parts()).hasSize(2);
+        assertThat(view.parts()).allSatisfy(p -> {
+            assertThat(p.markingState()).isEqualTo("PENDING");
+            assertThat(p.marksAwarded()).isNull();
+        });
+        assertThat(published).isEmpty();   // evidence deferred to first authoritative mark
+    }
+
+    @Test
+    @DisplayName("structured submit rejects a missing part answer")
+    void structuredSubmitRejectsMissingPart() {
+        Question question = structuredQuestion();
+        when(questions.findById(QUESTION_ID)).thenReturn(Optional.of(question));
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 4, 3, 240,
+                "Explain", QuestionVersion.ValidationState.VALIDATED, "doc-1", 0.9, "test");
+        QuestionPart partA = TestIds.withId(
+                new QuestionPart(version, "a", "part a prompt", "State", 2, 0), UUID.randomUUID());
+        QuestionPart partB = TestIds.withId(
+                new QuestionPart(version, "b", "part b prompt", "Explain", 2, 1), UUID.randomUUID());
+        version.addPart(partA);
+        version.addPart(partB);
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID))
+                .thenReturn(List.of(version));
+        when(attempts.save(org.mockito.ArgumentMatchers.any(Attempt.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(answers.save(org.mockito.ArgumentMatchers.any(Answer.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.syllabai.assessment.dto.StructuredSubmitRequest(
+                QUESTION_ID,
+                List.of(new com.syllabai.assessment.dto.PartAnswerRequest(
+                        partA.id(), "partial")),
+                5000L, 4, false, false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.submitStructured(LEARNER, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("missing answer for part");
     }
 }

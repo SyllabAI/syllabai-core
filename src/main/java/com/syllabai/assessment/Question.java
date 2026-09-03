@@ -23,7 +23,7 @@ import java.util.UUID;
 @Table(name = "questions")
 public class Question {
 
-    public enum Type { MCQ_SINGLE, SHORT_ANSWER }   // v0 implements MCQ_SINGLE end-to-end
+    public enum Type { MCQ_SINGLE, SHORT_ANSWER, STRUCTURED }   // MCQ end-to-end; STRUCTURED = multi-part (V8)
     public enum Provenance { PAST_PAPER, TEACHER_AUTHORED, SEED_DEMO }
 
     @Id
@@ -57,6 +57,10 @@ public class Question {
     /** primary KG node this question tests */
     @Column(name = "primary_topic_node_id", nullable = false)
     private UUID primaryTopicNodeId;
+
+    /** exam paper this question belongs to (null = standalone bank item) */
+    @Column(name = "exam_paper_id")
+    private UUID examPaperId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "provenance", nullable = false, length = 20)
@@ -112,6 +116,15 @@ public class Question {
     public int expectedTimeSeconds() { return expectedTimeSeconds; }
     public String commandWord() { return commandWord; }
     public UUID primaryTopicNodeId() { return primaryTopicNodeId; }
+    public UUID examPaperId() { return examPaperId; }
+
+    /** paper membership set once at ingestion (content never moves between papers) */
+    public void attachToPaper(UUID paperId) {
+        if (this.examPaperId != null && !this.examPaperId.equals(paperId)) {
+            throw new IllegalStateException("question already belongs to another paper");
+        }
+        this.examPaperId = paperId;
+    }
     public Provenance provenance() { return provenance; }
     public boolean active() { return active; }
     public int version() { return version; }

@@ -1,0 +1,260 @@
+package com.syllabai.teacher.ingestion;
+
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.assessment.MarkPoint;
+import com.syllabai.assessment.MarkScheme;
+import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.Question;
+import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionTopicRepository;
+import com.syllabai.assessment.QuestionVersion;
+import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.curriculum.CurriculumVersion;
+import com.syllabai.curriculum.CurriculumVersionRepository;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
+import com.syllabai.knowledge.KnowledgeEdge;
+import com.syllabai.knowledge.KnowledgeEdgeRepository;
+import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.KnowledgeNodeRepository;
+import com.syllabai.knowledge.NodeType;
+import com.syllabai.shared.ConflictException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Ingests a syllabai-parser past-paper draft into the content bank (T-011 bridge).
+ * Deterministic, whole-draft, single transaction: either the full paper lands or
+ * nothing does.
+ *
+ * <p>Everything is created in SUGGESTED state. Topic mapping: v0 drafts carry no KG
+ * references, so each paper gets one <em>ingestion anchor</em> TOPIC node (UNVALIDATED,
+ * provenance-tracked) that its questions are tagged to; teachers remap topics during
+ * review — the pipeline never guesses curriculum placement (Master Spec §7).</p>
+ */
+@Service
+public class PastPaperIngestionService {
+
+    private static final Logger log = LoggerFactory.getLogger(PastPaperIngestionService.class);
+
+    private final ExamPaperRepository examPapers;
+    private final QuestionRepository questions;
+    private final QuestionVersionRepository questionVersions;
+    private final MarkSchemeRepository markSchemes;
+    private final SubjectRepository subjects;
+    private final CurriculumVersionRepository curriculumVersions;
+    private final KnowledgeNodeRepository knowledgeNodes;
+    private final KnowledgeEdgeRepository knowledgeEdges;
+
+    public PastPaperIngestionService(ExamPaperRepository examPapers,
+                                     QuestionRepository questions,
+                                     QuestionVersionRepository questionVersions,
+                                     MarkSchemeRepository markSchemes,
+                                     SubjectRepository subjects,
+                                     CurriculumVersionRepository curriculumVersions,
+                                     KnowledgeNodeRepository knowledgeNodes,
+                                     KnowledgeEdgeRepository knowledgeEdges) {
+        this.examPapers = examPapers;
+        this.questions = questions;
+        this.questionVersions = questionVersions;
+        this.markSchemes = markSchemes;
+        this.subjects = subjects;
+        this.curriculumVersions = curriculumVersions;
+        this.knowledgeNodes = knowledgeNodes;
+        this.knowledgeEdges = knowledgeEdges;
+    }
+
+    @Transactional
+    public IngestionSummary ingest(PastPaperDraftDto draft, UUID ingestedBy) {
+        if (draft.paper() == null || draft.questions() == null || draft.questions().isEmpty()) {
+            throw new ConflictException("draft has no paper metadata or no questions");
+        }
+        PastPaperDraftDto.PaperMeta meta = draft.paper();
+        if (meta.paperCode() != null && meta.sessionLabel() != null
+                && examPapers.findByPaperCodeAndSessionLabel(meta.paperCode(), meta.sessionLabel()).isPresent()) {
+            throw new ConflictException("paper " + meta.paperCode() + " " + meta.sessionLabel()
+                    + " already ingested");
+        }
+
+        Subject subject = resolveSubject(meta);
+        UUID anchorTopic = createIngestionAnchor(meta, subject, ingestedBy);
+
+        ExamPaper paper = examPapers.save(new ExamPaper(
+                subject.id(),
+                (meta.qualification() == null ? "" : meta.qualification()) + " "
+                        + (meta.subject() == null ? "" : meta.subject()) + " "
+                        + (meta.paperCode() == null ? meta.unit() : meta.paperCode()) + " "
+                        + (meta.sessionLabel() == null ? "" : meta.sessionLabel()),
+                nullSafe(meta.board(), "unknown-board"),
+                nullSafe(meta.qualification(), "unknown"),
+                meta.unit(),
+                meta.sessionLabel(),
+                meta.paperCode(),
+                meta.questionPaperDocumentId(),
+                meta.markSchemeDocumentId(),
+                ExamPaper.Provenance.PAST_PAPER,
+                draft.extractionMethod(),
+                ingestedBy));
+
+        int questionCount = 0;
+        int partCount = 0;
+        Map<String, QuestionVersion> versionsByNumber = new HashMap<>();
+        for (PastPaperDraftDto.QuestionDraft q : draft.questions()) {
+            Question question = questions.save(new Question(
+                    q.externalRef(),
+                    Question.Type.STRUCTURED,
+                    nullSafe(q.prompt(), ""),
+                    Math.max(q.marks(), 1),
+                    3,                                   // difficulty unknown until review
+                    90 * Math.max(q.marks(), 1),          // 90s/mark heuristic, reviewable
+                    q.commandWord(),
+                    anchorTopic,
+                    Question.Provenance.PAST_PAPER));
+            question.attachToPaper(paper.id());
+            QuestionVersion version = questionVersions.save(new QuestionVersion(
+                    question, 1, nullSafe(q.prompt(), ""),
+                    Math.max(q.marks(), 1), 3, 90 * Math.max(q.marks(), 1),
+                    q.commandWord(),
+                    QuestionVersion.ValidationState.SUGGESTED,
+                    meta.questionPaperDocumentId(),
+                    q.confidence(),
+                    draft.extractionMethod()));
+            versionsByNumber.put(q.questionNumber(), version);
+            questionCount++;
+            int order = 0;
+            for (PastPaperDraftDto.PartDraft p : q.parts()) {
+                version.addPart(new QuestionPart(version, p.label(),
+                        nullSafe(p.prompt(), ""), p.commandWord(),
+                        Math.max(p.marks(), 0), order++));
+                partCount++;
+            }
+        }
+
+        int pointCount = 0;
+        if (draft.markScheme() != null && draft.markScheme().points() != null) {
+            for (Map.Entry<String, QuestionVersion> e : versionsByNumber.entrySet()) {
+                QuestionVersion version = e.getValue();
+                List<PastPaperDraftDto.MarkPointDraft> mine =
+                        pointsForQuestion(draft.markScheme().points(), e.getKey());
+                if (mine.isEmpty()) {
+                    continue;
+                }
+                MarkScheme scheme = markSchemes.save(new MarkScheme(
+                        version, nullSafe(draft.markScheme().version(), "1"),
+                        draft.markScheme().sourceDocumentId(),
+                        draft.extractionMethod()));
+                int order = 0;
+                for (PastPaperDraftDto.MarkPointDraft mp : mine) {
+                    QuestionPart part = resolvePart(version, mp.questionRef());
+                    scheme.addPoint(new MarkPoint(scheme, part, mp.questionRef(), order++,
+                            mp.text(), Math.max(mp.marks(), 1), mp.acceptance(),
+                            mp.confidence()));
+                    pointCount++;
+                }
+            }
+        }
+
+        log.info("ingested paper {}: {} questions, {} parts, {} mark points (all SUGGESTED)",
+                paper.id(), questionCount, partCount, pointCount);
+        return new IngestionSummary(paper.id(), questionCount, partCount, pointCount);
+    }
+
+    /** points whose questionRef matches the question number exactly or "N-x" parts */
+    private static List<PastPaperDraftDto.MarkPointDraft> pointsForQuestion(
+            List<PastPaperDraftDto.MarkPointDraft> points, String questionNumber) {
+        String prefix = questionNumber + "-";
+        return points.stream()
+                .filter(p -> p.questionRef() != null
+                        && (p.questionRef().equals(questionNumber)
+                            || p.questionRef().startsWith(prefix)))
+                .toList();
+    }
+
+    /** resolve the part a mark point targets: "3-a" → part "a" of question 3 */
+    private static QuestionPart resolvePart(QuestionVersion version, String questionRef) {
+        if (questionRef == null) return null;
+        int dash = questionRef.indexOf('-');
+        if (dash < 0 || dash + 1 >= questionRef.length()) return null; // question-level point
+        String label = questionRef.substring(dash + 1);
+        return version.parts().stream()
+                .filter(p -> label.equals(p.label()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Subject resolveSubject(PastPaperDraftDto.PaperMeta meta) {
+        String code = subjectCode(meta);
+        return subjects.findByCode(code).orElseGet(() -> {
+            CurriculumVersion cv = curriculumVersions.findAllByOrderByCreatedAtDesc().stream()
+                    .filter(c -> meta.board() != null && meta.board().equalsIgnoreCase(c.board())
+                            && meta.qualification() != null
+                            && meta.qualification().equalsIgnoreCase(c.qualification()))
+                    .findFirst()
+                    .orElseGet(() -> curriculumVersions.save(new CurriculumVersion(
+                            nullSafe(meta.board(), "unknown-board"),
+                            nullSafe(meta.qualification(), "unknown"),
+                            code + "-INGEST",
+                            (meta.qualification() == null ? "" : meta.qualification()) + " "
+                                    + (meta.subject() == null ? "" : meta.subject())
+                                    + " (ingested, pending review)",
+                            CurriculumVersion.Status.DRAFT)));
+            return subjects.save(new Subject(cv, code,
+                    nullSafe(meta.subject(), "unknown subject")));
+        });
+    }
+
+    private UUID createIngestionAnchor(PastPaperDraftDto.PaperMeta meta, Subject subject,
+                                       UUID ingestedBy) {
+        String anchorCode = "ING-" + (meta.paperCode() == null
+                ? meta.sessionLabel() == null ? UUID.randomUUID().toString().substring(0, 8)
+                        : meta.sessionLabel().replaceAll("\\W+", "").toUpperCase()
+                : meta.paperCode().replaceAll("\\W+", ""));
+        KnowledgeNode subjectRoot = subject.knowledgeNodeId() != null
+                ? knowledgeNodes.findById(subject.knowledgeNodeId()).orElse(null)
+                : null;
+        KnowledgeNode anchor = knowledgeNodes.save(new KnowledgeNode(
+                anchorCode, NodeType.TOPIC,
+                "Ingestion anchor: " + nullSafe(meta.paperCode(), meta.unit()),
+                "Auto-created topic for past-paper ingestion — remap during review "
+                        + "(Master Spec §7: pipeline never guesses curriculum placement).",
+                KnowledgeNode.ValidationStatus.UNVALIDATED,
+                "past-paper draft " + nullSafe(meta.paperCode(), "unknown"),
+                ingestedBy == null ? "ingestion-v1" : ingestedBy.toString()));
+        if (subjectRoot != null) {
+            knowledgeEdges.save(new KnowledgeEdge(anchor, subjectRoot,
+                    com.syllabai.knowledge.RelationType.PART_OF, null,
+                    "ingestion anchor under subject root",
+                    KnowledgeNode.ValidationStatus.UNVALIDATED,
+                    "past-paper draft", "ingestion-v1"));
+        }
+        return anchor.id();
+    }
+
+    private static String subjectCode(PastPaperDraftDto.PaperMeta meta) {
+        String raw = (meta.qualification() == null ? "" : meta.qualification())
+                + "-" + (meta.subject() == null ? "GEN" : meta.subject());
+        String sanitized = raw.replaceAll("\\W+", "").toUpperCase();
+        return sanitized.substring(0, Math.min(20, sanitized.length()));
+    }
+
+    private static String nullSafe(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * @param paperId      the created exam paper
+     * @param questions    created questions
+     * @param parts        created parts
+     * @param markPoints   created mark points
+     */
+    public record IngestionSummary(UUID paperId, int questions, int parts, int markPoints) {
+    }
+}

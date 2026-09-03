@@ -37,7 +37,8 @@ public class DemoUserSeeder implements CommandLineRunner {
     private void provision(String email, String password, String displayName, Set<Role> roles) {
         try {
             authService.provisionUser(email, password, displayName, roles);
-            log.info("demo user provisioned: {} (password: {})", email, password);
+            log.info("demo user provisioned: {} (credentials: DEV-ONLY, see DemoUserSeeder "
+                    + "source — never log secrets)", email);
         } catch (com.syllabai.shared.ConflictException alreadyExists) {
             log.debug("demo user already present: {}", email);
         }

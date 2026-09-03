@@ -48,6 +48,14 @@ public class SkillState {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Paper B §16 construct: untimed accuracy − timed accuracy for this skill,
+     * null until the learner has answered under BOTH conditions (F-162). Derived
+     * metric only — BKT mastery itself is condition-agnostic.
+     */
+    @Column(name = "procedural_fluency_gap")
+    private Double proceduralFluencyGap;
+
     protected SkillState() {
         // JPA
     }
@@ -95,4 +103,10 @@ public class SkillState {
     public Instant lastPracticedAt() { return lastPracticedAt; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
+    public Double proceduralFluencyGap() { return proceduralFluencyGap; }
+
+    /** recompute hook for the fluency gap — null clears it when a condition is unpaired */
+    void setProceduralFluencyGap(Double gap) {
+        this.proceduralFluencyGap = gap;
+    }
 }

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.bkt.BktEngine;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
@@ -41,9 +42,10 @@ class LearnerModelServiceTest {
     private final SkillStateRepository skillStates = mock(SkillStateRepository.class);
     private final MisconceptionStateRepository misconceptionStates =
             mock(MisconceptionStateRepository.class);
+    private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final List<Object> published = new ArrayList<>();
     private final LearnerModelService service = new LearnerModelService(
-            skillStates, misconceptionStates, new BktEngine(), new BdtEngine(),
+            skillStates, misconceptionStates, attempts, new BktEngine(), new BdtEngine(),
             new LearnerProperties(null, null, null, null), published::add);
 
     private AssessmentEvidenceRecordedEvent evidence(boolean correct,

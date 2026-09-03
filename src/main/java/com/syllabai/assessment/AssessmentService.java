@@ -1,38 +1,56 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.AttemptResultView;
+import com.syllabai.assessment.dto.PartAnswerRequest;
+import com.syllabai.assessment.dto.StructuredAttemptResultView;
 import com.syllabai.assessment.dto.SubmitAnswerRequest;
+import com.syllabai.assessment.dto.StructuredSubmitRequest;
 import com.syllabai.shared.NotFoundException;
-import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Assessment use cases. On submission it persists the raw {@link Attempt} and then
- * <strong>emits evidence</strong> as {@link AssessmentEvidenceRecordedEvent} — the
+ * <strong>emits evidence</strong> as {@code AssessmentEvidenceRecordedEvent} — the
  * learner model and research telemetry observe it; this service never updates mastery
  * itself (Master Spec §12 evidence contract, §23 Observer pattern).
+ *
+ * <p>Two submission paths (V8):</p>
+ * <ul>
+ *   <li><b>MCQ</b> — auto-graded at submit; evidence fires immediately (unchanged
+ *       contract from Wave 0/2).</li>
+ *   <li><b>STRUCTURED</b> — multi-part written answers stored PENDING marking;
+ *       evidence fires exactly once, at first authoritative marking (human mark, or
+ *       Smart Mark once the κ ≥ 0.60 gate has released it).</li>
+ * </ul>
  */
 @Service
 public class AssessmentService {
 
     private final QuestionRepository questions;
     private final QuestionTopicRepository questionTopics;
+    private final QuestionVersionRepository questionVersions;
+    private final AnswerRepository answers;
     private final AttemptRepository attempts;
-    private final ApplicationEventPublisher events;
+    private final EvidencePublisher evidencePublisher;
 
     public AssessmentService(QuestionRepository questions,
                              QuestionTopicRepository questionTopics,
+                             QuestionVersionRepository questionVersions,
+                             AnswerRepository answers,
                              AttemptRepository attempts,
-                             ApplicationEventPublisher events) {
+                             EvidencePublisher evidencePublisher) {
         this.questions = questions;
         this.questionTopics = questionTopics;
+        this.questionVersions = questionVersions;
+        this.answers = answers;
         this.attempts = attempts;
-        this.events = events;
+        this.evidencePublisher = evidencePublisher;
     }
 
     @Transactional
@@ -56,19 +74,14 @@ public class AssessmentService {
                 provenanceOf(request));
         attempt = attempts.save(attempt);
 
-        List<UUID> topicNodeIds = topicNodeIds(question);
+        List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
         List<UUID> expressedMisconceptionIds = chosen.misconceptionNodeId() == null
                 ? List.of()
                 : List.of(chosen.misconceptionNodeId());
         List<UUID> observedMisconceptionIds = observedMisconceptionIds(question);
 
-        events.publishEvent(new AssessmentEvidenceRecordedEvent(
-                attempt.id(), learnerId, question.id(), topicNodeIds,
-                correct, question.marks(), marksAwarded,
-                request.responseTimeMs(), request.confidence(),
-                request.selfDoubtFlag(), request.timedCondition(),
-                expressedMisconceptionIds, observedMisconceptionIds,
-                attempt.provenance(), Instant.now()));
+        evidencePublisher.publishMcq(attempt, question, secondary,
+                expressedMisconceptionIds, observedMisconceptionIds);
 
         String correctLabel = question.options().stream()
                 .filter(QuestionOption::correct)
@@ -81,23 +94,71 @@ public class AssessmentService {
                 correctLabel, expressedMisconceptionIds, attempt.createdAt());
     }
 
-    private List<UUID> topicNodeIds(Question question) {
-        List<UUID> ids = new java.util.ArrayList<>();
-        ids.add(question.primaryTopicNodeId());
-        for (QuestionTopic qt : questionTopics.findByQuestionId(question.id())) {
-            if (!qt.nodeId().equals(question.primaryTopicNodeId())) {
-                ids.add(qt.nodeId());
+    /**
+     * Structured submission (Master Spec §6.5, §16): persists one answer per part of
+     * the current question version, marks nothing, emits no evidence — the attempt
+     * enters PENDING marking. Timed/untimed pairing rides on the attempt row.
+     */
+    @Transactional
+    public StructuredAttemptResultView submitStructured(UUID learnerId,
+                                                        StructuredSubmitRequest request) {
+        Question question = questions.findById(request.questionId())
+                .filter(Question::active)
+                .filter(q -> q.type() == Question.Type.STRUCTURED)
+                .orElseThrow(() -> new NotFoundException("structured question",
+                        request.questionId()));
+
+        QuestionVersion version = questionVersions
+                .findByQuestionIdOrderByVersionDesc(question.id()).stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("question version", question.id()));
+        List<QuestionPart> parts = version.parts();
+        if (parts.isEmpty()) {
+            throw new NotFoundException("parts for question version", version.id());
+        }
+
+        Map<UUID, PartAnswerRequest> byPartId = new HashMap<>();
+        for (PartAnswerRequest pa : request.partAnswers()) {
+            if (byPartId.put(pa.partId(), pa) != null) {
+                throw new IllegalArgumentException(
+                        "duplicate answer for part " + pa.partId());
             }
         }
-        return ids;
+        for (QuestionPart part : parts) {
+            if (!byPartId.containsKey(part.id())) {
+                throw new IllegalArgumentException(
+                        "missing answer for part '" + part.label() + "'");
+            }
+        }
+
+        Attempt attempt = new Attempt(
+                learnerId, question, null, false, null,
+                request.responseTimeMs(), request.confidence(),
+                request.selfDoubtFlag(), request.timedCondition(),
+                "web-structured-v1" + (request.timedCondition() ? "-timed" : ""));
+        attempt.beginMarking();
+        attempt = attempts.save(attempt);
+
+        List<Answer> savedAnswers = new ArrayList<>();
+        for (QuestionPart part : parts) {
+            PartAnswerRequest pa = byPartId.get(part.id());
+            savedAnswers.add(answers.save(new Answer(attempt, part,
+                    pa.answerText() == null ? "" : pa.answerText().trim())));
+        }
+
+        return new StructuredAttemptResultView(
+                attempt.id(), question.id(), question.marks(),
+                attempt.markingState().name(), attempt.createdAt(),
+                savedAnswers.stream()
+                        .map(a -> new StructuredAttemptResultView.PartResult(
+                                a.questionPartId(),
+                                a.questionPart().label(),
+                                a.questionPart().marks(),
+                                a.markingState().name(),
+                                a.marksAwarded()))
+                        .toList());
     }
 
-    /**
-     * Every misconception node monitored by this question's distractors (Paper B §3.4).
-     * These are the hypotheses the item can update: choosing a tagged distractor
-     * expresses the misconception (strengthens), while a correct answer on this item
-     * weakens all of them. Distinct and order-stable.
-     */
     private List<UUID> observedMisconceptionIds(Question question) {
         return question.options().stream()
                 .map(QuestionOption::misconceptionNodeId)

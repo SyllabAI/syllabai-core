@@ -46,7 +46,8 @@ public class LearnerStateController {
                             s.mastery(), s.lastPracticedAt(), now, decayParams);
                     return new SkillStateView(
                             s.nodeId(), s.mastery(), effective, bandOf(effective, decayParams),
-                            s.attempts(), s.correctCount(), s.lastPracticedAt());
+                            s.attempts(), s.correctCount(), s.lastPracticedAt(),
+                            s.proceduralFluencyGap());
                 })
                 .toList();
 

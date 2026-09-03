@@ -27,4 +27,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     @EntityGraph(attributePaths = "options")
     @Query("select q from Question q where q.active = true order by q.difficulty")
     List<Question> findAllActive();
+
+    @EntityGraph(attributePaths = "options")
+    List<Question> findAllByOrderByDifficultyAsc();
 }

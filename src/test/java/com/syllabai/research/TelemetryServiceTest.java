@@ -8,9 +8,11 @@ import static org.mockito.Mockito.verify;
 
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
 import com.syllabai.shared.events.DecayAppliedEvent;
+import com.syllabai.shared.events.HumanMarkRecordedEvent;
 import com.syllabai.shared.events.MasteryUpdatedEvent;
 import com.syllabai.shared.events.MisconceptionUpdatedEvent;
 import com.syllabai.shared.events.ReviewScheduledEvent;
+import com.syllabai.shared.events.SmartMarkCompletedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -136,5 +138,43 @@ class TelemetryServiceTest {
                 .containsEntry("masteryAtTrigger", 0.3206)
                 .containsEntry("reason", "DECAY_CROSSED_THRESHOLD")
                 .containsEntry("dueAt", WHEN.toString());
+    }
+
+    @Test
+    @DisplayName("smart-mark completion appends SMART_MARK_COMPLETED with model provenance")
+    void smartMarkCompleted() {
+        UUID answer = UUID.randomUUID();
+        service.onSmartMarkCompleted(new SmartMarkCompletedEvent(
+                answer, ATTEMPT, LEARNER, QUESTION, 2, 3, true, null,
+                "llama-3.3-70b-versatile", "1.0.0", false, WHEN));
+
+        verify(events).save(saved.capture());
+        TelemetryEvent row = saved.getValue();
+        assertThat(row.type()).isEqualTo(TelemetryEvent.Type.SMART_MARK_COMPLETED);
+        assertThat(row.learnerId()).isEqualTo(LEARNER);
+        assertThat(row.payload())
+                .containsEntry("marksAwarded", 2)
+                .containsEntry("marksPossible", 3)
+                .containsEntry("validationPassed", true)
+                .containsEntry("authoritative", false)
+                .containsEntry("modelId", "llama-3.3-70b-versatile")
+                .containsEntry("pipelineVersion", "1.0.0");
+    }
+
+    @Test
+    @DisplayName("human marks and overrides append HUMAN_MARK_RECORDED")
+    void humanMarkRecorded() {
+        UUID answer = UUID.randomUUID();
+        UUID marker = UUID.randomUUID();
+        service.onHumanMarkRecorded(new HumanMarkRecordedEvent(
+                answer, ATTEMPT, LEARNER, QUESTION, 1, true, marker, WHEN));
+
+        verify(events).save(saved.capture());
+        TelemetryEvent row = saved.getValue();
+        assertThat(row.type()).isEqualTo(TelemetryEvent.Type.HUMAN_MARK_RECORDED);
+        assertThat(row.payload())
+                .containsEntry("marksAwarded", 1)
+                .containsEntry("revising", true)
+                .containsEntry("markerId", marker.toString());
     }
 }

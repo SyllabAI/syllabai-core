@@ -29,7 +29,9 @@ public class TelemetryEvent {
         BDT_UPDATED,
         REVIEW_SCHEDULED,
         DECAY_APPLIED,
-        SELF_DOUBT_FLAGGED
+        SELF_DOUBT_FLAGGED,
+        SMART_MARK_COMPLETED,
+        HUMAN_MARK_RECORDED
     }
 
     @Id

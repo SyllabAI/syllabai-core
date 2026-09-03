@@ -1,0 +1,201 @@
+package com.syllabai.teacher;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.syllabai.TestIds;
+import com.syllabai.assessment.Answer;
+import com.syllabai.assessment.AnswerRepository;
+import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.EvidencePublisher;
+import com.syllabai.assessment.MarkPoint;
+import com.syllabai.assessment.MarkScheme;
+import com.syllabai.assessment.Question;
+import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionTopicRepository;
+import com.syllabai.assessment.QuestionVersion;
+import com.syllabai.shared.ConflictException;
+import com.syllabai.shared.events.HumanMarkRecordedEvent;
+import com.syllabai.smartmark.HumanMark;
+import com.syllabai.smartmark.HumanMarkRepository;
+import com.syllabai.smartmark.SmartMarkAgreementEvaluation;
+import com.syllabai.smartmark.SmartMarkAgreementEvaluationRepository;
+import com.syllabai.smartmark.SmartMarkResult;
+import com.syllabai.smartmark.SmartMarkResultRepository;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Human-mark authority semantics (Master Spec §15): the first human mark fires the
+ * evidence contract exactly once; a second mark on the same attempt is an override
+ * that never re-fires evidence. κ evaluation pairs per-point decisions between the
+ * latest accepted smart run and the latest human mark.
+ */
+class TeacherMarkingServiceTest {
+
+    private static final UUID LEARNER = UUID.randomUUID();
+    private static final UUID MARKER = UUID.randomUUID();
+    private static final UUID TOPIC = UUID.randomUUID();
+
+    private final AnswerRepository answers = mock(AnswerRepository.class);
+    private final HumanMarkRepository humanMarks = mock(HumanMarkRepository.class);
+    private final SmartMarkResultRepository smartMarkResults = mock(SmartMarkResultRepository.class);
+    private final SmartMarkAgreementEvaluationRepository agreementEvaluations =
+            mock(SmartMarkAgreementEvaluationRepository.class);
+    private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
+    private final List<Object> published = new ArrayList<>();
+    private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add);
+
+    private final TeacherMarkingService service = new TeacherMarkingService(
+            answers, humanMarks, smartMarkResults, agreementEvaluations, questionTopics,
+            evidencePublisher, published::add);
+
+    private final Question question;
+    private final QuestionPart part;
+    private final Attempt attempt;
+    private final Answer answer;
+    private final MarkPoint pointA;
+    private final MarkPoint pointB;
+
+    TeacherMarkingServiceTest() {
+        question = new Question("q-1", Question.Type.STRUCTURED, "stem", 2, 3, 120,
+                "Explain", TOPIC, Question.Provenance.PAST_PAPER);
+        TestIds.withId(question, UUID.randomUUID());
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 2, 3, 120, "Explain",
+                QuestionVersion.ValidationState.VALIDATED, "doc", 0.9, "test");
+        TestIds.withId(version, UUID.randomUUID());
+        part = new QuestionPart(version, "a", "part a", "State", 2, 0);
+        TestIds.withId(part, UUID.randomUUID());
+        version.addPart(part);
+
+        attempt = new Attempt(LEARNER, question, null, false, null,
+                5000L, 4, false, false, "test");
+        TestIds.withId(attempt, UUID.randomUUID());
+        attempt.beginMarking();
+        answer = new Answer(attempt, part, "iron oxide and water");
+        TestIds.withId(answer, UUID.randomUUID());
+
+        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        TestIds.withId(scheme, UUID.randomUUID());
+        pointA = new MarkPoint(scheme, part, "1-a", 0, "iron oxide", 1, List.of(), 0.9);
+        TestIds.withId(pointA, UUID.randomUUID());
+        pointB = new MarkPoint(scheme, part, "1-a", 1, "water", 1, List.of(), 0.9);
+        TestIds.withId(pointB, UUID.randomUUID());
+        scheme.addPoint(pointA);
+        scheme.addPoint(pointB);
+
+        when(answers.findWithPartAndAttempt(answer.id())).thenReturn(Optional.of(answer));
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(answer));
+        when(answers.save(any(Answer.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(humanMarks.save(any(HumanMark.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(questionTopics.findByQuestionId(question.id())).thenReturn(List.of());
+        when(agreementEvaluations.save(any(SmartMarkAgreementEvaluation.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private Map<String, Integer> bothPoints() {
+        Map<String, Integer> decisions = new LinkedHashMap<>();
+        decisions.put(pointA.id().toString(), 1);
+        decisions.put(pointB.id().toString(), 1);
+        return decisions;
+    }
+
+    @Test
+    @DisplayName("first human mark fires evidence exactly once and is authoritative")
+    void firstHumanMarkFiresEvidence() {
+        HumanMark mark = service.recordHumanMark(answer.id(), MARKER, 2, bothPoints(), "both");
+
+        assertThat(mark.marksAwarded()).isEqualTo(2);
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.HUMAN_MARKED);
+        assertThat(attempt.markingState()).isEqualTo(Attempt.MarkingState.HUMAN_MARKED);
+        assertThat(attempt.marksAwarded()).isEqualTo(2);
+        assertThat(attempt.evidenceEmitted()).isTrue();
+        assertThat(published.stream()
+                .filter(e -> e instanceof com.syllabai.shared.events.AssessmentEvidenceRecordedEvent)
+                .count()).isEqualTo(1);
+        HumanMarkRecordedEvent event = (HumanMarkRecordedEvent) published.stream()
+                .filter(e -> e instanceof HumanMarkRecordedEvent).findFirst().orElseThrow();
+        assertThat(event.revising()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a second human mark on the same attempt is an override — evidence never re-fires")
+    void overrideNeverRefiresEvidence() {
+        service.recordHumanMark(answer.id(), MARKER, 2, bothPoints(), "first pass");
+
+        service.recordHumanMark(answer.id(), MARKER, 1, bothPoints(), "on reflection: 1");
+
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.OVERRIDDEN);
+        assertThat(attempt.markingState()).isEqualTo(Attempt.MarkingState.OVERRIDDEN);
+        assertThat(attempt.marksAwarded()).isEqualTo(1);
+        // exactly one evidence event across both marks (guard held)
+        long evidenceEvents = published.stream()
+                .filter(e -> e instanceof com.syllabai.shared.events.AssessmentEvidenceRecordedEvent)
+                .count();
+        assertThat(evidenceEvents).isEqualTo(1);
+        HumanMarkRecordedEvent second = (HumanMarkRecordedEvent) published.stream()
+                .filter(e -> e instanceof HumanMarkRecordedEvent)
+                .reduce((first, last) -> last).orElseThrow();
+        assertThat(second.revising()).isTrue();
+    }
+
+    @Test
+    @DisplayName("marks outside the part bound are rejected with 409 semantics")
+    void outOfBoundsMarksRejected() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.recordHumanMark(answer.id(), MARKER, 3, null, "too many"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("outside part bound");
+    }
+
+    @Test
+    @DisplayName("κ evaluation pairs smart/human point decisions and persists the gate result")
+    void kappaEvaluationPairs() {
+        // accepted smart run: pointA awarded, pointB not
+        Map<String, Object> smartA = new LinkedHashMap<>();
+        smartA.put("markPointId", pointA.id().toString());
+        smartA.put("awarded", true);
+        Map<String, Object> smartB = new LinkedHashMap<>();
+        smartB.put("markPointId", pointB.id().toString());
+        smartB.put("awarded", false);
+        SmartMarkResult smart = new SmartMarkResult(answer, "test-model", 1, 0.9, true,
+                List.of(smartA, smartB), null, "raw");
+        TestIds.withId(smart, UUID.randomUUID());
+        when(smartMarkResults.findLatest(answer.id())).thenReturn(Optional.of(smart));
+
+        // human: both points awarded
+        HumanMark human = new HumanMark(answer, MARKER, 2, bothPoints(), null);
+        TestIds.withId(human, UUID.randomUUID());
+        when(humanMarks.findAllByOrderByCreatedAtAsc()).thenReturn(List.of(human));
+
+        SmartMarkAgreementEvaluation evaluation =
+                service.evaluateAgreement(null, MARKER);
+
+        // pairs: (1,1) and (0,1) -> po = 0.5, pe = 0.5*1 + 0.5*0 = 0.5, κ = 0.0
+        assertThat(evaluation.sampleSize()).isEqualTo(2);
+        assertThat(evaluation.observedAgreement()).isEqualTo(0.5);
+        assertThat(evaluation.kappa()).isCloseTo(0.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(evaluation.passed()).isFalse();
+        assertThat(evaluation.scope()).isEqualTo(SmartMarkAgreementEvaluation.SCOPE_ALL);
+    }
+
+    @Test
+    @DisplayName("κ evaluation fails loudly when nothing is paired")
+    void kappaEmptyFails() {
+        when(humanMarks.findAllByOrderByCreatedAtAsc()).thenReturn(List.of());
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.evaluateAgreement(null, MARKER))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("no paired");
+    }
+}
