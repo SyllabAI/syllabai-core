@@ -38,7 +38,7 @@ public class LlmChainConfig {
     }
 
     @Bean
-    public FailoverLlmChain failoverLlmChain() {
+    public FailoverLlmChain failoverLlmChain(java.util.List<ExperimentPinResolver> registryResolvers) {
         List<LlmProvider> providers = new ArrayList<>();
 
         if (properties.groq().enabled() && hasKey(properties.groq().apiKey())) {
@@ -62,7 +62,14 @@ public class LlmChainConfig {
             providers.add(new SpringAiChatModelAdapter("openrouter", null, false));
         }
 
-        return new FailoverLlmChain(providers);
+        // Pin resolution order (§26.1): deployment configuration first, then the
+        // experiments research registry (JpaExperimentPinResolver bean, if present).
+        List<ExperimentPinResolver> resolvers = new ArrayList<>();
+        resolvers.add(new PropertiesExperimentPinResolver(properties.experimentPins()));
+        if (registryResolvers != null) {
+            resolvers.addAll(registryResolvers);
+        }
+        return new FailoverLlmChain(providers, new CompositeExperimentPinResolver(resolvers));
     }
 
     // ── ChatModel construction (provider specifics stay below this line) ──

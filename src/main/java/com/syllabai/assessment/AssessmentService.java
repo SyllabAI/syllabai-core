@@ -57,16 +57,18 @@ public class AssessmentService {
         attempt = attempts.save(attempt);
 
         List<UUID> topicNodeIds = topicNodeIds(question);
-        List<UUID> misconceptionIds = chosen.misconceptionNodeId() == null
+        List<UUID> expressedMisconceptionIds = chosen.misconceptionNodeId() == null
                 ? List.of()
                 : List.of(chosen.misconceptionNodeId());
+        List<UUID> observedMisconceptionIds = observedMisconceptionIds(question);
 
         events.publishEvent(new AssessmentEvidenceRecordedEvent(
                 attempt.id(), learnerId, question.id(), topicNodeIds,
                 correct, question.marks(), marksAwarded,
                 request.responseTimeMs(), request.confidence(),
                 request.selfDoubtFlag(), request.timedCondition(),
-                misconceptionIds, attempt.provenance(), Instant.now()));
+                expressedMisconceptionIds, observedMisconceptionIds,
+                attempt.provenance(), Instant.now()));
 
         String correctLabel = question.options().stream()
                 .filter(QuestionOption::correct)
@@ -76,7 +78,7 @@ public class AssessmentService {
 
         return new AttemptResultView(
                 attempt.id(), question.id(), correct, marksAwarded, question.marks(),
-                correctLabel, misconceptionIds, attempt.createdAt());
+                correctLabel, expressedMisconceptionIds, attempt.createdAt());
     }
 
     private List<UUID> topicNodeIds(Question question) {
@@ -88,6 +90,20 @@ public class AssessmentService {
             }
         }
         return ids;
+    }
+
+    /**
+     * Every misconception node monitored by this question's distractors (Paper B §3.4).
+     * These are the hypotheses the item can update: choosing a tagged distractor
+     * expresses the misconception (strengthens), while a correct answer on this item
+     * weakens all of them. Distinct and order-stable.
+     */
+    private List<UUID> observedMisconceptionIds(Question question) {
+        return question.options().stream()
+                .map(QuestionOption::misconceptionNodeId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private String provenanceOf(SubmitAnswerRequest request) {

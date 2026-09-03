@@ -7,22 +7,32 @@ package com.syllabai.infrastructure.llm;
  * @param userPrompt    the actual user question
  * @param temperature   sampling temperature; null = provider default
  * @param maxTokens     response token cap; null = provider default
+ * @param model         explicit model override; null = the provider's configured
+ *                     default. Set automatically when an experiment pin names a model.
  * @param experimentId  when set, the chain must pin to the provider/model registered
- *                     for that experiment — no silent drift mid-experiment (§26.1)
+ *                     for that experiment — no silent drift mid-experiment (§26.1);
+ *                     unpinned experiment ids fail loudly
  */
 public record LlmRequest(
         String systemPrompt,
         String userPrompt,
         Double temperature,
         Integer maxTokens,
+        String model,
         String experimentId) {
 
     public static LlmRequest of(String systemPrompt, String userPrompt) {
-        return new LlmRequest(systemPrompt, userPrompt, null, null, null);
+        return new LlmRequest(systemPrompt, userPrompt, null, null, null, null);
     }
 
     public static LlmRequest withOptions(String systemPrompt, String userPrompt,
                                           Double temperature, Integer maxTokens) {
-        return new LlmRequest(systemPrompt, userPrompt, temperature, maxTokens, null);
+        return new LlmRequest(systemPrompt, userPrompt, temperature, maxTokens, null, null);
+    }
+
+    /** Copy with an explicit model (per-experiment model pinning, §26.1). */
+    public LlmRequest withModel(String pinnedModel) {
+        return new LlmRequest(systemPrompt, userPrompt, temperature, maxTokens,
+                pinnedModel, experimentId);
     }
 }

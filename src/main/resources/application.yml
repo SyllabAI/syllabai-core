@@ -88,6 +88,13 @@ syllabai:
       timeout-seconds: 30
       cooldown-seconds: 60
       failure-threshold: 3
+    # Research provenance (§26.1): a request carrying an experiment id must find a pin
+    # here (value "provider" or "provider:model") or in the experiments registry
+    # (status RUNNING + pinned provider) — otherwise generation fails loudly.
+    # Experiments never drift across providers/models mid-run.
+    experiment-pins: {}
+    #  cycle1-baseline: groq
+    #  cycle1-rag-pilot: groq:llama-3.3-70b-versatile
 
   learner:
     bkt:

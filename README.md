@@ -47,13 +47,13 @@ Each module owns its application services, domain objects, ports, and persistenc
 | T-006 | ✅ | GitHub Actions CI (build + test, JDK 25) |
 | T-007 | ✅ | `ObjectStorage` port + local + R2 (S3 SDK) adapters |
 | T-012 | ✅ | `KnowledgeGraphRepository` with recursive-CTE prerequisite closure + tree + misconception traversal |
-| T-014 | ✅ | `AssessmentEvidenceRecordedEvent` evidence contract (Observer: learner model + telemetry react) |
+| T-014 | ✅ | `AssessmentEvidenceRecordedEvent` evidence contract with expressed + observed misconception sets (Observer: learner model + telemetry react) |
 | T-015 | ✅ | BKT engine (L₀=0.1, slip=0.1, guess=0.25, T=0.1 — config + model registry versioned) |
 | T-016 | ✅ (v0) | Learner state aggregate: skill_states + misconception_states + read model with decay-adjusted mastery |
-| T-017 | ✅ (v0) | BDT misconception engine driven by distractor evidence (prior 0.3) |
+| T-017 | ✅ (v0) | BDT misconception engine: tagged distractors strengthen, correct answers weaken monitored misconceptions (prior 0.3) |
 | T-018 | ✅ | Ebbinghaus decay service (τ=30/90/365 by band, floor, review threshold) + nightly `@Scheduled` job |
-| T-020 | ✅ (v0) | Append-only telemetry event store (JSONB) + model/prompt/experiment registries |
-| T-023 | ✅ (core) | `LlmProvider` port + Spring AI adapters + `FailoverLlmChain` (Groq→Gemini→OpenRouter, health/cooldown, admin health endpoint) |
+| T-020 | ✅ (v0) | Append-only telemetry event store (JSONB): all six Cycle-1 event types emitted (ATTEMPT_SUBMITTED, BKT_UPDATED, BDT_UPDATED, REVIEW_SCHEDULED, DECAY_APPLIED, SELF_DOUBT_FLAGGED) |
+| T-023 | ✅ (core) | `LlmProvider` port + Spring AI adapters + `FailoverLlmChain` (Groq→Gemini→OpenRouter, health/cooldown, admin health endpoint, **experiment pinning** via config + experiments registry — unpinned experiments fail loudly, pinned never fail over) |
 
 ## Quickstart (local)
 
@@ -96,12 +96,17 @@ open http://localhost:8080/api/v1/docs
 
 Submitting the *wrong* option on question 1 picks the distractor tagged with the
 moles/grams misconception — watch `misconceptionStates.probability` jump from the
-0.3 prior in `/learners/me/state`, and BKT mastery drop on the topic.
+0.3 prior in `/learners/me/state`, and BKT mastery drop on the topic. Submitting Q2
+*correctly* then **weakens** that same misconception (Q2's distractor C monitors it):
+0.3 → 0.75 (wrong) → 0.5 (correct), with every step logged as BDT_UPDATED telemetry
+(`evidence: TAGGED_DISTRACTOR` / `CORRECT_ANSWER`).
 
 ## Tests
 
 ```bash
-mvn test    # 32 unit tests: BKT math, BDT Bayes, decay formula/bands/floor, chain failover, storage
+mvn test    # 60 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
+            # evidence assembly, telemetry coverage, decay formula/bands/floor,
+            # decay-job events, chain failover, experiment pinning, storage
 ```
 
 Integration tests (Testcontainers PostgreSQL) land with T-002 follow-up; CI runs on

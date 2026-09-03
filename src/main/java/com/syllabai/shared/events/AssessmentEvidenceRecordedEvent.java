@@ -24,7 +24,12 @@ import java.util.UUID;
  * @param confidence       learner-reported confidence (1–5, nullable)
  * @param selfDoubtFlag    learner self-doubt flag (Paper B §3.5, struggle type 4 signal)
  * @param timedCondition   true when answered under timed conditions (Paper B §16)
- * @param misconceptionIds misconception nodes implicated by the chosen distractor
+ * @param misconceptionIds misconception nodes <em>expressed</em> by the chosen
+ *                        distractor (empty when the answer is correct or the chosen
+ *                        option is untagged — strengthens the belief, Paper B §3.4)
+ * @param observedMisconceptionIds every misconception node monitored by this
+ *                        question's distractors — a correct answer weakens these
+ *                        (BDT update-on-correct, Paper B §3.4)
  * @param provenance       where this attempt came from (e.g. "web-quiz-v0")
  * @param occurredAt       when the attempt was submitted
  */
@@ -41,6 +46,7 @@ public record AssessmentEvidenceRecordedEvent(
         boolean selfDoubtFlag,
         boolean timedCondition,
         List<UUID> misconceptionIds,
+        List<UUID> observedMisconceptionIds,
         String provenance,
         Instant occurredAt) {
 }

@@ -1,9 +1,13 @@
 package com.syllabai.learner;
 
 import com.syllabai.learner.decay.EbbinghausDecayService;
+import com.syllabai.shared.events.DecayAppliedEvent;
+import com.syllabai.shared.events.ReviewScheduledEvent;
+import java.time.Duration;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,8 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>For every skill state idle beyond the grace period, mastery is decayed
  * (P(t)=P₀·e^(−t/τ), τ by proficiency band) and a review is scheduled when the
- * effective mastery crosses the review threshold. Disabled by default; enable in
- * the production profile via {@code syllabai.learner.decay-job.enabled=true}.</p>
+ * effective mastery crosses the review threshold. Every decay write and every
+ * scheduled review is also published as a domain event so the research module can
+ * log DECAY_APPLIED / REVIEW_SCHEDULED telemetry (§18). Disabled by default; enable
+ * in the production profile via {@code syllabai.learner.decay-job.enabled=true}.</p>
  */
 @Component
 public class NightlyDecayJob {
@@ -28,15 +34,18 @@ public class NightlyDecayJob {
     private final ReviewScheduleRepository reviewSchedules;
     private final EbbinghausDecayService decayService;
     private final LearnerProperties properties;
+    private final ApplicationEventPublisher events;
 
     public NightlyDecayJob(SkillStateRepository skillStates,
                            ReviewScheduleRepository reviewSchedules,
                            EbbinghausDecayService decayService,
-                           LearnerProperties properties) {
+                           LearnerProperties properties,
+                           ApplicationEventPublisher events) {
         this.skillStates = skillStates;
         this.reviewSchedules = reviewSchedules;
         this.decayService = decayService;
         this.properties = properties;
+        this.events = events;
     }
 
     @Scheduled(cron = "${syllabai.learner.decay-job.cron:0 0 3 * * *}")
@@ -56,19 +65,31 @@ public class NightlyDecayJob {
         var candidates = skillStates.findByLastPracticedAtBefore(idleSince, page);
         while (!candidates.isEmpty()) {
             for (SkillState state : candidates) {
+                double priorMastery = state.mastery();
                 double effective = decayService.decayed(
-                        state.mastery(), state.lastPracticedAt(), now, params);
-                if (effective < state.mastery()) {
+                        priorMastery, state.lastPracticedAt(), now, params);
+                // The review decision evaluates the effective (already decayed) mastery;
+                // re-running the decay formula on the stored value would double-count.
+                boolean reviewThresholdCrossed = effective < params.reviewBelow();
+                if (effective < priorMastery) {
                     state.applyDecay(effective, now);
                     decayed++;
+                    events.publishEvent(new DecayAppliedEvent(
+                            state.learnerId(), state.nodeId(), priorMastery, effective,
+                            Duration.between(state.lastPracticedAt(), now).toDays(),
+                            (int) params.tauFor(priorMastery).toDays(),
+                            reviewThresholdCrossed, now));
                 }
-                if (decayService.needsReview(state.mastery(), state.lastPracticedAt(), now, params)
+                if (reviewThresholdCrossed
                         && !reviewSchedules.existsByLearnerIdAndNodeIdAndStatus(
                                 state.learnerId(), state.nodeId(), ReviewSchedule.Status.PENDING)) {
                     reviewSchedules.save(new ReviewSchedule(
                             state.learnerId(), state.nodeId(), now,
                             ReviewSchedule.Reason.DECAY_CROSSED_THRESHOLD, effective));
                     reviewsScheduled++;
+                    events.publishEvent(new ReviewScheduledEvent(
+                            state.learnerId(), state.nodeId(), now, effective,
+                            ReviewSchedule.Reason.DECAY_CROSSED_THRESHOLD.name(), now));
                 }
             }
             skillStates.saveAll(candidates);

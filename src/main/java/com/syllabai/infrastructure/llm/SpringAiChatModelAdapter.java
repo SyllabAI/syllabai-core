@@ -85,7 +85,8 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     }
 
     private ChatOptions options(LlmRequest request) {
-        if (request.temperature() == null && request.maxTokens() == null) {
+        if (request.temperature() == null && request.maxTokens() == null
+                && (request.model() == null || request.model().isBlank())) {
             return null;    // fall back to model defaults
         }
         ChatOptions.Builder<?> builder = ChatOptions.builder();
@@ -94,6 +95,9 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         }
         if (request.maxTokens() != null) {
             builder.maxTokens(request.maxTokens());
+        }
+        if (request.model() != null && !request.model().isBlank()) {
+            builder.model(request.model());   // per-experiment model pin (§26.1)
         }
         return builder.build();
     }
