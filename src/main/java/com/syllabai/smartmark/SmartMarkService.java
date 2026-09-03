@@ -149,6 +149,6 @@ public class SmartMarkService {
                 .filter(m -> m != null)
                 .mapToInt(Integer::intValue)
                 .sum();
-        attempt.recordTotalMarks(total);
+        attempt.recordTotalMarks(total, attempt.question().marks());
     }
 }

@@ -138,9 +138,16 @@ public class Attempt {
         this.markingState = revising ? MarkingState.OVERRIDDEN : MarkingState.HUMAN_MARKED;
     }
 
-    /** recompute the whole-attempt mark total from its part answers */
-    public void recordTotalMarks(int totalAwarded) {
+    /**
+     * Settle the whole-attempt mark total from its part answers and the stored
+     * correctness flag. Structured attempts are created with a placeholder
+     * {@code correct=false}; the first authoritative marking settles it with the
+     * documented conservative rule (full marks = correct) so raw-column consumers
+     * (fluency-gap aggregation, analytics) agree with the evidence event.
+     */
+    public void recordTotalMarks(int totalAwarded, int marksTotal) {
         this.marksAwarded = totalAwarded;
+        this.correct = marksTotal > 0 && totalAwarded >= marksTotal;
     }
 
     /** idempotent: flips the guard, returns false when evidence already fired */

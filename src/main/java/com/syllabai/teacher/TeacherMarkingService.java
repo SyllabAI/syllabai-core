@@ -100,7 +100,7 @@ public class TeacherMarkingService {
             answer.humanMarked(marksAwarded);
         }
         attempt.humanMarked(revising);
-        attempt.recordTotalMarks(totalAwarded(attempt));
+        attempt.recordTotalMarks(totalAwarded(attempt), question.marks());
         answers.save(answer);
 
         boolean evidenceFired = false;
