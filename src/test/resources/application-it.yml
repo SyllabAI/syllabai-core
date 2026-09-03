@@ -1,0 +1,15 @@
+# Integration-test profile: Testcontainers supplies the datasource (@ServiceConnection).
+spring:
+  flyway:
+    clean-disabled: false
+
+syllabai:
+  security:
+    jwt-secret: it-only-secret-change-me-0123456789abcdef0123456789abcdef
+  seed:
+    demo-users:
+      enabled: false
+
+logging:
+  level:
+    com.syllabai: INFO
