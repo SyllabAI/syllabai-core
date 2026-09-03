@@ -213,10 +213,18 @@ public class PastPaperIngestionService {
 
     private UUID createIngestionAnchor(PastPaperDraftDto.PaperMeta meta, Subject subject,
                                        UUID ingestedBy) {
-        String anchorCode = "ING-" + (meta.paperCode() == null
-                ? meta.sessionLabel() == null ? UUID.randomUUID().toString().substring(0, 8)
-                        : meta.sessionLabel().replaceAll("\\W+", "").toUpperCase()
+        // knowledge_nodes.code is VARCHAR(40): cap deterministically, keeping uniqueness
+        // with a 8-hex hash suffix when the raw identity is longer.
+        String rawIdentity = (meta.paperCode() == null
+                ? (meta.sessionLabel() == null
+                        ? UUID.randomUUID().toString().substring(0, 8)
+                        : meta.sessionLabel().replaceAll("\\W+", "").toUpperCase())
                 : meta.paperCode().replaceAll("\\W+", ""));
+        String anchorCode = "ING-" + rawIdentity;
+        if (anchorCode.length() > 40) {
+            anchorCode = anchorCode.substring(0, 31) + "-"
+                    + String.format("%08x", anchorCode.hashCode());
+        }
         KnowledgeNode subjectRoot = subject.knowledgeNodeId() != null
                 ? knowledgeNodes.findById(subject.knowledgeNodeId()).orElse(null)
                 : null;
