@@ -101,8 +101,8 @@ class MultipartMarkingFlowIT {
         return new PastPaperDraftDto(
                 "1.0",
                 new PastPaperDraftDto.PaperMeta("Edexcel", "IGCSE", "Chemistry",
-                        "Paper 2C", "June 2013", "4CH0/2C-" + UUID.randomUUID(),
-                        "it-qp-doc", "it-ms-doc"),
+                        "Paper 2C", "June 2013-" + UUID.randomUUID().toString().substring(0, 6),
+                        "4CH0/2C", "it-qp-doc", "it-ms-doc"),
                 List.of(new PastPaperDraftDto.QuestionDraft("q1", "1", "Question 1 stem",
                         "Explain", 2, "STRUCTURED", 1, 0.6,
                         List.of(new PastPaperDraftDto.PartDraft("a", "Part a prompt",

@@ -87,21 +87,25 @@ public class PastPaperIngestionService {
         Subject subject = resolveSubject(meta);
         UUID anchorTopic = createIngestionAnchor(meta, subject, ingestedBy);
 
+        // defensive bounds for the VARCHAR columns (parser drafts are untrusted input)
+        String paperCode = bound(meta.paperCode(), 30);
+        String sessionLabel = bound(meta.sessionLabel(), 60);
+
         ExamPaper paper = examPapers.save(new ExamPaper(
                 subject.id(),
-                (meta.qualification() == null ? "" : meta.qualification()) + " "
+                bound((meta.qualification() == null ? "" : meta.qualification()) + " "
                         + (meta.subject() == null ? "" : meta.subject()) + " "
-                        + (meta.paperCode() == null ? meta.unit() : meta.paperCode()) + " "
-                        + (meta.sessionLabel() == null ? "" : meta.sessionLabel()),
-                nullSafe(meta.board(), "unknown-board"),
-                nullSafe(meta.qualification(), "unknown"),
-                meta.unit(),
-                meta.sessionLabel(),
-                meta.paperCode(),
-                meta.questionPaperDocumentId(),
-                meta.markSchemeDocumentId(),
+                        + (paperCode == null ? meta.unit() : paperCode) + " "
+                        + (sessionLabel == null ? "" : sessionLabel), 200),
+                bound(nullSafe(meta.board(), "unknown-board"), 40),
+                bound(nullSafe(meta.qualification(), "unknown"), 20),
+                bound(meta.unit(), 60),
+                sessionLabel,
+                paperCode,
+                bound(meta.questionPaperDocumentId(), 80),
+                bound(meta.markSchemeDocumentId(), 80),
                 ExamPaper.Provenance.PAST_PAPER,
-                draft.extractionMethod(),
+                bound(draft.extractionMethod(), 120),
                 ingestedBy));
 
         int questionCount = 0;
@@ -255,6 +259,12 @@ public class PastPaperIngestionService {
 
     private static String nullSafe(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /** null-safe truncation for VARCHAR columns fed from untrusted draft input */
+    private static String bound(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) return value;
+        return value.substring(0, maxLength);
     }
 
     /**
