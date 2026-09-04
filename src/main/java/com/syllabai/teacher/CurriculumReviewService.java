@@ -22,6 +22,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// read methods open a session so PART_OF edge targets resolve; mutating
+// methods below declare their own read-write @Transactional (which overrides)
+
 /**
  * Teacher validation workflow for spec-derived curricula (T-010, Master Spec
  * §7). Ingested nodes arrive SUGGESTED and are validated one by one — the
@@ -31,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
  * unreviewed seeds must never gate what serves to learners.
  */
 @Service
+@Transactional(readOnly = true)
 public class CurriculumReviewService {
 
     private static final Logger log = LoggerFactory.getLogger(CurriculumReviewService.class);

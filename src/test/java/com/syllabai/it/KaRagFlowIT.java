@@ -208,7 +208,9 @@ class KaRagFlowIT {
         seedCorpus();
         int callsBefore = generator.calls.get();
 
-        TutorAnswerView answer = kaRag.ask(learnerId, "photosynthesis in plant cells");
+        // NB: tokens chosen to be collision-free against the corpus under the
+        // fake hashing embeddings (real Gemini embeddings need no such care)
+        TutorAnswerView answer = kaRag.ask(learnerId, "cooking recipes ancient pyramids");
 
         assertThat(answer.refused()).isTrue();
         assertThat(answer.answer()).contains("can't answer that");
