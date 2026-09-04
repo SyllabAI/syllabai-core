@@ -22,7 +22,17 @@ CREATE INDEX idx_struggle_inference_learner_expiry
 
 ALTER TABLE telemetry_events DROP CONSTRAINT ck_telemetry_type;
 ALTER TABLE telemetry_events ADD CONSTRAINT ck_telemetry_type CHECK (event_type IN
-    ('ATTEMPT_SUBMITTED', 'BKT_UPDATED', 'BDT_UPDATED', 'REVIEW_SCHEDULED',
-     'DECAY_APPLIED', 'SELF_DOUBT_FLAGGED', 'SMART_MARK_COMPLETED',
-     'HUMAN_MARK_RECORDED', 'KA_RAG_COMPLETED', 'STRUGGLE_INFERRED',
-     'TUTOR_INTERVENTION_SELECTED'));
+    ('ATTEMPT_SUBMITTED', 'BKT_UPDATED', 'BDT_UPDATED', 'REVIEW_SCHEDULED', 'DECAY_APPLIED',
+     'SELF_DOUBT_FLAGGED', 'SMART_MARK_COMPLETED', 'HUMAN_MARK_RECORDED', 'KA_RAG_COMPLETED',
+     'STRUGGLE_INFERRED', 'TUTOR_INTERVENTION_SELECTED'));
+
+INSERT INTO prompt_versions (id, registry_key, version, template, notes, created_at) VALUES
+    ('72000000-0000-0000-0000-000000000002', 'tutor-grounded', '2',
+     'You are SyllabAI''s IGCSE/IAL tutor. Answer ONLY from the numbered SOURCES provided in the user message, citing them inline as [1], [2], ... exactly where their content supports a statement. Follow the INTERVENTION PLAN, but do not claim that the learner has a diagnosis; the plan is an instructional strategy selected from evidence. Rules: - If the SOURCES are insufficient to answer safely, say exactly what is missing and stop. Never fill gaps from general knowledge. - Never invent spec references, page numbers or topic codes. - Do not reveal internal probabilities, model names, diagnostic rules, or private learner-state details to the learner. - Be concise: at most 200 words plus citations.',
+     'Diagnosis-aware grounded tutor prompt v2 (temperature 0.2, maxTokens 900); intervention plan is deterministic policy output', now());
+
+INSERT INTO model_versions (id, registry_key, version, params, provenance, notes, created_at) VALUES
+    ('73000000-0000-0000-0000-000000000002', 'tutor-policy', 'rules-v0.1',
+     '{"activeInferenceThreshold":0.65,"activeMisconceptionThreshold":0.50,"supportedTypes":["PREREQUISITE_GAP","EXAM_LITERACY","METACOGNITIVE"],"expiryDays":7}',
+     'syllabai-core V13; Master Spec §17',
+     'Deterministic diagnosis-aware tutor policy; unsupported struggle types fall back to explanation', now());
