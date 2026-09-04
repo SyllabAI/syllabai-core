@@ -9,14 +9,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
-/**
- * Learner-aware context assembly (T-024, Paper B §3.3): renders the learner
- * brief (mastery of the relevant topics, active misconceptions, fluency gaps)
- * and the KG brief (matched topics, prerequisites, misconceptions) alongside
- * the evidence set. This is <em>assembly</em>, not policy — deciding which
- * intervention the state implies is T-026. Anonymous calls (teacher preview,
- * research probes) get an explicitly-empty brief, never a fabricated one.
- */
+/** Learner-aware context assembly plus the T-026 intervention-policy decision. */
 @Component
 public class LearnerContextAssembler implements ContextAssembler {
 
@@ -25,9 +18,11 @@ public class LearnerContextAssembler implements ContextAssembler {
     private static final double ACTIVE_MISCONCEPTION_THRESHOLD = 0.5;
 
     private final LearnerModelService learnerModel;
+    private final TutorPolicyService policy;
 
-    public LearnerContextAssembler(LearnerModelService learnerModel) {
+    public LearnerContextAssembler(LearnerModelService learnerModel, TutorPolicyService policy) {
         this.learnerModel = learnerModel;
+        this.policy = policy;
     }
 
     @Override
@@ -40,7 +35,9 @@ public class LearnerContextAssembler implements ContextAssembler {
 
         String learnerBrief = learnerId == null ? ANONYMOUS
                 : learnerBrief(learnerId, relevantNodes, knowledge);
-        return new TutorContext(learnerBrief, knowledgeBrief(knowledge), List.copyOf(evidence));
+        TutorPolicyService.InterventionPlan plan = policy.select(
+                learnerId, knowledge.topics(), knowledge.misconceptions());
+        return new TutorContext(learnerBrief, knowledgeBrief(knowledge), List.copyOf(evidence), plan);
     }
 
     private String learnerBrief(UUID learnerId, Set<UUID> relevantNodes,
@@ -50,10 +47,8 @@ public class LearnerContextAssembler implements ContextAssembler {
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.mastery(), (a, b) -> a));
 
         Map<UUID, Double> fluencyGaps = learnerModel.skillStates(learnerId).stream()
-                .filter(s -> relevantNodes.contains(s.nodeId())
-                        && s.proceduralFluencyGap() != null)
-                .collect(Collectors.toMap(s -> s.nodeId(), s -> s.proceduralFluencyGap(),
-                        (a, b) -> a));
+                .filter(s -> relevantNodes.contains(s.nodeId()) && s.proceduralFluencyGap() != null)
+                .collect(Collectors.toMap(s -> s.nodeId(), s -> s.proceduralFluencyGap(), (a, b) -> a));
 
         Set<UUID> activeMisconceptions = learnerModel.misconceptionStates(learnerId).stream()
                 .filter(m -> m.probability() >= ACTIVE_MISCONCEPTION_THRESHOLD)
@@ -98,16 +93,13 @@ public class LearnerContextAssembler implements ContextAssembler {
                 .append(topic.title()).append('\n'));
         if (!knowledge.prerequisites().isEmpty()) {
             sb.append("Prerequisites of the matched topics:\n");
-            knowledge.prerequisites().stream()
-                    .limit(8)
-                    .forEach(p -> sb.append("- ").append(p.title())
-                            .append(" (").append(p.depth()).append(p.depth() == 1
-                                    ? " hop" : " hops deep").append(")\n"));
+            knowledge.prerequisites().stream().limit(8).forEach(p -> sb.append("- ")
+                    .append(p.title()).append(" (").append(p.depth())
+                    .append(p.depth() == 1 ? " hop" : " hops deep").append(")\n"));
         }
         if (!knowledge.misconceptions().isEmpty()) {
             sb.append("Known misconceptions attached to these topics:\n");
-            knowledge.misconceptions().stream()
-                    .limit(6)
+            knowledge.misconceptions().stream().limit(6)
                     .forEach(m -> sb.append("- ").append(m.title()).append('\n'));
         }
         return sb.toString().strip();

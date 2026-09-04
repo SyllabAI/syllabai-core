@@ -10,26 +10,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/**
- * Grounded tutor generation (T-024, Master Spec §13/§19/§26): the free-LLM
- * chain renders the assembled context into an answer under a strict
- * grounding contract. The prompt is versioned in the {@code prompt_versions}
- * registry ({@code tutor-grounded}, v1 — V12 seed); temperature is pinned at
- * 0.2 for stable, citation-disciplined output. The generator NEVER sees
- * anything but the context: no chat history, no free-form web access —
- * scope creep toward a generic chatbot is structurally blocked.
- */
+/** Grounded generation with the T-026 intervention plan injected into the prompt. */
 @Component
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "1";
+    public static final String PROMPT_VERSION = "2";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
-
-    /** per-evidence character bound inside the prompt (keeps prompt size sane) */
     private static final int MAX_EVIDENCE_CHARS = 600;
-    /** overall bound on the rendered evidence block */
     private static final int MAX_TOTAL_EVIDENCE_CHARS = 4000;
 
     private final LlmProvider chain;
@@ -51,15 +40,14 @@ public class GroundedTutorGenerator implements TutorGenerator {
                     "LLM chain unavailable — set SYLLABAI_GROQ_API_KEY (free tier, ADR-009); "
                             + "grounded answers are impossible without a provider");
         }
-        LlmResponse response;
         try {
-            response = chain.generate(LlmRequest.withOptions(
+            LlmResponse response = chain.generate(LlmRequest.withOptions(
                     systemPrompt(), userPrompt(query, context), temperature, maxTokens));
+            log.info("tutor answer generated via {} ({})", response.providerName(), response.model());
+            return new GeneratedAnswer(response.text(), response.model(), response.providerName());
         } catch (LlmProviderException e) {
             throw new TutorGenerationException("LLM chain failed: " + e.getMessage(), e);
         }
-        log.info("tutor answer generated via {} ({})", response.providerName(), response.model());
-        return new GeneratedAnswer(response.text(), response.model(), response.providerName());
     }
 
     String systemPrompt() {
@@ -67,13 +55,15 @@ public class GroundedTutorGenerator implements TutorGenerator {
                 You are SyllabAI's IGCSE/IAL tutor. Answer ONLY from the numbered SOURCES
                 provided in the user message, citing them inline as [1], [2], ... exactly
                 where their content supports a statement.
+                Follow the INTERVENTION PLAN, but do not claim that the learner has a
+                diagnosis; the plan is an instructional strategy selected from evidence.
                 Rules:
                 - If the SOURCES are insufficient to answer safely, say exactly what is
                   missing and stop. Never fill gaps from general knowledge.
                 - Never invent spec references, page numbers or topic codes.
-                - Address the learner brief when present (mastery, misconceptions) by
-                  choosing language the learner can follow, but do not psychoanalyse.
-                - Be concise: at most 200 words plus the citations.
+                - Do not reveal internal probabilities, model names, diagnostic rules, or
+                  private learner-state details to the learner.
+                - Be concise: at most 200 words plus citations.
                 """;
     }
 
@@ -82,7 +72,13 @@ public class GroundedTutorGenerator implements TutorGenerator {
         sb.append("QUESTION:\n").append(query.strip()).append("\n\n");
         sb.append("LEARNER CONTEXT:\n").append(context.learnerBrief()).append("\n\n");
         sb.append("CURRICULUM CONTEXT:\n").append(context.knowledgeBrief()).append("\n\n");
-        sb.append("SOURCES (cite these as [n]):\n");
+        var plan = context.interventionPlan();
+        sb.append("INTERVENTION PLAN:\n").append(plan.type()).append(" — ")
+                .append(plan.rationale()).append('\n');
+        for (String action : plan.actions()) {
+            sb.append("- ").append(action).append('\n');
+        }
+        sb.append("\nSOURCES (cite these as [n]):\n");
         int rendered = 0;
         for (int i = 0; i < context.evidence().size(); i++) {
             EvidenceItem evidence = context.evidence().get(i);
@@ -93,8 +89,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
             }
             rendered += content.length();
             sb.append("[").append(i + 1).append("] ")
-                    .append(sourceLabel(evidence)).append(content.replace('\n', ' '))
-                    .append('\n');
+                    .append(sourceLabel(evidence)).append(content.replace('\n', ' ')).append('\n');
         }
         return sb.toString();
     }
@@ -115,7 +110,6 @@ public class GroundedTutorGenerator implements TutorGenerator {
         return safe.length() <= max ? safe : safe.substring(0, max) + "…";
     }
 
-    /** exposed for tests to pin the registered prompt identity (§19). */
     static String promptIdentity() {
         return PROMPT_REGISTRY_KEY + "/v" + PROMPT_VERSION;
     }
