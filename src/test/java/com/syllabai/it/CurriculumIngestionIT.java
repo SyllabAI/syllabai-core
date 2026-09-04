@@ -74,10 +74,12 @@ class CurriculumIngestionIT {
         assertThat(summary.topics()).isEqualTo(20);
         assertThat(summary.subtopics()).isEqualTo(15);
 
-        // V6 already seeded IAL-CHEM-2018 + subject CH + root CHM — resolution
+        // V6 already seeded IAL-CHEM-2018 + subject CHM + root CHM — resolution
         // must REUSE them, never duplicate the curriculum identity
         assertThat(summary.curriculumVersionId()).isNotNull();
-        assertThat(summary.subjectRootNodeId()).isNotNull();
+        assertThat(summary.subjectRootNodeId()).isEqualTo(
+                java.util.UUID.fromString("20000000-0000-0000-0000-000000000001"));
+        assertThat(knowledgeNodes.findByCode("IALCHEM2018-ROOT")).isEmpty();
         assertThat(curriculumVersions.findByBoardAndQualificationAndCode(
                 "Edexcel", "IAL", "IAL-CHEM-2018")).isPresent();
 
@@ -96,6 +98,7 @@ class CurriculumIngestionIT {
         assertThat(u1.provenance()).contains("curriculum:").contains("checksum:");
 
         // review queue sees exactly the spec-derived nodes as SUGGESTED
+        // (V6's manual nodes sit at UNVALIDATED, a different state)
         var queue = review.nodes(summary.curriculumVersionId(),
                 com.syllabai.knowledge.KnowledgeNode.ValidationStatus.SUGGESTED);
         assertThat(queue).hasSize(41);   // 6 units + 20 topics + 15 subtopics
@@ -124,8 +127,8 @@ class CurriculumIngestionIT {
         CurriculumIngestionService.IngestionSummary summary =
                 ingestion.ingest(draft(), null);
 
-        // gate refuses while SUGGESTED nodes remain (V6 manual seeds included —
-        // they are part of the same tree and equally pending validation)
+        // gate refuses while SUGGESTED/UNVALIDATED nodes remain (the spec tree
+        // joins V6's manual tree under the same CHM root — both must validate)
         UUID versionId = summary.curriculumVersionId();
         assertThatThrownBy(() -> review.validateVersion(versionId))
                 .isInstanceOf(ConflictException.class)

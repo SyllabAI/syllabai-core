@@ -184,20 +184,25 @@ class KaRagFlowIT {
 
     @Test
     @Order(2)
-    @DisplayName("vector-only grounding: mark-scheme chunks cite without any KG topic match")
-    void vectorOnlyAsk() throws Exception {
+    @DisplayName("true hybrid grounding: spec subtopic AND mark-scheme chunk both cite")
+    void hybridAsk() throws Exception {
         seedCorpus();
         int callsBefore = generator.calls.get();
 
-        // halogen vocabulary lives in the 4CH0/1C mark-scheme table chunk; no
-        // spec topic title contains these tokens → the vector side alone grounds
+        // halogen vocabulary lives on BOTH retrieval sides: spec subtopic
+        // U2-T8-C literally names "chlorine, bromine and iodine", and the
+        // 4CH0/1C mark-scheme table chunk shares the vocabulary
         TutorAnswerView answer = kaRag.ask(learnerId, "chlorine iodine astatine halogens");
 
         assertThat(answer.refused()).isFalse();
-        assertThat(answer.topics()).isEmpty();   // no intent match on the spec outline
+        assertThat(answer.topics())
+                .extracting(TutorAnswerView.TopicMatch::code)
+                .contains("IALCHEM2018-U2-T8-C");
         assertThat(answer.citations()).isNotEmpty();
         assertThat(answer.citations())
                 .anySatisfy(c -> assertThat(c.sourceType()).isEqualTo("MARK_SCHEME"));
+        assertThat(answer.citations())
+                .anySatisfy(c -> assertThat(c.sourceType()).isEqualTo("KNOWLEDGE_NODE"));
         assertThat(generator.calls.get()).isGreaterThan(callsBefore);
     }
 

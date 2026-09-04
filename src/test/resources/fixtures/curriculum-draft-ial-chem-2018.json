@@ -5,7 +5,7 @@
   "code" : "IAL-CHEM-2018",
   "title" : "Edexcel International Advanced Level Chemistry",
   "subject" : {
-    "code" : "CH",
+    "code" : "CHM",
     "name" : "Chemistry"
   },
   "units" : [ {
@@ -338,7 +338,7 @@
     "confidence" : 0.95
   } ],
   "provenance" : {
-    "sourceDocumentId" : "2163958d-e912-4b11-b3f1-67f78bff5902",
+    "sourceDocumentId" : "4937f827-4bf9-4fcc-99b7-95bb3831952e",
     "sourceChecksum" : "1e68fdf7d854f7a61b7d505456fc00eb6727b92bd003d03226963bd8ea6f832c",
     "engine" : "opendataloader-pdf",
     "engineVersion" : "2.5.7",

@@ -232,7 +232,7 @@ class CurriculumIngestionServiceTest {
                 "s057", List.of(), 29, 0.95);
         return new CurriculumDraftDto("1.1", "Edexcel", "IAL", "IAL-CHEM-2018",
                 "Edexcel International Advanced Level Chemistry",
-                new CurriculumDraftDto.SubjectDraft("CH", "Chemistry"),
+                new CurriculumDraftDto.SubjectDraft("CHM", "Chemistry"),
                 List.of(u1, u2), provenance());
     }
 
