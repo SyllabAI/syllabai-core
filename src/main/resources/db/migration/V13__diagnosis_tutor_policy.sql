@@ -1,4 +1,7 @@
 -- V13: explainable diagnosis and diagnosis-aware tutor policy (T-026/T-027).
+-- superseded_at: set when a newer inference of the same (learner, topic, type)
+-- replaces an active one; rows are kept (append-only research history) but
+-- excluded from active reads.
 CREATE TABLE struggle_inferences (
     id UUID PRIMARY KEY,
     learner_id UUID NOT NULL REFERENCES users(id),
@@ -10,7 +13,8 @@ CREATE TABLE struggle_inferences (
     model_version VARCHAR(80) NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
-    teacher_override VARCHAR(80),
+    superseded_at TIMESTAMPTZ,
+    teacher_override VARCHAR(40),
     overridden_by UUID REFERENCES users(id),
     overridden_at TIMESTAMPTZ,
     CHECK (expires_at > generated_at)
@@ -19,6 +23,9 @@ CREATE INDEX idx_struggle_inference_learner_topic_expiry
     ON struggle_inferences (learner_id, topic_node_id, expires_at DESC, probability DESC);
 CREATE INDEX idx_struggle_inference_learner_expiry
     ON struggle_inferences (learner_id, expires_at DESC, probability DESC);
+CREATE INDEX idx_struggle_inference_supersede
+    ON struggle_inferences (learner_id, topic_node_id, type, expires_at DESC)
+    WHERE superseded_at IS NULL;
 
 ALTER TABLE telemetry_events DROP CONSTRAINT ck_telemetry_type;
 ALTER TABLE telemetry_events ADD CONSTRAINT ck_telemetry_type CHECK (event_type IN
@@ -32,7 +39,7 @@ INSERT INTO prompt_versions (id, registry_key, version, template, notes, created
      'Diagnosis-aware grounded tutor prompt v2 (temperature 0.2, maxTokens 900); intervention plan is deterministic policy output', now());
 
 INSERT INTO model_versions (id, registry_key, version, params, provenance, notes, created_at) VALUES
-    ('73000000-0000-0000-0000-000000000002', 'tutor-policy', 'rules-v0.1',
-     '{"activeInferenceThreshold":0.65,"activeMisconceptionThreshold":0.50,"supportedTypes":["PREREQUISITE_GAP","EXAM_LITERACY","METACOGNITIVE"],"expiryDays":7}',
+    ('73000000-0000-0000-0000-000000000002', 'tutor-policy', 'rules-v0.2',
+     '{"interventionThreshold":0.65,"activeMisconceptionThreshold":0.50,"supportedTypes":["PREREQUISITE_GAP","EXAM_LITERACY","METACOGNITIVE"],"expiryDays":7,"readOrder":"probabilityDesc,generatedAtDesc","supersede":"same (learner,topic,type) replaced on new evidence; history kept","teacherOverride":{"CONFIRMED":"meets intervention threshold","REJECTED":"excluded from policy reads"}}',
      'syllabai-core V13; Master Spec §17',
      'Deterministic diagnosis-aware tutor policy; unsupported struggle types fall back to explanation', now());

@@ -71,7 +71,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v1");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v2");
     }
 
     @Test

@@ -6,13 +6,19 @@ import com.syllabai.research.TelemetryEvent;
 import com.syllabai.research.TelemetryEventRepository;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Research-only telemetry observer for T-026/T-027; keeps the existing telemetry service unchanged. */
+/** Research-only telemetry observer for T-026/T-027; keeps the existing telemetry service unchanged.
+ * Anonymous selections (learnerId == null) are recorded under the reserved
+ * all-zero id, exactly like {@code TelemetryService#onTutorAnswered}. */
 @Service
 public class DiagnosisTelemetryService {
+    /** reserved id for anonymous/preview records — keeps the FK-shaped column NOT NULL */
+    static final UUID ANONYMOUS_LEARNER = new UUID(0, 0);
+
     private final TelemetryEventRepository events;
     public DiagnosisTelemetryService(TelemetryEventRepository events) { this.events = events; }
 
@@ -27,7 +33,9 @@ public class DiagnosisTelemetryService {
 
     @EventListener @Transactional
     public void onTutorInterventionSelected(TutorInterventionSelectedEvent e) {
-        events.save(new TelemetryEvent(e.learnerId(), TelemetryEvent.Type.TUTOR_INTERVENTION_SELECTED,
+        events.save(new TelemetryEvent(
+                e.learnerId() == null ? ANONYMOUS_LEARNER : e.learnerId(),
+                TelemetryEvent.Type.TUTOR_INTERVENTION_SELECTED,
                 Map.of("topicNodeIds", e.topicNodeIds().stream().map(Object::toString).toList(),
                         "interventionType", e.interventionType(), "rationale", e.rationale(),
                         "policyVersion", e.policyVersion()), e.occurredAt()));

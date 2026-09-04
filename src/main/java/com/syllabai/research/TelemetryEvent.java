@@ -32,7 +32,9 @@ public class TelemetryEvent {
         SELF_DOUBT_FLAGGED,
         SMART_MARK_COMPLETED,
         HUMAN_MARK_RECORDED,
-        KA_RAG_COMPLETED
+        KA_RAG_COMPLETED,
+        STRUGGLE_INFERRED,
+        TUTOR_INTERVENTION_SELECTED
     }
 
     @Id

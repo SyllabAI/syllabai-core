@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,7 +61,13 @@ public class LearnerModelService {
         this.events = events;
     }
 
+    /**
+     * Order 10: learner-state updates run BEFORE downstream diagnosis
+     * ({@code StruggleInferenceService}, order 100), so diagnosis always reads
+     * the post-update model, never evidence-trailing state.
+     */
     @EventListener
+    @Order(10)
     @Transactional
     public void onAssessmentEvidence(AssessmentEvidenceRecordedEvent event) {
         updateMastery(event);
