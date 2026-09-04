@@ -62,13 +62,15 @@ public class CanonicalDocumentValidator {
             }
         }
 
+        // text may legitimately be null (layout-only elements — the real 4CH0 QP
+        // fixture ships one); chunking skips them, so validation tolerates them
         Set<String> elementIds = new HashSet<>();
         List<String> elementViolations = new ArrayList<>();
         if (doc.textBlocks() != null) {
             for (CanonicalDocumentDto.TextBlockElement e : doc.textBlocks()) {
                 checkElement(doc, e == null ? null : e.elementId(), e == null ? null : e.elementType(),
                         e == null ? null : e.pageNumber(), e == null ? null : e.readingOrder(),
-                        e == null ? null : e.confidence(), e == null ? null : e.text(), true,
+                        e == null ? null : e.confidence(),
                         e == null ? null : e.sourceEngine(), e == null ? null : e.sourceEngineVersion(),
                         elementIds, elementViolations, "textBlock");
             }
@@ -77,7 +79,7 @@ public class CanonicalDocumentValidator {
             for (CanonicalDocumentDto.TableElement e : doc.tables()) {
                 checkElement(doc, e == null ? null : e.elementId(), e == null ? null : e.elementType(),
                         e == null ? null : e.pageNumber(), e == null ? null : e.readingOrder(),
-                        e == null ? null : e.confidence(), e == null ? null : e.text(), true,
+                        e == null ? null : e.confidence(),
                         e == null ? null : e.sourceEngine(), e == null ? null : e.sourceEngineVersion(),
                         elementIds, elementViolations, "table");
             }
@@ -86,7 +88,7 @@ public class CanonicalDocumentValidator {
             for (CanonicalDocumentDto.EquationElement e : doc.equations()) {
                 checkElement(doc, e == null ? null : e.elementId(), e == null ? null : e.elementType(),
                         e == null ? null : e.pageNumber(), e == null ? null : e.readingOrder(),
-                        e == null ? null : e.confidence(), e == null ? null : e.text(), false,
+                        e == null ? null : e.confidence(),
                         e == null ? null : e.sourceEngine(), e == null ? null : e.sourceEngineVersion(),
                         elementIds, elementViolations, "equation");
             }
@@ -95,7 +97,7 @@ public class CanonicalDocumentValidator {
             for (CanonicalDocumentDto.FigureElement e : doc.figures()) {
                 checkElement(doc, e == null ? null : e.elementId(), e == null ? null : e.elementType(),
                         e == null ? null : e.pageNumber(), e == null ? null : e.readingOrder(),
-                        e == null ? null : e.confidence(), null, false,
+                        e == null ? null : e.confidence(),
                         e == null ? null : e.sourceEngine(), e == null ? null : e.sourceEngineVersion(),
                         elementIds, elementViolations, "figure");
             }
@@ -127,9 +129,8 @@ public class CanonicalDocumentValidator {
 
     private void checkElement(CanonicalDocumentDto doc, String elementId, String elementType,
                               Integer pageNumber, Integer readingOrder, Double confidence,
-                              String text, boolean textRequired, String sourceEngine,
-                              String sourceEngineVersion, Set<String> seenIds,
-                              List<String> violations, String family) {
+                              String sourceEngine, String sourceEngineVersion,
+                              Set<String> seenIds, List<String> violations, String family) {
         String label = family + " " + quote(elementId);
         if (isBlank(elementId)) {
             violations.add(family + " without element_id");
@@ -150,9 +151,6 @@ public class CanonicalDocumentValidator {
         }
         if (confidence != null && (confidence < 0.0 || confidence > 1.0)) {
             violations.add(label + ": confidence " + confidence + " outside 0..1");
-        }
-        if (textRequired && isBlank(text)) {
-            violations.add(label + ": text is required");
         }
         if (isBlank(sourceEngine)) {
             violations.add(label + ": source_engine is required");

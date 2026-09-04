@@ -79,17 +79,17 @@ class CanonicalDocumentValidatorTest {
     }
 
     @Test
-    @DisplayName("text-bearing element without text is rejected")
-    void rejectsTextlessTextBlock() {
+    @DisplayName("textless textBlocks are tolerated (layout-only elements; chunking skips them)")
+    void toleratesTextlessTextBlock() {
         List<CanonicalDocumentDto.TextBlockElement> blocks = List.of(
-                CanonicalDocs.block("e000000", 1, 0, " "));
+                CanonicalDocs.block("e000000", 1, 0, "real text"),
+                CanonicalDocs.block("e000001", 1, 1, " "));
         CanonicalDocumentDto doc = CanonicalDocs.valid();
-        CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
+        CanonicalDocumentDto withBlank = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
                 blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance());
-        assertThatThrownBy(() -> validator.validate(bad))
-                .isInstanceOf(InvalidDocumentException.class)
-                .hasMessageContaining("text is required");
+        // the real 4CH0 QP fixture ships a null-text textBlock (e000034) — same case
+        assertThatCode(() -> validator.validate(withBlank)).doesNotThrowAnyException();
     }
 
     @Test

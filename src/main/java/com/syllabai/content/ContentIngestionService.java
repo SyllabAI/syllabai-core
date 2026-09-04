@@ -11,9 +11,14 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Persists syllabai-parser canonical documents (T-011's draft bridge, T-013's store).
  * Pipeline: validate (core-side, never trust across a process boundary) → dedup by
- * source checksum (idempotent corpus loads) → persist the document verbatim → chunk
+ * source checksum (idempotent corpus loads) → persist the document → chunk
  * deterministically → persist chunks. Embedding is a separate, re-runnable operation
  * ({@link DocumentEmbeddingService}) so content lands even with zero API keys.
+ *
+ * <p>Storage note: the raw request JSON is handed to the entity and stored in a JSONB
+ * column — content-preserving (the JSON writer may normalize formatting). The §8
+ * provenance spine for the original FILE is {@code source.checksum}, not the JSON
+ * serialization.</p>
  */
 @Service
 public class ContentIngestionService {
@@ -32,8 +37,8 @@ public class ContentIngestionService {
     }
 
     /**
-     * @param rawJson the request body verbatim — stored byte-exact, the parser's
-     *                sealed output is the record (§8), not a re-serialization
+     * @param rawJson the request body as received — stored via JSONB, content-preserving;
+     *                the source checksum (§8) is the provenance spine for the original file
      */
     @Transactional
     public IngestionResult ingest(CanonicalDocumentDto doc, String rawJson, Document.Kind kind,

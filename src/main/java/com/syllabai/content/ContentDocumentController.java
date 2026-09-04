@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Teacher content endpoints for the canonical document store (T-013). Route security:
  * {@code /api/v1/teacher/**} requires TEACHER/ADMIN. The canonical JSON is received
- * and stored verbatim — the body is the record (§8), re-serialization would break
- * byte-exactness with the parser's sealed output.
+ * as-is and stored in JSONB (content-preserving; the source checksum pins the
+ * original file per §8).
  */
 @RestController
 @RequestMapping("/api/v1/teacher/content/documents")

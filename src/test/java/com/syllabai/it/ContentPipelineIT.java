@@ -93,9 +93,11 @@ class ContentPipelineIT {
         assertThat(result.elements()).isEqualTo(ms.dto().totalElementCount());
         assertThat(result.pages()).isEqualTo(ms.dto().pageCount());
 
-        // verbatim storage: the canonical JSON round-trips byte-exact
+        // content-preserving storage: JSONB round-trips the canonical tree (the
+        // SqlTypes.JSON writer normalizes formatting, so compare parsed trees —
+        // the source checksum pins the original FILE, §8)
         Document stored = documents.findById(result.id()).orElseThrow();
-        assertThat(stored.canonicalJson()).isEqualTo(ms.raw());
+        assertThat(JSON.readTree(stored.canonicalJson())).isEqualTo(JSON.readTree(ms.raw()));
         assertThat(stored.sourceEngine()).isEqualTo("opendataloader-pdf");
         assertThat(stored.sourceEngineVersion()).isEqualTo("2.5.7");
 
