@@ -54,7 +54,7 @@ class GlmOcrIngestionCliTest {
                 new GlmOcrIngestionService.ReconciliationStatus("OK", 0, false, 80, null),
                 List.of(), true));
 
-        GlmOcrIngestionCli cli = new GlmOcrIngestionCli(bridge, JSON, environment);
+        GlmOcrIngestionCli cli = new GlmOcrIngestionCli(bridge, environment);
 
         PrintStream originalOut = System.out;
         ByteArrayOutputStream printed = new ByteArrayOutputStream();
@@ -88,7 +88,7 @@ class GlmOcrIngestionCliTest {
     void rejectsBadDirectory(@TempDir Path temp) {
         when(environment.getRequiredProperty("syllabai.glmocr.pair-dir"))
                 .thenReturn(temp.resolve("nope").toString());
-        GlmOcrIngestionCli cli = new GlmOcrIngestionCli(bridge, JSON, environment);
+        GlmOcrIngestionCli cli = new GlmOcrIngestionCli(bridge, environment);
 
         assertThatThrownBy(cli::run)
                 .isInstanceOf(IllegalStateException.class)

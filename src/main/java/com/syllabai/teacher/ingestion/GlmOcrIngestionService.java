@@ -54,6 +54,10 @@ public class GlmOcrIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(GlmOcrIngestionService.class);
 
+    /** house pattern: the app context exposes no ObjectMapper bean (see
+     *  ContentDocumentController/ChunkVectorRepository) */
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private final ContentIngestionService contentIngestion;
     private final PastPaperIngestionService pastPaperIngestion;
     private final GlmOcrDraftMapper mapper;
@@ -62,7 +66,6 @@ public class GlmOcrIngestionService {
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
     private final MarkPointRepository markPoints;
-    private final ObjectMapper json;
 
     public GlmOcrIngestionService(ContentIngestionService contentIngestion,
                                    PastPaperIngestionService pastPaperIngestion,
@@ -71,8 +74,7 @@ public class GlmOcrIngestionService {
                                    ExamPaperRepository examPapers,
                                    QuestionVersionRepository questionVersions,
                                    MarkSchemeRepository markSchemes,
-                                   MarkPointRepository markPoints,
-                                   ObjectMapper json) {
+                                   MarkPointRepository markPoints) {
         this.contentIngestion = contentIngestion;
         this.pastPaperIngestion = pastPaperIngestion;
         this.mapper = mapper;
@@ -81,7 +83,6 @@ public class GlmOcrIngestionService {
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.markPoints = markPoints;
-        this.json = json;
     }
 
     /**
@@ -131,10 +132,10 @@ public class GlmOcrIngestionService {
                     pair.msCanonical().source().checksum(),
                     GlmOcrDraftMapper.BRIDGE_METHOD,
                     reconciliationStatus,
-                    json.writeValueAsString(findings),
-                    json.writeValueAsString(pair.qpDraft()),
-                    json.writeValueAsString(pair.msDraft()),
-                    json.writeValueAsString(pair.reconciliation()),
+                    JSON.writeValueAsString(findings),
+                    JSON.writeValueAsString(pair.qpDraft()),
+                    JSON.writeValueAsString(pair.msDraft()),
+                    JSON.writeValueAsString(pair.reconciliation()),
                     ingestedBy);
             bridgeRecords.save(record);
         } catch (Exception e) {
@@ -247,8 +248,8 @@ public class GlmOcrIngestionService {
 
     private List<ReviewFinding> deserialize(String stored) {
         try {
-            return json.readValue(stored,
-                    json.getTypeFactory().constructCollectionType(List.class, ReviewFinding.class));
+            return JSON.readValue(stored,
+                    JSON.getTypeFactory().constructCollectionType(List.class, ReviewFinding.class));
         } catch (Exception e) {
             throw new IllegalStateException("stored review findings are unreadable", e);
         }
@@ -256,7 +257,7 @@ public class GlmOcrIngestionService {
 
     private GlmOcrReconciliationDto deserializeReconciliation(String stored) {
         try {
-            return json.readValue(stored, GlmOcrReconciliationDto.class);
+            return JSON.readValue(stored, GlmOcrReconciliationDto.class);
         } catch (Exception e) {
             throw new IllegalStateException("stored reconciliation is unreadable", e);
         }

@@ -57,7 +57,7 @@ class GlmOcrIngestionServiceTest {
 
     private final GlmOcrIngestionService service = new GlmOcrIngestionService(
             contentIngestion, pastPaperIngestion, new GlmOcrDraftMapper(), bridgeRecords,
-            examPapers, questionVersions, markSchemes, markPoints, JSON);
+            examPapers, questionVersions, markSchemes, markPoints);
 
     private static final UUID OPERATOR = UUID.randomUUID();
 

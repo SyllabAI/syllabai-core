@@ -34,14 +34,14 @@ public class GlmOcrIngestionCli implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(GlmOcrIngestionCli.class);
 
+    /** house pattern: the app context exposes no ObjectMapper bean */
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private final GlmOcrIngestionService bridge;
-    private final ObjectMapper json;
     private final Environment environment;
 
-    public GlmOcrIngestionCli(GlmOcrIngestionService bridge, ObjectMapper json,
-                              Environment environment) {
+    public GlmOcrIngestionCli(GlmOcrIngestionService bridge, Environment environment) {
         this.bridge = bridge;
-        this.json = json;
         this.environment = environment;
     }
 
@@ -59,13 +59,13 @@ public class GlmOcrIngestionCli implements CommandLineRunner {
         String msCanonicalJson = Files.readString(dir.resolve("ms-canonical.json"));
 
         GlmOcrPairRequest request = new GlmOcrPairRequest(
-                json.readValue(qpCanonicalJson, CanonicalDocumentDto.class),
+                JSON.readValue(qpCanonicalJson, CanonicalDocumentDto.class),
                 qpCanonicalJson,
-                json.readValue(msCanonicalJson, CanonicalDocumentDto.class),
+                JSON.readValue(msCanonicalJson, CanonicalDocumentDto.class),
                 msCanonicalJson,
-                json.readValue(dir.resolve("qp-draft.json").toFile(), GlmOcrPaperDraftDto.class),
-                json.readValue(dir.resolve("ms-draft.json").toFile(), GlmOcrMarkSchemeDraftDto.class),
-                json.readValue(dir.resolve("reconciliation.json").toFile(),
+                JSON.readValue(dir.resolve("qp-draft.json").toFile(), GlmOcrPaperDraftDto.class),
+                JSON.readValue(dir.resolve("ms-draft.json").toFile(), GlmOcrMarkSchemeDraftDto.class),
+                JSON.readValue(dir.resolve("reconciliation.json").toFile(),
                         GlmOcrReconciliationDto.class));
 
         GlmOcrIngestionService.PairResult result = bridge.ingestPair(request, null);
@@ -86,7 +86,7 @@ public class GlmOcrIngestionCli implements CommandLineRunner {
                 result.embeddingSkipped());
 
         // structured result on stdout for ops scripting
-        System.out.println(json.writerWithDefaultPrettyPrinter()
+        System.out.println(JSON.writerWithDefaultPrettyPrinter()
                 .writeValueAsString(result));
     }
 }
