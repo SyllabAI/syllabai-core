@@ -1,0 +1,1 @@
+T-C02 implementation should follow docs/t-c02-bridge-contract.md. This marker exists only to keep branch/review work explicit.
