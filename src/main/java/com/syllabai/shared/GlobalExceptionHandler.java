@@ -29,6 +29,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(com.syllabai.content.InvalidDocumentException.class)
+    ResponseEntity<ApiError> invalidDocument(com.syllabai.content.InvalidDocumentException ex) {
+        // full invariant list preserved — corpus operators fix a bad document in one pass
+        return build(HttpStatus.BAD_REQUEST, "invalid_document", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()

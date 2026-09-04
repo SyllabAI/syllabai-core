@@ -23,6 +23,7 @@ com.syllabai
 ├── identity          (auth, users, RBAC, consent)
 ├── curriculum        (boards, subjects, versions)
 ├── knowledge         (KG nodes/edges, misconceptions, traversal)
+├── content           (canonical document store, chunking, embeddings, vector retrieval)
 ├── assessment        (question bank, attempts, evidence contract)
 ├── smartmark         (AI marking, kappa gate — Wave 2, placeholder)
 ├── learner           (BKT, BDT, Ebbinghaus decay, learner state)
@@ -36,7 +37,7 @@ com.syllabai
 
 Each module owns its application services, domain objects, ports, and persistence adapters. Cross-module communication via domain events and contracts — never direct repository access.
 
-## Implemented so far (Wave 0 + science core)
+## Implemented so far (Wave 0–2 + science core)
 
 | Task | Status | What |
 |------|--------|------|
@@ -54,6 +55,8 @@ Each module owns its application services, domain objects, ports, and persistenc
 | T-018 | ✅ | Ebbinghaus decay service (τ=30/90/365 by band, floor, review threshold) + nightly `@Scheduled` job |
 | T-020 | ✅ (v0) | Append-only telemetry event store (JSONB): all six Cycle-1 event types emitted (ATTEMPT_SUBMITTED, BKT_UPDATED, BDT_UPDATED, REVIEW_SCHEDULED, DECAY_APPLIED, SELF_DOUBT_FLAGGED) |
 | T-023 | ✅ (core) | `LlmProvider` port + Spring AI adapters + `FailoverLlmChain` (Groq→Gemini→OpenRouter, health/cooldown, admin health endpoint, **experiment pinning** via config + experiments registry — unpinned experiments fail loudly, pinned never fail over) |
+| T-008–T-011, T-019, T-021, T-022 | ✅ | Wave-1/2 content+assessment fabric: V8 multi-part model (ExamPaper/QuestionVersion/QuestionPart/MarkScheme/MarkPoint/Answer/SmartMarkResult/HumanMark + κ evaluations), timed/untimed fluency gap, Smart Mark Strategy pipeline (candidate → bounds/coverage/mark-sum validators → append-only results; blank answers deterministic; LLM never final truth), κ ≥ 0.60 release gate, T-011 parser draft bridge + teacher validation workflow + ingestion anchors, ServableQuestionSpec (unvalidated content never serves) |
+| T-013 | ✅ | V11 content module: canonical document store (verbatim JSONB, checksum-idempotent), deterministic chunking (element-ordered, block-bound, provenance element_ids), `EmbeddingProvider` port + Gemini text-embedding-004 (768-dim, no failover by design), pgvector `vector(768)` + HNSW cosine search, teacher content APIs (ingest/embed/search), model-registry seed `content-embedding` (§19) |
 
 ## Quickstart (local)
 
@@ -65,6 +68,8 @@ docker compose up -d            # Postgres 17 + pgvector on :5432
 export SYLLABAI_JWT_SECRET="$(openssl rand -base64 48)"
 # optional LLM keys (app boots fine without them):
 export SYLLABAI_GROQ_API_KEY=... SYLLABAI_GEMINI_API_KEY=...
+# optional embeddings for T-013 retrieval (free tier, no CC):
+export SYLLABAI_EMBEDDING_GEMINI_API_KEY=...
 
 # 3. run (local profile = demo users + dev jwt secret)
 mvn spring-boot:run -Dspring-boot.run.profiles=local
@@ -90,6 +95,18 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
   -d '{"questionId":"40000000-0000-0000-0000-000000000001","chosenOptionId":"41000000-0000-0000-0000-000000000001","responseTimeMs":42000,"confidence":2,"selfDoubtFlag":true,"timedCondition":false}' | jq
 curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/learners/me/state | jq
 
+# T-013 content pipeline: ingest a parser canonical document (schema 1.0) as a mark
+# scheme, embed its chunks, cosine-search the index (all teacher-gated)
+TEACHER=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"teacher@syllabai.dev","password":"teacher-demo-1234"}' | jq -r .accessToken)
+curl -s -X POST "localhost:8080/api/v1/teacher/content/documents?kind=MARK_SCHEME" \
+  -H "Authorization: Bearer $TEACHER" -H 'Content-Type: application/json' \
+  --data-binary @canonical-ms.json | jq
+curl -s -X POST localhost:8080/api/v1/teacher/content/documents/<id>/embed \
+  -H "Authorization: Bearer $TEACHER" | jq
+curl -s "localhost:8080/api/v1/teacher/content/documents/search?query=chlorine%20iodine&kind=MARK_SCHEME" \
+  -H "Authorization: Bearer $TEACHER" | jq
+
 # OpenAPI
 open http://localhost:8080/api/v1/docs
 ```
@@ -104,13 +121,16 @@ moles/grams misconception — watch `misconceptionStates.probability` jump from 
 ## Tests
 
 ```bash
-mvn test    # 60 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
+mvn test    # 121 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
             # evidence assembly, telemetry coverage, decay formula/bands/floor,
-            # decay-job events, chain failover, experiment pinning, storage
-```
+            # decay-job events, chain failover, experiment pinning, storage,
+            # Smart Mark pipeline + κ gate, multi-part ingestion bridge,
+            # canonical validation, deterministic chunking, embedding idempotency
 
-Integration tests (Testcontainers PostgreSQL) land with T-002 follow-up; CI runs on
-GitHub Actions (`.github/workflows/ci.yml`).
+mvn verify   # + Testcontainers ITs (CI, Docker): full marking loop
+             # (MultipartMarkingFlowIT), content pipeline ingest→chunk→embed→
+             # cosine search (ContentPipelineIT)
+```
 
 ## OOP expectations (graded course project)
 

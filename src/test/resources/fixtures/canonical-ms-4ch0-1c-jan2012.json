@@ -1,0 +1,1073 @@
+{
+  "documentId" : "6c2ccae2-63d0-4130-b317-9988d8c50c64",
+  "schemaVersion" : "1.0",
+  "version" : 1,
+  "source" : {
+    "uri" : "ms.pdf",
+    "checksum" : "ddf0444b528cf551cbaf2bbcc1f7aa212c902eda53fbb918c2edd83fee1e32c8",
+    "checksumAlgorithm" : "SHA-256",
+    "mimeType" : "application/pdf",
+    "fileName" : "input.pdf"
+  },
+  "pageCount" : 28,
+  "pages" : [ {
+    "pageNumber" : 1,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 2,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 3,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 4,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 5,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 6,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 7,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 8,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 9,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 10,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 11,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 12,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 13,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 14,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 15,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 16,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 17,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 18,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 19,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 20,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 21,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 22,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 23,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 24,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 25,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 26,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 27,
+    "width" : null,
+    "height" : null
+  }, {
+    "pageNumber" : 28,
+    "width" : null,
+    "height" : null
+  } ],
+  "sections" : [ {
+    "sectionId" : "s001",
+    "title" : "Mark Scheme (Results) January 2012",
+    "level" : 1,
+    "pageNumber" : 1,
+    "elementIds" : [ "e000002" ]
+  }, {
+    "sectionId" : "s002",
+    "title" : "Edexcel and BTEC Qualifications",
+    "level" : 3,
+    "pageNumber" : 2,
+    "elementIds" : [ "e000005", "e000006", "e000007", "e000008" ]
+  }, {
+    "sectionId" : "s003",
+    "title" : "Pearson: helping people progress, everywhere",
+    "level" : 3,
+    "pageNumber" : 2,
+    "elementIds" : [ "e000010", "e000011" ]
+  }, {
+    "sectionId" : "s004",
+    "title" : "INTERNATIONAL GCSE CHEMISTRY 4CH0 4SC0 /1C – JANUARY 2012",
+    "level" : 3,
+    "pageNumber" : 3,
+    "elementIds" : [ "e000032", "e000033", "e000034", "e000035", "e000036", "e000038", "e000039", "e000040", "e000041", "e000042", "e000045", "e000046", "e000047", "e000048" ]
+  } ],
+  "textBlocks" : [ {
+    "element_id" : "e000001",
+    "element_type" : "text_block",
+    "page_number" : 1,
+    "bounding_box" : {
+      "x" : 56.28,
+      "y" : 606.764,
+      "width" : 281.174,
+      "height" : 87.33600000000001,
+      "unit" : "pt"
+    },
+    "text" : "Mark Scheme (Results) January 2012",
+    "reading_order" : 1,
+    "confidence" : 1.0,
+    "role" : "heading",
+    "heading_level" : 1,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000002",
+    "element_type" : "text_block",
+    "page_number" : 1,
+    "bounding_box" : {
+      "x" : 56.28,
+      "y" : 412.365,
+      "width" : 419.514,
+      "height" : 106.77499999999998,
+      "unit" : "pt"
+    },
+    "text" : "International GCSE Chemistry (4CH0) Paper 1C Science Double Award (4SC0) Paper 1C",
+    "reading_order" : 2,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000004",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.543,
+      "y" : 748.691,
+      "width" : 197.894,
+      "height" : 13.26400000000001,
+      "unit" : "pt"
+    },
+    "text" : "Edexcel and BTEC Qualifications",
+    "reading_order" : 4,
+    "confidence" : 1.0,
+    "role" : "heading",
+    "heading_level" : 3,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000005",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.536,
+      "y" : 668.483,
+      "width" : 482.199,
+      "height" : 80.08800000000008,
+      "unit" : "pt"
+    },
+    "text" : "Edexcel and BTEC qualifications come from Pearson, the world’s leading learning company. We provide a wide range of qualifications including academic, vocational, occupational and specific programmes for employers. For further information, please call our GCE line on 0844 576 0025, our GCSE team on 0844 576 0027, or visit our qualifications website at www.edexcel.com. For information about our BTEC qualifications, please call 0844 576 0026, or visit our website at www.btec.co.uk.",
+    "reading_order" : 5,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000006",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.549,
+      "y" : 628.334,
+      "width" : 481.929,
+      "height" : 26.637000000000057,
+      "unit" : "pt"
+    },
+    "text" : "If you have any subject specific questions about this specification that require the help of a subject specialist, you may find our Ask The Expert email service helpful.",
+    "reading_order" : 6,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000007",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.549,
+      "y" : 574.861,
+      "width" : 332.35400000000004,
+      "height" : 40.02200000000005,
+      "unit" : "pt"
+    },
+    "text" : "Ask The Expert can be accessed online at the following link: http://www.edexcel.com/Aboutus/contact-us/",
+    "reading_order" : 7,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000008",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.543,
+      "y" : 521.415,
+      "width" : 482.039,
+      "height" : 26.637000000000057,
+      "unit" : "pt"
+    },
+    "text" : "Alternatively, you can speak directly to a subject specialist at Pearson about Edexcel qualifications on our dedicated Science telephone line: 0844 576 0037",
+    "reading_order" : 8,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000009",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.543,
+      "y" : 494.635,
+      "width" : 287.897,
+      "height" : 13.263000000000034,
+      "unit" : "pt"
+    },
+    "text" : "Pearson: helping people progress, everywhere",
+    "reading_order" : 9,
+    "confidence" : 1.0,
+    "role" : "heading",
+    "heading_level" : 3,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000010",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.543,
+      "y" : 401.107,
+      "width" : 482.067,
+      "height" : 93.40699999999998,
+      "unit" : "pt"
+    },
+    "text" : "Our aim is to help everyone progress in their lives through education. We believe in every kind of learning, for all kinds of people, wherever they are in the world. We’ve been involved in education for over 150 years, and by working across 70 countries, in 100 languages, we have built an international reputation for raising achievement through innovation in education. Find out more about how we can help you and your students at: www.pearson.com/uk",
+    "reading_order" : 10,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000011",
+    "element_type" : "text_block",
+    "page_number" : 2,
+    "bounding_box" : {
+      "x" : 42.539,
+      "y" : 112.386,
+      "width" : 254.652,
+      "height" : 61.367999999999995,
+      "unit" : "pt"
+    },
+    "text" : "January 2012 Publications Code UG030278 All the material in this publication is copyright © Pearson Education Ltd 2012",
+    "reading_order" : 11,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000012",
+    "element_type" : "text_block",
+    "page_number" : 3,
+    "bounding_box" : {
+      "x" : 99.23,
+      "y" : 510.756,
+      "width" : 424.76,
+      "height" : 13.26400000000001,
+      "unit" : "pt"
+    },
+    "text" : "INTERNATIONAL GCSE CHEMISTRY 4CH0 4SC0 /1C – JANUARY 2012",
+    "reading_order" : 12,
+    "confidence" : 1.0,
+    "role" : "heading",
+    "heading_level" : 3,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000032",
+    "element_type" : "text_block",
+    "page_number" : 22,
+    "bounding_box" : {
+      "x" : 106.67,
+      "y" : 483.516,
+      "width" : 55.13000000000001,
+      "height" : 26.644000000000005,
+      "unit" : "pt"
+    },
+    "text" : "Question number",
+    "reading_order" : 32,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000033",
+    "element_type" : "text_block",
+    "page_number" : 22,
+    "bounding_box" : {
+      "x" : 314.451,
+      "y" : 490.236,
+      "width" : 288.7289999999999,
+      "height" : 13.26400000000001,
+      "unit" : "pt"
+    },
+    "text" : "Answer Notes",
+    "reading_order" : 33,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000034",
+    "element_type" : "text_block",
+    "page_number" : 22,
+    "bounding_box" : {
+      "x" : 103.73,
+      "y" : 469.667,
+      "width" : 121.30399999999999,
+      "height" : 13.253000000000043,
+      "unit" : "pt"
+    },
+    "text" : "9 d i M1 60",
+    "reading_order" : 34,
+    "confidence" : 1.0,
+    "role" : "list_item",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000035",
+    "element_type" : "text_block",
+    "page_number" : 22,
+    "bounding_box" : {
+      "x" : 149.881,
+      "y" : 416.198,
+      "width" : 300.16700000000003,
+      "height" : 40.02200000000005,
+      "unit" : "pt"
+    },
+    "text" : "ii M1 setting out correct division of each % by Ar OR 2.5, 5 and 3.75",
+    "reading_order" : 35,
+    "confidence" : 1.0,
+    "role" : "list_item",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000036",
+    "element_type" : "text_block",
+    "page_number" : 22,
+    "bounding_box" : {
+      "x" : 148.38,
+      "y" : 188.91,
+      "width" : 541.041,
+      "height" : 80.10999999999999,
+      "unit" : "pt"
+    },
+    "text" : "iii M1 ammonium nitrate Accept phonetic spellings Do not accept ammonia in place of ammonium Do not accept nitrite or nitride in place of nitrate Ignore all formulae",
+    "reading_order" : 36,
+    "confidence" : 1.0,
+    "role" : "list_item",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000038",
+    "element_type" : "text_block",
+    "page_number" : 24,
+    "bounding_box" : {
+      "x" : 110.21,
+      "y" : 470.196,
+      "width" : 55.13000000000001,
+      "height" : 26.583999999999946,
+      "unit" : "pt"
+    },
+    "text" : "Question number",
+    "reading_order" : 38,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000039",
+    "element_type" : "text_block",
+    "page_number" : 24,
+    "bounding_box" : {
+      "x" : 325.191,
+      "y" : 476.856,
+      "width" : 286.6290000000001,
+      "height" : 13.26400000000001,
+      "unit" : "pt"
+    },
+    "text" : "Answer Notes",
+    "reading_order" : 39,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000040",
+    "element_type" : "text_block",
+    "page_number" : 24,
+    "bounding_box" : {
+      "x" : 105.95,
+      "y" : 362.739,
+      "width" : 592.24,
+      "height" : 106.80100000000004,
+      "unit" : "pt"
+    },
+    "text" : "10 b i M1 green precipitate Accept solid / suspension Ignore qualifiers such as pale / light / dark / muddy / dirty Ignore grey Ignore references to turning Reject bubbles or equivalent Do not penalise wrong identity of precipitate",
+    "reading_order" : 40,
+    "confidence" : 1.0,
+    "role" : "list_item",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000041",
+    "element_type" : "text_block",
+    "page_number" : 24,
+    "bounding_box" : {
+      "x" : 182.645,
+      "y" : 229.068,
+      "width" : 515.5550000000001,
+      "height" : 133.552,
+      "unit" : "pt"
+    },
+    "text" : "M2 brown precipitate Accept solid / suspension Accept orange / orange-brown / redbrown Ignore qualifiers such as pale / light / dark Reject bubbles or equivalent Do not penalise wrong identity of precipitate Award 1 for both colours correct but precipitate missing",
+    "reading_order" : 41,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000042",
+    "element_type" : "text_block",
+    "page_number" : 24,
+    "bounding_box" : {
+      "x" : 160.08,
+      "y" : 188.927,
+      "width" : 575.824,
+      "height" : 26.699000000000012,
+      "unit" : "pt"
+    },
+    "text" : "ii M1 FeSO4 + 2NaOH → Fe(OH)2 + Na2SO4 Correct formulae = 1 1 M2 Balancing = 1",
+    "reading_order" : 42,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000045",
+    "element_type" : "text_block",
+    "page_number" : 28,
+    "bounding_box" : {
+      "x" : 85.08,
+      "y" : 232.722,
+      "width" : 247.188,
+      "height" : 22.591999999999985,
+      "unit" : "pt"
+    },
+    "text" : "Further copies of this publication are available from Edexcel Publications, Adamsway, Mansfield, Notts, NG18 4FN",
+    "reading_order" : 45,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000046",
+    "element_type" : "text_block",
+    "page_number" : 28,
+    "bounding_box" : {
+      "x" : 85.08,
+      "y" : 169.01,
+      "width" : 155.07600000000002,
+      "height" : 47.297,
+      "unit" : "pt"
+    },
+    "text" : "Telephone 01623 467467 Fax 01623 450481 Email publication.orders@edexcel.com Order Code xxxxxxxx January 2012",
+    "reading_order" : 46,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000047",
+    "element_type" : "text_block",
+    "page_number" : 28,
+    "bounding_box" : {
+      "x" : 85.081,
+      "y" : 120.284,
+      "width" : 237.84299999999996,
+      "height" : 19.35199999999999,
+      "unit" : "pt"
+    },
+    "text" : "For more information on Edexcel qualifications, please visit www.edexcel.com/quals",
+    "reading_order" : 47,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000048",
+    "element_type" : "text_block",
+    "page_number" : 28,
+    "bounding_box" : {
+      "x" : 85.08,
+      "y" : 72.887,
+      "width" : 277.38,
+      "height" : 19.352000000000004,
+      "unit" : "pt"
+    },
+    "text" : "Pearson Education Limited. Registered company number 872828 with its registered office at Edinburgh Gate, Harlow, Essex CM20 2JE",
+    "reading_order" : 48,
+    "confidence" : 1.0,
+    "role" : "paragraph",
+    "heading_level" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  } ],
+  "tables" : [ {
+    "element_id" : "e000013",
+    "element_type" : "table",
+    "page_number" : 3,
+    "bounding_box" : {
+      "x" : 93.591,
+      "y" : 256.0,
+      "width" : 668.34,
+      "height" : 246.12,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n1 | a |  | M1 M2 M3 M4 M5 M6 | beaker water glass rod funnel conical flask water | Accept phonetic spellings | \n\n\n\n\n\n\n | b |  | M1 M1 | (filter) paper sand | Accept phonetic spellings Ignore alternatives to filter, such as kitchen / chromatography the essential word is paper Accept phonetic spellings | \n | c |  | M1 M2 |  |  | ",
+    "reading_order" : 13,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "1", "a", "", "M1 M2 M3 M4 M5 M6", "beaker water glass rod funnel conical flask water", "Accept phonetic spellings", "" ], [ "" ], [ "" ], [ "" ], [ "" ], [ "" ], [ "" ], [ "", "b", "", "M1 M1", "(filter) paper sand", "Accept phonetic spellings Ignore alternatives to filter, such as kitchen / chromatography the essential word is paper Accept phonetic spellings", "" ], [ "", "c", "", "M1 M2", "", "", "" ] ],
+    "row_count" : 10,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000014",
+    "element_type" : "table",
+    "page_number" : 4,
+    "bounding_box" : {
+      "x" : 123.171,
+      "y" : 173.5,
+      "width" : 668.3399999999999,
+      "height" : 337.26,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer |  | \n2 | a |  | M1 M1 M2 | (hydrated) iron(III) oxide / Fe2O3 oxygen / O2 water / H2O | Allow (hydrated) iron oxide and Fe2O3.xH2O Allow air Do not accept O Accept poorly written formulae such as H2O and O Accept phonetic spellings Answers can be in either order Reject salt / acid - eg salt water does not score | \n | b |  | M1 | cross in box 4 (oxidation) |  | \n | c |  | M1 M1 | Zinc / Zn cross in box 2 (Bucket) | Accept phonetic spellings | \n | d |  | M1 M2 | oiling / greasing / painting / covering with plastic / coating with tin or named metal (aluminium or below) in reactivity series / attaching magnesium or zinc blocks (to ships) | Any two for 1 each Ignore sacrificial protection and galvanising and alloying | ",
+    "reading_order" : 14,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "", "" ], [ "2", "a", "", "M1 M1 M2", "(hydrated) iron(III) oxide / Fe2O3 oxygen / O2 water / H2O", "Allow (hydrated) iron oxide and Fe2O3.xH2O Allow air Do not accept O Accept poorly written formulae such as H2O and O Accept phonetic spellings Answers can be in either order Reject salt / acid - eg salt water does not score", "" ], [ "", "b", "", "M1", "cross in box 4 (oxidation)", "", "" ], [ "", "c", "", "M1 M1", "Zinc / Zn cross in box 2 (Bucket)", "Accept phonetic spellings", "" ], [ "", "d", "", "M1 M2", "oiling / greasing / painting / covering with plastic / coating with tin or named metal (aluminium or below) in reactivity series / attaching magnesium or zinc blocks (to ships)", "Any two for 1 each Ignore sacrificial protection and galvanising and alloying", "" ] ],
+    "row_count" : 5,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000015",
+    "element_type" : "table",
+    "page_number" : 5,
+    "bounding_box" : {
+      "x" : 120.291,
+      "y" : 80.92,
+      "width" : 659.8800000000001,
+      "height" : 429.84,
+      "unit" : "pt"
+    },
+    "text" : "Questio n numbe r |  | Answer | Notes | \n3 | a |  | M1 M2 | NH4+ Cl– | Award 1 if wrong way around Penalise missing charges both times | \n | b |  | M1 M2 M3 | (add) sodium hydroxide/NaOH (solution) (and warm) test (gas / ammonia) with (damp red) litmus (paper) OR test with hydrogen chloride / conc HCl (litmus paper) turns blue OR white smoke/solid/powder (add) silver nitrate/AgNO3 (solution) (dilute) nitric acid white precipitate / solid / suspension | Accept any identified Group 1 or Group 2 hydroxide If no reagent added, max 1 mark for correct test AND result even if dipped into solution If just hydroxide or OH- ions, do not award M1 but continue marking If any other incorrect reagent added, then 0/3 Accept use of universal indicator Accept holding litmus above tube etc Reject blue litmus for M2 and M3 Do not penalise ammonium instead of ammonia in M2 Do not allow (dilute) hydrochloric acid Do not award M3 if litmus dipped into solution (even if only implied) If missing or incorrect reagent, 0/3 Do not accept any other acid or just acidified If acid missing or wrong, M3 can still be awarded If bleaching litmus paper mentioned, only M1 can be awarded | ",
+    "reading_order" : 15,
+    "confidence" : 1.0,
+    "rows" : [ [ "Questio n numbe r", "", "Answer", "Notes", "" ], [ "3", "a", "", "M1 M2", "NH4+ Cl–", "Award 1 if wrong way around Penalise missing charges both times", "" ], [ "", "b", "", "M1 M2 M3", "(add) sodium hydroxide/NaOH (solution) (and warm) test (gas / ammonia) with (damp red) litmus (paper) OR test with hydrogen chloride / conc HCl (litmus paper) turns blue OR white smoke/solid/powder (add) silver nitrate/AgNO3 (solution) (dilute) nitric acid white precipitate / solid / suspension", "Accept any identified Group 1 or Group 2 hydroxide If no reagent added, max 1 mark for correct test AND result even if dipped into solution If just hydroxide or OH- ions, do not award M1 but continue marking If any other incorrect reagent added, then 0/3 Accept use of universal indicator Accept holding litmus above tube etc Reject blue litmus for M2 and M3 Do not penalise ammonium instead of ammonia in M2 Do not allow (dilute) hydrochloric acid Do not award M3 if litmus dipped into solution (even if only implied) If missing or incorrect reagent, 0/3 Do not accept any other acid or just acidified If acid missing or wrong, M3 can still be awarded If bleaching litmus paper mentioned, only M1 can be awarded", "" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000016",
+    "element_type" : "table",
+    "page_number" : 6,
+    "bounding_box" : {
+      "x" : 98.991,
+      "y" : 93.82,
+      "width" : 659.88,
+      "height" : 416.94,
+      "unit" : "pt"
+    },
+    "text" : "Questio n numbe r |  | Answer | Notes | \n3 | c |  | M1 | reversible / goes both ways | Ignore equilibrium | \n | d |  | M1 M1 | ammonium chloride / NH4Cl ammonia / NH3 / molecules / they / it are / move / diffuse /travel faster / quicker | Do not accept ammonia chloride If name and formula given, both must be correct Ignore descriptions such as lighter / smaller / denser Accept phonetic spellings including amonia / ammonium Do not accept hydrogen chloride / hydrochloric acid / HCl / ammonium chloride / NH place of ammonia Accept all other words with same meaning as faster - eg speedier Do not accept react faster or travel further Accept reverse statements such as hydrogen chloride slower | \n | e |  | M1 M2 | Corrosive / burns / damages skin or eyes Wear eye protection eg goggles or mask / gloves / place bung in the end of the tube / use of fume cupboard | Ignore harmful / irritant / toxic / poisonous Allow tongs / tweezers if reference to cotton wool Ignore lab coats M1 and M2 are independent | ",
+    "reading_order" : 16,
+    "confidence" : 1.0,
+    "rows" : [ [ "Questio n numbe r", "", "Answer", "Notes", "" ], [ "3", "c", "", "M1", "reversible / goes both ways", "Ignore equilibrium", "" ], [ "", "d", "", "M1 M1", "ammonium chloride / NH4Cl ammonia / NH3 / molecules / they / it are / move / diffuse /travel faster / quicker", "Do not accept ammonia chloride If name and formula given, both must be correct Ignore descriptions such as lighter / smaller / denser Accept phonetic spellings including amonia / ammonium Do not accept hydrogen chloride / hydrochloric acid / HCl / ammonium chloride / NH place of ammonia Accept all other words with same meaning as faster - eg speedier Do not accept react faster or travel further Accept reverse statements such as hydrogen chloride slower", "" ], [ "", "e", "", "M1 M2", "Corrosive / burns / damages skin or eyes Wear eye protection eg goggles or mask / gloves / place bung in the end of the tube / use of fume cupboard", "Ignore harmful / irritant / toxic / poisonous Allow tongs / tweezers if reference to cotton wool Ignore lab coats M1 and M2 are independent", "" ] ],
+    "row_count" : 4,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000017",
+    "element_type" : "table",
+    "page_number" : 7,
+    "bounding_box" : {
+      "x" : 113.211,
+      "y" : 133.9,
+      "width" : 659.88,
+      "height" : 376.86,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n4 | a |  | M1 M1 | bubbles / fizzing / effervescence OR solid/magnesium disappears/dissolves OR flask gets warm magnesium chloride / MgCl2 | Allow just gas (given off) Ignore wrongly named gas Allow temperature increases but not heat produced Accept phonetic spellings Accept poorly written formulae such as MGCl2 and MgCL2 | \n | b |  | M1 M2 M1 | 2H2 + O2 → 2H2O condensation | correct formulae = 1 balancing = 1 Ignore heat anywhere Ignore state symbols Accept phonetic spellings | \n | c | i | M1 | blue | Do not accept any other colours even in combination with blue, eg blue-green Accept phonetic spellings Ignore qualifiers such as pale / dark / light Ignore mention of solution / liquid / solid | ",
+    "reading_order" : 17,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "4", "a", "", "M1 M1", "bubbles / fizzing / effervescence OR solid/magnesium disappears/dissolves OR flask gets warm magnesium chloride / MgCl2", "Allow just gas (given off) Ignore wrongly named gas Allow temperature increases but not heat produced Accept phonetic spellings Accept poorly written formulae such as MGCl2 and MgCL2", "" ], [ "", "b", "", "M1 M2 M1", "2H2 + O2 → 2H2O condensation", "correct formulae = 1 balancing = 1 Ignore heat anywhere Ignore state symbols Accept phonetic spellings", "" ], [ "", "c", "i", "M1", "blue", "Do not accept any other colours even in combination with blue, eg blue-green Accept phonetic spellings Ignore qualifiers such as pale / dark / light Ignore mention of solution / liquid / solid", "" ] ],
+    "row_count" : 4,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000018",
+    "element_type" : "table",
+    "page_number" : 8,
+    "bounding_box" : {
+      "x" : 113.211,
+      "y" : 348.82,
+      "width" : 659.88,
+      "height" : 161.94,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n4 | c | ii |  | measure boiling point / melting/freezing point OR distil / boil / freeze 100 ºC / 0 ºC | Ignore heat and cool Value must match property Accept º or C in place of ºC Do not award M2 if only value given Ignore evaporates M2 dependent on M1 | 1",
+    "reading_order" : 18,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "4", "c", "ii", "", "measure boiling point / melting/freezing point OR distil / boil / freeze 100 ºC / 0 ºC", "Ignore heat and cool Value must match property Accept º or C in place of ºC Do not award M2 if only value given Ignore evaporates M2 dependent on M1", "1" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000019",
+    "element_type" : "table",
+    "page_number" : 9,
+    "bounding_box" : {
+      "x" : 93.591,
+      "y" : 104.62,
+      "width" : 659.88,
+      "height" : 406.14,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n5 | a |  | M1 M1 M1 | T / U | Accept diagram: Accept diagrams: / Accept diagrams: / Do not penalise if both T and U are given Do not award the mark if either or both of T or U is given and any other letter is included | ",
+    "reading_order" : 19,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "5", "a", "", "M1 M1 M1", "T / U", "Accept diagram: Accept diagrams: / Accept diagrams: / Do not penalise if both T and U are given Do not award the mark if either or both of T or U is given and any other letter is included", "" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000020",
+    "element_type" : "table",
+    "page_number" : 10,
+    "bounding_box" : {
+      "x" : 93.591,
+      "y" : 118.54,
+      "width" : 659.88,
+      "height" : 392.21999999999997,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n5 | b |  |  | (add) bromine (water) decolourised / goes colourless | If bromide, then 0/2 Do not allow bromine in UV light, but M2 can be awarded Ignore starting colour of bromine Ignore clear / discolours Reject bleached | \n | c |  | M1 | displayed formula of but-1ene, but-2-ene or methylpropene | All atoms and bonds must be shown Allow dienes | \n | d | i | M1 | CnH2n+2 | Accept x and other letters in place of n Accept answers like CnH2n+2 Ignore brackets | \n |  | ii |  | same/similar chemical properties / reactions / behaviour / characteristics gradation /gradual change / trend / increase / decrease of physical properties (neighbouring members) differ by CH2 same functional group | Ignore specific example such as react with oxygen Ignore similar (type of) reactivity Accept reference to specific property, eg boiling point Reject same / similar physical properties Any two for 1 each Accept two answers on one answer line | ",
+    "reading_order" : 20,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "5", "b", "", "", "(add) bromine (water) decolourised / goes colourless", "If bromide, then 0/2 Do not allow bromine in UV light, but M2 can be awarded Ignore starting colour of bromine Ignore clear / discolours Reject bleached", "" ], [ "", "c", "", "M1", "displayed formula of but-1ene, but-2-ene or methylpropene", "All atoms and bonds must be shown Allow dienes", "" ], [ "", "d", "i", "M1", "CnH2n+2", "Accept x and other letters in place of n Accept answers like CnH2n+2 Ignore brackets", "" ], [ "", "", "ii", "", "same/similar chemical properties / reactions / behaviour / characteristics gradation /gradual change / trend / increase / decrease of physical properties (neighbouring members) differ by CH2 same functional group", "Ignore specific example such as react with oxygen Ignore similar (type of) reactivity Accept reference to specific property, eg boiling point Reject same / similar physical properties Any two for 1 each Accept two answers on one answer line", "" ] ],
+    "row_count" : 5,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000021",
+    "element_type" : "table",
+    "page_number" : 11,
+    "bounding_box" : {
+      "x" : 93.591,
+      "y" : 362.2,
+      "width" : 659.88,
+      "height" : 148.56,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n5 | e |  |  | (compounds / molecules with) same molecular formula / same number of each type of atom different structures / structural formulae / atoms arranged differently / different displayed formulae | Ignore same chemical formula Ignore hydrocarbons If atoms or elements instead of compounds or molecules, max 1 for Q | 1",
+    "reading_order" : 21,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "5", "e", "", "", "(compounds / molecules with) same molecular formula / same number of each type of atom different structures / structural formulae / atoms arranged differently / different displayed formulae", "Ignore same chemical formula Ignore hydrocarbons If atoms or elements instead of compounds or molecules, max 1 for Q", "1" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000022",
+    "element_type" : "table",
+    "page_number" : 12,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 241.84,
+      "width" : 659.88,
+      "height" : 268.91999999999996,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n6 | a |  | M1 M2 | H—O—H with both bonds represented by 2 shared electrons 8 electrons in outer shell of O AND 2 electrons in outer shell of both H (strong electrostatic) attraction between bonding/shared pair of electrons and nuclei (of hydrogen and oxygen) | Accept 2 dots, 2 crosses or 1 of each Atoms do not have to be labelled with H or O If wrongly labelled, only M1 can be awarded Ignore inner shell of O Reject if H has 2 shells M2 dependent on M1 Must refer to pair or two electrons Accept word nucleus instead of nuclei if clear reference to 2 atoms 0/2 if any mention of ions / electron transfer M2 dependent on mention of both attraction and electrons in M1 | 1",
+    "reading_order" : 22,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "6", "a", "", "M1 M2", "H—O—H with both bonds represented by 2 shared electrons 8 electrons in outer shell of O AND 2 electrons in outer shell of both H (strong electrostatic) attraction between bonding/shared pair of electrons and nuclei (of hydrogen and oxygen)", "Accept 2 dots, 2 crosses or 1 of each Atoms do not have to be labelled with H or O If wrongly labelled, only M1 can be awarded Ignore inner shell of O Reject if H has 2 shells M2 dependent on M1 Must refer to pair or two electrons Accept word nucleus instead of nuclei if clear reference to 2 atoms 0/2 if any mention of ions / electron transfer M2 dependent on mention of both attraction and electrons in M1", "1" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000023",
+    "element_type" : "table",
+    "page_number" : 13,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 268.12,
+      "width" : 659.88,
+      "height" : 242.64,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n6 | b | i | M1 | idea of electron transfer / loss and gain of electrons |  | 1\n |  | ii | M2 M3 M1 | direction of transfer, eg sodium to oxygen / sodium loses and oxygen gains correct number of electrons involved, eg (each) sodium loses 1 and oxygen gains 2 (sodium) loses electron(s) | Ignore charges on ions Ignore covalent 0/3 if any mention of electron sharing All marks may be scored on diagrams or by reference to electronic configurations Max 2 if molecules mentioned Ignore oxygen gains electrons | 1 1 1",
+    "reading_order" : 23,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "6", "b", "i", "M1", "idea of electron transfer / loss and gain of electrons", "", "1" ], [ "", "", "ii", "M2 M3 M1", "direction of transfer, eg sodium to oxygen / sodium loses and oxygen gains correct number of electrons involved, eg (each) sodium loses 1 and oxygen gains 2 (sodium) loses electron(s)", "Ignore charges on ions Ignore covalent 0/3 if any mention of electron sharing All marks may be scored on diagrams or by reference to electronic configurations Max 2 if molecules mentioned Ignore oxygen gains electrons", "1 1 1" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000024",
+    "element_type" : "table",
+    "page_number" : 14,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 348.82,
+      "width" : 659.88,
+      "height" : 161.94,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n6 | c |  | M | attractions between water molecules are weak(er) / easily overcome / need little energy to break attractions between (sodium and oxide) ions are strong(er) / ionic bonds are strong /need a lot of energy to break | Allow (named) intermolecular forces in place of attractions Do not award M2 if any mention of intermolecular forces / metallic bonding Any implication of breaking bonds = 0/2 | ",
+    "reading_order" : 24,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "6", "c", "", "M", "attractions between water molecules are weak(er) / easily overcome / need little energy to break attractions between (sodium and oxide) ions are strong(er) / ionic bonds are strong /need a lot of energy to break", "Allow (named) intermolecular forces in place of attractions Do not award M2 if any mention of intermolecular forces / metallic bonding Any implication of breaking bonds = 0/2", "" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000025",
+    "element_type" : "table",
+    "page_number" : 15,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 281.98,
+      "width" : 659.88,
+      "height" : 228.77999999999997,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n6 | d |  | M1 M2 M3 M1 M2 | s l aq blue / purple OH– / hydroxide | All three correct = 2 marks Two correct = 1 mark One/none correct = 0 marks Do not award M1 for g or if not possible to be sure that it is s and not g Do not award marks for abbreviations such as sol / liq Allow indigo or violet M1 and M2 independent | ",
+    "reading_order" : 25,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "6", "d", "", "M1 M2 M3 M1 M2", "s l aq blue / purple OH– / hydroxide", "All three correct = 2 marks Two correct = 1 mark One/none correct = 0 marks Do not award M1 for g or if not possible to be sure that it is s and not g Do not award marks for abbreviations such as sol / liq Allow indigo or violet M1 and M2 independent", "" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000026",
+    "element_type" : "table",
+    "page_number" : 16,
+    "bounding_box" : {
+      "x" : 98.991,
+      "y" : 227.98,
+      "width" : 657.12,
+      "height" : 282.78,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n7 | a |  | M M 1 | Chlorine / /Cl2 Iodine / I2 Astatine / At2 | Allow Cl Accept phonetic spellings Do not penalise poorly written formulae such as CL / cl / cL Allow I Accept phonetic spellings Allow At Accept phonetic spellings Do not penalise poorly written formulae such as AT / at / aT | \n | b |  | M | H2 + Cl2 → 2HCl | correct formulae = 1 balancing = 1 Max 1 for symbol or formula error, eg HcL, Cl2 | ",
+    "reading_order" : 26,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "7", "a", "", "M M 1", "Chlorine / /Cl2 Iodine / I2 Astatine / At2", "Allow Cl Accept phonetic spellings Do not penalise poorly written formulae such as CL / cl / cL Allow I Accept phonetic spellings Allow At Accept phonetic spellings Do not penalise poorly written formulae such as AT / at / aT", "" ], [ "", "b", "", "M", "H2 + Cl2 → 2HCl", "correct formulae = 1 balancing = 1 Max 1 for symbol or formula error, eg HcL, Cl2", "" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000027",
+    "element_type" : "table",
+    "page_number" : 17,
+    "bounding_box" : {
+      "x" : 98.991,
+      "y" : 322.06,
+      "width" : 657.12,
+      "height" : 188.7,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n7 | c |  | M1 M2 | red (hydrochloric) acid / hydrogen ions / H+ (formed) blue no reaction/acid/hydrogen ions/H+ (formed) | Ignore acidic and references to pH Allow no colour change Do not accept changes (from red) to blue Reject any reference to alkaline Ignore not acidic and references to pH Ignore reference to not dissolving | 1",
+    "reading_order" : 27,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "7", "c", "", "M1 M2", "red (hydrochloric) acid / hydrogen ions / H+ (formed) blue no reaction/acid/hydrogen ions/H+ (formed)", "Ignore acidic and references to pH Allow no colour change Do not accept changes (from red) to blue Reject any reference to alkaline Ignore not acidic and references to pH Ignore reference to not dissolving", "1" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000028",
+    "element_type" : "table",
+    "page_number" : 18,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 147.76,
+      "width" : 659.88,
+      "height" : 363.0,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n8 | a |  | M1 | exothermic | Accept phonetic spellings Do not accept endothermic or any spelling that could be taken as endothermic or a hybrid such as exdothermic | \n | b |  | M1 M2 M3 M4 M5 M6 M1 M2 M3 M1 M2 | volume of solution concentration (of solution) amount / mass of metal same surface area of metal same (rate/time of) stirring same starting/initial temperature 18.7(0) 26.8(0) 8.1(0) Zn / zinc X | Allow amount of solution Allow quantity of metal Allow same size pieces / same state of subdivision Ignore references to room temperature Any two for 1 each Conseq on M1 and M2 Accept phonetic spellings | ",
+    "reading_order" : 28,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "8", "a", "", "M1", "exothermic", "Accept phonetic spellings Do not accept endothermic or any spelling that could be taken as endothermic or a hybrid such as exdothermic", "" ], [ "", "b", "", "M1 M2 M3 M4 M5 M6 M1 M2 M3 M1 M2", "volume of solution concentration (of solution) amount / mass of metal same surface area of metal same (rate/time of) stirring same starting/initial temperature 18.7(0) 26.8(0) 8.1(0) Zn / zinc X", "Allow amount of solution Allow quantity of metal Allow same size pieces / same state of subdivision Ignore references to room temperature Any two for 1 each Conseq on M1 and M2 Accept phonetic spellings", "" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000029",
+    "element_type" : "table",
+    "page_number" : 19,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 388.42,
+      "width" : 659.88,
+      "height" : 122.33999999999997,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n8 | c |  | M1 | Zn + XSO4 → ZnSO4 + X | Ignore state symbols | 1\n | d |  | M1 | would react with water OR forms insoluble calcium sulfate/product | Allow too reactive/very high in the reactivity series Do not allow more reactive than other metals (in experiment) | ",
+    "reading_order" : 29,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "8", "c", "", "M1", "Zn + XSO4 → ZnSO4 + X", "Ignore state symbols", "1" ], [ "", "d", "", "M1", "would react with water OR forms insoluble calcium sulfate/product", "Allow too reactive/very high in the reactivity series Do not allow more reactive than other metals (in experiment)", "" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000030",
+    "element_type" : "table",
+    "page_number" : 20,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 161.62,
+      "width" : 665.22,
+      "height" : 349.14,
+      "unit" : "pt"
+    },
+    "text" : "Q n 9 | ues um a | tion ber i | M1 | Answer air / atmosphere | Notes | 1\n |  |  | M2 | water / natural gas / hydrocarbons | Allow methane | \n |  | ii | M1 | iron / Fe | Ignore iron oxide Accept phonetic spellings Do not penalise other included numbers - eg Fe(II) / Fe(III) / Fe Fe3+ | \n |  |  | M1 M2 | 450 ºC 200 atm(ospheres) cooled / temperature lowered ammonia liquefies / condenses | Accept temperature of 350ºC to 550ºC or temperatures in K If range given, both values must be within acceptable range Accept pressure of 150 atm to 250 atm or pressures in Pa Unit needed for mark If two conditions given, both must be correct M1 and M2 are independent Do not award M2 if implication that other gases condense | ",
+    "reading_order" : 30,
+    "confidence" : 1.0,
+    "rows" : [ [ "Q n 9", "ues um a", "tion ber i", "M1", "Answer air / atmosphere", "Notes", "1" ], [ "", "", "", "M2", "water / natural gas / hydrocarbons", "Allow methane", "" ], [ "", "", "ii", "M1", "iron / Fe", "Ignore iron oxide Accept phonetic spellings Do not penalise other included numbers - eg Fe(II) / Fe(III) / Fe Fe3+", "" ], [ "", "", "", "M1 M2", "450 ºC 200 atm(ospheres) cooled / temperature lowered ammonia liquefies / condenses", "Accept temperature of 350ºC to 550ºC or temperatures in K If range given, both values must be within acceptable range Accept pressure of 150 atm to 250 atm or pressures in Pa Unit needed for mark If two conditions given, both must be correct M1 and M2 are independent Do not award M2 if implication that other gases condense", "" ] ],
+    "row_count" : 4,
+    "column_count" : 7,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000031",
+    "element_type" : "table",
+    "page_number" : 21,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 106.66,
+      "width" : 666.06,
+      "height" : 404.1,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n9 | b |  | M1 M2 M3 | n(N2) = (56 × 106) ÷ 28 / 2 × 106 n(NH3) = M1 × 2 / 4 × 106 m(NH3) = M2 × 17 / 68 t(onnes) OR 34 × 56 28 = 68 t(onnes) | No penalty for missing or incorrect power of 10 Conseq on M1 Conseq on M2 Correct final answer with units scores 3 Accept answers in grams and kilograms 34 t scores 2 marks Final answer of 68 with missing or incorrect units scores 2 M1 for 28 and 34 (need not be in this expression) M2 is for expression shown M3 is for answer with units | \n |  |  |  |  |  | \n |  |  |  |  |  | \n | c |  | M1 M2 | increased shift to left shift to right fewer moles/molecules (of gas) on the right | Allow less ammonia / products Allow moves in reverse direction Ignore reference to favouring Allow more ammonia / products Allow moves in forward direction Ignore reference to favouring Allow more moles/molecules on the left Do not penalise incorrect numbers, eg 3 moles on the left and 2 moles on the right Ignore references to rate M2 dependent on M1 | ",
+    "reading_order" : 31,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "9", "b", "", "M1 M2 M3", "n(N2) = (56 × 106) ÷ 28 / 2 × 106 n(NH3) = M1 × 2 / 4 × 106 m(NH3) = M2 × 17 / 68 t(onnes) OR 34 × 56 28 = 68 t(onnes)", "No penalty for missing or incorrect power of 10 Conseq on M1 Conseq on M2 Correct final answer with units scores 3 Accept answers in grams and kilograms 34 t scores 2 marks Final answer of 68 with missing or incorrect units scores 2 M1 for 28 and 34 (need not be in this expression) M2 is for expression shown M3 is for answer with units", "" ], [ "", "", "", "", "", "", "" ], [ "", "", "", "", "", "", "" ], [ "", "c", "", "M1 M2", "increased shift to left shift to right fewer moles/molecules (of gas) on the right", "Allow less ammonia / products Allow moves in reverse direction Ignore reference to favouring Allow more ammonia / products Allow moves in forward direction Ignore reference to favouring Allow more moles/molecules on the left Do not penalise incorrect numbers, eg 3 moles on the left and 2 moles on the right Ignore references to rate M2 dependent on M1", "" ] ],
+    "row_count" : 5,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000037",
+    "element_type" : "table",
+    "page_number" : 23,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 255.22,
+      "width" : 662.76,
+      "height" : 255.54,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n10 | a |  | M1 M2 | layers / sheets / planes / rows of (positive) ions slide (over each other) delocalised electrons / sea of electrons move / flow (through structure) / mobile (when voltage/potential difference applied) | Allow atoms/ particles in place of positive ions Reject molecules / protons / electrons Allow slip / flow / move in place of slide Accept explanation in terms of nondirectional bonding Do not award M2 if protons / electrons Do not award M2 if no mention of layers or equivalent Ignore free electrons M2 needs mention of electrons Any mention of ions moving = 0/2 | ",
+    "reading_order" : 37,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "10", "a", "", "M1 M2", "layers / sheets / planes / rows of (positive) ions slide (over each other) delocalised electrons / sea of electrons move / flow (through structure) / mobile (when voltage/potential difference applied)", "Allow atoms/ particles in place of positive ions Reject molecules / protons / electrons Allow slip / flow / move in place of slide Accept explanation in terms of nondirectional bonding Do not award M2 if protons / electrons Do not award M2 if no mention of layers or equivalent Ignore free electrons M2 needs mention of electrons Any mention of ions moving = 0/2", "" ] ],
+    "row_count" : 2,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000043",
+    "element_type" : "table",
+    "page_number" : 25,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 200.74,
+      "width" : 666.18,
+      "height" : 310.02,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n11 | a |  | M1 | (total) volume different/not constant / not 50 / is 55 | Allow too much water / sodium thiosulfate added / reference to numbers eg should be 10 instead of 15 or 35 instead of 40 | \n | b |  | M1 M2 M3 | All six points plotted correctly to nearest gridline curve of best fit | Deduct 1 mark for each error If plotting cannot be seen judge accuracy from the line. Do not award mark for joining dots or multiple lines or if all of the data points are completely misplotted | \n | c |  | M1 M2 | 1000 ÷ 26.6 37.6 | Ignore units M2 can be awarded for use of another student's result Award 2 marks for correct final answer Award 1 mark for 38 / 37.59 / 37.5 | ",
+    "reading_order" : 43,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "11", "a", "", "M1", "(total) volume different/not constant / not 50 / is 55", "Allow too much water / sodium thiosulfate added / reference to numbers eg should be 10 instead of 15 or 35 instead of 40", "" ], [ "", "b", "", "M1 M2 M3", "All six points plotted correctly to nearest gridline curve of best fit", "Deduct 1 mark for each error If plotting cannot be seen judge accuracy from the line. Do not award mark for joining dots or multiple lines or if all of the data points are completely misplotted", "" ], [ "", "c", "", "M1 M2", "1000 ÷ 26.6 37.6", "Ignore units M2 can be awarded for use of another student's result Award 2 marks for correct final answer Award 1 mark for 38 / 37.59 / 37.5", "" ] ],
+    "row_count" : 4,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000044",
+    "element_type" : "table",
+    "page_number" : 26,
+    "bounding_box" : {
+      "x" : 98.091,
+      "y" : 214.6,
+      "width" : 666.18,
+      "height" : 296.15999999999997,
+      "unit" : "pt"
+    },
+    "text" : "Question number |  | Answer | Notes | \n11 | d | i | M1 M2 | rate (directly) proportional to concentration | Accept concentration (directly) proportional to rate Accept specific quantitative expression, eg rate doubles as concentration doubles Allow 1 mark for qualitative expression, rate increases as concentration increases | \n11 | d | ii | M1 M2 M3 | more particles / ions (in a given volume) collide (successfully) more frequently | Reject atoms / molecules Reject with more energy Ignore greater chance of collision Must be reference to frequency or number of collisions per unit time Allow \"increased frequency of collisions\" for M2 and M3 | ",
+    "reading_order" : 44,
+    "confidence" : 1.0,
+    "rows" : [ [ "Question number", "", "Answer", "Notes", "" ], [ "11", "d", "i", "M1 M2", "rate (directly) proportional to concentration", "Accept concentration (directly) proportional to rate Accept specific quantitative expression, eg rate doubles as concentration doubles Allow 1 mark for qualitative expression, rate increases as concentration increases", "" ], [ "11", "d", "ii", "M1 M2 M3", "more particles / ions (in a given volume) collide (successfully) more frequently", "Reject atoms / molecules Reject with more energy Ignore greater chance of collision Must be reference to frequency or number of collisions per unit time Allow \"increased frequency of collisions\" for M2 and M3", "" ] ],
+    "row_count" : 3,
+    "column_count" : 5,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  } ],
+  "figures" : [ {
+    "element_id" : "e000000",
+    "element_type" : "figure",
+    "page_number" : 1,
+    "bounding_box" : {
+      "x" : 391.08,
+      "y" : 751.04,
+      "width" : 144.54000000000002,
+      "height" : 27.180000000000064,
+      "unit" : "pt"
+    },
+    "text" : null,
+    "reading_order" : 0,
+    "confidence" : 1.0,
+    "format" : null,
+    "source_name" : "input_images/imageFile1.png",
+    "alt" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  }, {
+    "element_id" : "e000003",
+    "element_type" : "figure",
+    "page_number" : 1,
+    "bounding_box" : {
+      "x" : -0.54,
+      "y" : 0.86,
+      "width" : 593.6999999999999,
+      "height" : 39.9,
+      "unit" : "pt"
+    },
+    "text" : null,
+    "reading_order" : 3,
+    "confidence" : 1.0,
+    "format" : null,
+    "source_name" : "input_images/imageFile2.png",
+    "alt" : null,
+    "source_engine" : "opendataloader-pdf",
+    "source_engine_version" : "2.5.7"
+  } ],
+  "equations" : [ ],
+  "provenance" : {
+    "engine" : "opendataloader-pdf",
+    "engineVersion" : "2.5.7",
+    "extractedAt" : "2026-09-03T08:01:49.258698663Z",
+    "extractionParams" : {
+      "mode" : "fast",
+      "readingOrder" : "xycut",
+      "includeHeaderFooter" : false
+    },
+    "application" : "syllabai-parser",
+    "schemaVersion" : "1.0"
+  }
+}
