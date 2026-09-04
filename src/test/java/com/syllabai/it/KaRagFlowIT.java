@@ -169,13 +169,14 @@ class KaRagFlowIT {
         assertThat(((Number) last.payload().get("evidenceCount")).intValue())
                 .isEqualTo(answer.evidenceCount());
         assertThat(last.payload().get("refused")).isEqualTo(false);
-        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v1");
+        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v2");
 
-        // §19 registry: the V12 prompt seed exists for the LLM touchpoint
+        // §19 registry: V12 seeded v1, V13 registers the diagnosis-aware v2
+        // prompt alongside it (both rows present, v2 is the active identity)
         Integer prompts = jdbc.queryForObject(
                 "select count(*) from prompt_versions where registry_key = 'tutor-grounded'",
                 Integer.class);
-        assertThat(prompts).isEqualTo(1);
+        assertThat(prompts).isEqualTo(2);
         Integer models = jdbc.queryForObject(
                 "select count(*) from model_versions where registry_key = 'ka-rag-pipeline'",
                 Integer.class);
