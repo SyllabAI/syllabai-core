@@ -22,15 +22,19 @@ import org.springframework.web.bind.annotation.RestController;
  * Teacher curriculum endpoints (T-010): spec-draft ingestion + the §7 node
  * validation workflow. Route security: /api/v1/teacher/** requires
  * TEACHER/ADMIN.
+ *
+ * <p>Named TeacherCurriculumController to avoid the default bean-name clash
+ * with {@code curriculum.CurriculumController} (the learner-facing
+ * curriculum read surface).</p>
  */
 @RestController
 @RequestMapping("/api/v1/teacher/curriculum")
-public class CurriculumController {
+public class TeacherCurriculumController {
 
     private final CurriculumIngestionService ingestion;
     private final CurriculumReviewService review;
 
-    public CurriculumController(CurriculumIngestionService ingestion,
+    public TeacherCurriculumController(CurriculumIngestionService ingestion,
                                 CurriculumReviewService review) {
         this.ingestion = ingestion;
         this.review = review;
