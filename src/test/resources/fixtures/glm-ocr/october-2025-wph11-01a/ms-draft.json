@@ -1,0 +1,1110 @@
+{
+  "schemaVersion" : "1.0",
+  "extractionMethod" : "glm-ocr-ms-v1",
+  "reviewRequired" : true,
+  "paper" : {
+    "board" : "Edexcel",
+    "qualification" : "IAL",
+    "subject" : null,
+    "paperReference" : "WPH11/01A",
+    "logNumber" : "P87440A",
+    "publicationCode" : "WPH11_01A_2510_MS",
+    "session" : "October 2025",
+    "examDate" : null,
+    "duration" : null,
+    "canonicalDocumentId" : "159ee2a7-982b-58e4-a153-d4681e9efede"
+  },
+  "entries" : [ {
+    "entryId" : "ms-159ee2a7-q1",
+    "label" : "1",
+    "number" : 1,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "C",
+    "answerText" : "The only correct answer is C(velocity)\nA is not correct because distance is a scalar quantity\nB is not correct because speed is a scalar quantity\nD is not correct because work done is a scalar quantity",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q2",
+    "label" : "2",
+    "number" : 2,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D(50Nm-1)\nA is not correct because k=ΔF/Δx=1.5N/0.030m=50Nm-1\nB is not correct because k=ΔF/Δx=1.5N/0.030m=50Nm-1\nC is not correct because k=ΔF/Δx=1.5N/0.030m=50Nm-1",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q3",
+    "label" : "3",
+    "number" : 3,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B(s)\nA is not correct because displacement is measured in metres\nC is not correct because velocity is measured in metres per second\nD is not correct because acceleration is a vector",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q4",
+    "label" : "4",
+    "number" : 4,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B(y-axis2s;x-axist2)\nA is not correct because this would give a gradient ofg/2\nC is not correct because this would give a gradient of2/g\nD is not correct because this would give a gradient of1/g",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q5",
+    "label" : "5",
+    "number" : 5,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D\nA is not correct because vector arrows should be added tip-to-tail and R is in the wrong direction\nB is not correct because R is in the wrong direction\nC is not correct because vector arrows should be added tip-to-tail and R goes between the wrong two points",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q6",
+    "label" : "6",
+    "number" : 6,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "C",
+    "answerText" : "The only correct answer is C(The initial horizontal velocity is equal to the final horizontal velocity)\nA is not correct because the horizontal component of velocity remains constant throughout the motion. A constant value does not have a minimum or maximum, so it is not appropriate to describe the horizontal velocity as minimum\nB is not correct because at maximum height the vertical velocity is 0\nD is not correct because the final position is below the initial position",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q7",
+    "label" : "7",
+    "number" : 7,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B($W>0.5F_{1}e_{1}$)\nA is not correct because the area under the graph is greater than the area of a triangle drawn from the origin to the end of the line\nC is not correct because work done is a force multiplied by a distance, not divided by a distance\nD is not correct because work done is a force multiplied by a distance, not divided by a distance",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q8",
+    "label" : "8",
+    "number" : 8,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D($-9.8\\text{m s}^{-1}$)\nA is not correct because the ball is in freefall so has acceleration due to gravity\nB is not correct because the ball is in freefall so has acceleration due to gravity\nC is not correct because the ball is in freefall so has acceleration due to gravity",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q9",
+    "label" : "9",
+    "number" : 9,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B(the forces act on the same body)\nA is not correct because in a Newton's third law pair the forces act in opposite directions\nC is not correct because in a Newton's third law pair the forces are of the same type\nD is not correct because the forces have the same magnitude",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q10",
+    "label" : "10",
+    "number" : 10,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D($90g$)\nA is not correct because by conserving energy, the expression for speed in metres per second should be $\\sqrt{2\\times g\\times(75-30)}$\nB is not correct because by conserving energy, the expression for speed in metres per second should be $\\sqrt{2\\times g\\times(75-30)}$\nC is not correct because by conserving energy, the expression for speed in metres per second should be $\\sqrt{2\\times g\\times(75-30)}$",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-159ee2a7-q11a",
+    "label" : "11(a)",
+    "number" : 11,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Three downward arrows to show the forces of the people and the weight of the plank(1)Upward arrow to show reaction force at the pivot(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Three downward arrows to show the forces of the people and the weight of the plank",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Three downward arrows to show the forces of the people and the weight of the plank"
+    }, {
+      "ordinal" : 2,
+      "text" : "Upward arrow to show reaction force at the pivot",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Upward arrow to show reaction force at the pivot"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-diagram",
+      "text" : "Example diagram"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q11b",
+    "label" : "11(b)",
+    "number" : 11,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of moment=Fx(1)Application of principle of momentsx=0.89m(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of moment=Fx",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of moment=Fx"
+    }, {
+      "ordinal" : 2,
+      "text" : "Application of principle of momentsx=0.89m",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Application of principle of momentsx=0.89m"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculation950N×0.90m=(4.0m/2)-0.90m)×250+x×650Nx=(950N×0.90m)-(1.10m×250N)/650Nx=(855Nm-275Nm)/650N=0.89m"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q12a",
+    "label" : "12(a)",
+    "number" : 12,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of appropriate trigonometry(1)Use of $\\Delta E_{\\mathrm{grav}}=mg\\Delta h$OrUse of $W=Fs$P=180(W)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of appropriate trigonometry",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of $\\Delta E_{\\mathrm{grav}}=mg\\Delta h$OrUse of $W=Fs$P=180(W)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $\\Delta E_{\\mathrm{grav}}=mg\\Delta h$OrUse of $W=Fs$P=180(W)"
+    } ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "See $\\frac{\\Delta h}{t}\\times\\sin(30^{\\circ})(=0.255\\mathrm{m}\\mathrm{s}^{-1})$Or see $mg\\times\\sin(30^{\\circ})(=353\\mathrm{N})$Example calculation$mg\\frac{\\Delta h}{t}=72\\mathrm{kg}\\times9.81\\mathrm{N}\\mathrm{kg}^{-1}\\times\\sin(30^{\\circ})\\times0.51\\mathrm{m}\\mathrm{s}^{-1}$P=180W"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q12b",
+    "label" : "12(b)",
+    "number" : 12,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Calculates useful power output(1)Use of efficiency $=\\frac{\\mathrm{useful\\ power\\ output}}{\\mathrm{total\\ power\\ input}}$(1)Power input=3500W(=3800Wif‘show that’value used)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Calculates useful power output",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Calculates useful power output"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of efficiency $=\\frac{\\mathrm{useful\\ power\\ output}}{\\mathrm{total\\ power\\ input}}$",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of efficiency $=\\frac{\\mathrm{useful\\ power\\ output}}{\\mathrm{total\\ power\\ input}}$"
+    }, {
+      "ordinal" : 3,
+      "text" : "Power input=3500W(=3800Wif‘show that’value used)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Power input=3500W(=3800Wif‘show that’value used)"
+    } ],
+    "guidance" : [ {
+      "kind" : "ecf",
+      "text" : "ecf from12(a)Example calculation$P_{\\mathrm{useful}}=15\\times180\\mathrm{W}=2700\\mathrm{W}$efficiency $=0.78=\\frac{2700\\mathrm{W}}{P_{\\mathrm{input}}}$$P_{\\mathrm{input}}=\\frac{2700\\mathrm{W}}{0.78}=3460\\mathrm{W}$"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q13a",
+    "label" : "13(a)",
+    "number" : 13,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Low speedOr laminar flowOr an absence of turbulent flow(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Low speedOr laminar flowOr an absence of turbulent flow",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Low speedOr laminar flowOr an absence of turbulent flow"
+    } ],
+    "guidance" : [ {
+      "kind" : "ignore",
+      "text" : "Ignore small sphere"
+    } ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q13b",
+    "label" : "13(b)",
+    "number" : 13,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of W=mg(1)Use of U+D=W(1)Use of F=6πηrv(1)F=(-)2.5×10-5NComparison of calculated value of drag with calculated value for F and corresponding conclusion(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of W=mg",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of W=mg"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of U+D=W",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of U+D=W"
+    }, {
+      "ordinal" : 3,
+      "text" : "Use of F=6πηrv",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of F=6πηrv"
+    }, {
+      "ordinal" : 4,
+      "text" : "F=(-)2.5×10-5NComparison of calculated value of drag with calculated value for F and corresponding conclusion",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "F=(-)2.5×10-5NComparison of calculated value of drag with calculated value for F and corresponding conclusion"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculationW=9.1×10-4kg×9.81Nkg-1=8.93×10-3NDrag=8.93×10-3N-1.1×10-3N=7.83×10-3NF=6π×8.9×10-4Pa s×6.0×10-3m2×0.50m s-1F=2.52×10-5N7.83×10-3N≠2.52×10-5N,so no."
+    } ],
+    "marks" : 5,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q14",
+    "label" : "*14",
+    "number" : 14,
+    "qwc" : true,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "This question assesses a student's ability to show a coherent and logically structured answer with linkages and fully-sustained reasoning. Marks are awarded for indicative content and for how the answer is structured and shows lines of reasoning. The following table shows how the marks should be awarded for indicative content.\nThe following table shows how the marks should be awarded for structure and lines of reasoning.\nAnswer shows a coherent and logical structure with linkages and fully sustained lines of reasoning demonstrated throughout\nAnswer is partially structured with some linkages and lines of reasoning\nAnswer has no linkages between points and is unstructured",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "Number of marks awarded for structure of answer and sustained line of reasoning"
+    } ],
+    "marks" : null,
+    "marksCellSource" : null,
+    "confidence" : 0.5
+  }, {
+    "entryId" : "ms-159ee2a7-q15a",
+    "label" : "15(a)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "the stiffness of the material / metal / copper\nOr(Young modulus=) $ \\frac{Stress}{Strain} $ in the linear region\nOr(Young modulus=) $ \\frac{Fx}{A\\Delta x} $ in the linear region with all terms defined",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "(1)"
+    } ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q15bi",
+    "label" : "15(b)(i)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Calculates mean diameter\nCalculates cross sectional area\n$ A=4.3\\times10^{-8} \\mathrm{m}^{2} $ ($=4.3\\times10^{-2} \\mathrm{mm}^{2}$)",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "Mean diameter"
+    }, {
+      "kind" : "note",
+      "text" : "$ =\\frac{0.230 \\mathrm{mm}+0.235 \\mathrm{mm}+0.230 \\mathrm{mm}+0.240 \\mathrm{mm}}{4}$"
+    }, {
+      "kind" : "note",
+      "text" : "Mean diameter $ =0.234\\times10^{-3} \\mathrm{m}$"
+    }, {
+      "kind" : "note",
+      "text" : "$ A=\\pi\\frac{(0.234\\times10^{-3} \\mathrm{m})^{2}}{4}=4.30\\times10^{-8} \\mathrm{m}^{2}$"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q15bii",
+    "label" : "15(b)(ii)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of $ W=mg $\nUse of $ \\sigma=\\frac{F}{A} $ and Use of $ \\varepsilon=\\frac{\\Delta x}{x} $ and use of $ E=\\frac{\\sigma}{\\varepsilon} $\nOr\nCalculates gradient $ \\times\\frac{\\mathrm{length}}{\\mathrm{area}} $\nYoung modulus $ =1.6\\times10^{11} \\mathrm{Pa} $ (ecf from(b)(i))",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$ \\frac{F}{\\Delta x}=195 \\mathrm{kg} \\mathrm{m}^{-1}\\times9.81 \\mathrm{N} \\mathrm{kg}^{-1}=1913 \\mathrm{N} \\mathrm{m}^{-1} $"
+    }, {
+      "kind" : "note",
+      "text" : "$ E=1913 \\mathrm{N} \\mathrm{m}^{-1}\\times\\frac{3.50 \\mathrm{m}}{4.30\\times10^{-8} \\mathrm{m}^{2}} $"
+    }, {
+      "kind" : "note",
+      "text" : "$ =1.557\\times10^{11} \\mathrm{Pa} $"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q15biii",
+    "label" : "15(b)(iii)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "The gradient will be greater (for the shorter wire)\nThe Young modulus is the same",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "(1)"
+    }, {
+      "kind" : "note",
+      "text" : "(1)"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q16a",
+    "label" : "16(a)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of ρ=m/V(1)Calculates cross sectional area of pipe(1)Use of volume in 1 second=cross section area×speed(1)Speed=37.1(m/s-1)(to at least 3 significant figures)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of ρ=m/V",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of ρ=m/V"
+    }, {
+      "ordinal" : 2,
+      "text" : "Calculates cross sectional area of pipe",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Calculates cross sectional area of pipe"
+    }, {
+      "ordinal" : 3,
+      "text" : "Use of volume in 1 second=cross section area×speed",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of volume in 1 second=cross section area×speed"
+    }, {
+      "ordinal" : 4,
+      "text" : "Speed=37.1(m/s-1)(to at least 3 significant figures)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Speed=37.1(m/s-1)(to at least 3 significant figures)"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculationV=300kg/1030kgm-3=0.291m3A=π×(0.050m)2=7.85×10-3m2v=0.291m3s-1/7.85×10-3m2=37.10m/s-1"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q16b",
+    "label" : "16(b)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Pump applies a(forward/upward/rightwards) force to the water(1)By Newton's third law,water applies an(equal and) opposite/backward/downward/leftward force to the pump(1)ORPump applies a(forward/upward/rightwards) force to the pipe(1)By Newton's third law,pipe applies an(equal and) opposite/backward/downward/leftward force to the pump(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Pump applies a(forward/upward/rightwards) force to the water",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Pump applies a(forward/upward/rightwards) force to the water"
+    }, {
+      "ordinal" : 2,
+      "text" : "By Newton's third law,water applies an(equal and) opposite/backward/downward/leftward force to the pump",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "By Newton's third law,water applies an(equal and) opposite/backward/downward/leftward force to the pump"
+    }, {
+      "ordinal" : 3,
+      "text" : "ORPump applies a(forward/upward/rightwards) force to the pipe",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "ORPump applies a(forward/upward/rightwards) force to the pipe"
+    }, {
+      "ordinal" : 4,
+      "text" : "By Newton's third law,pipe applies an(equal and) opposite/backward/downward/leftward force to the pump",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "By Newton's third law,pipe applies an(equal and) opposite/backward/downward/leftward force to the pump"
+    } ],
+    "guidance" : [ {
+      "kind" : "dependent",
+      "text" : "MP2 dependent on MP1MP2 dependent on MP1If no other marks scored,allow1mark for the direction of the water is to the right,so by Newton's third law the force of the water on the pump is to the left"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q16c",
+    "label" : "16(c)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "When pump is turned on there is a resultant force backwards/leftwards on the boat, (so the speed decreases) (1)\nAs speed decreases, drag force decreases (1)\nUntil resultant force = zero (when speed becomes constant)\nOr\nUntil drag force + force from pump = forward force from engine (when speed becomes constant)\nOr\nResultant force = zero when speed is constant (1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "When pump is turned on there is a resultant force backwards/leftwards on the boat, (so the speed decreases)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "When pump is turned on there is a resultant force backwards/leftwards on the boat, (so the speed decreases)"
+    }, {
+      "ordinal" : 2,
+      "text" : "As speed decreases, drag force decreases",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "As speed decreases, drag force decreases"
+    }, {
+      "ordinal" : 3,
+      "text" : "Until resultant force = zero (when speed becomes constant)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ "Until drag force + force from pump = forward force from engine (when speed becomes constant)", "Resultant force = zero when speed is constant" ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Until resultant force = zero (when speed becomes constant)\nOr\nUntil drag force + force from pump = forward force from engine (when speed becomes constant)\nOr\nResultant force = zero when speed is constant"
+    } ],
+    "guidance" : [ ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q17ai",
+    "label" : "17(a)(i)",
+    "number" : 17,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Initial angle at 30°(with a parabolic shape)(judge by eye)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Initial angle at 30°(with a parabolic shape)(judge by eye)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Initial angle at 30°(with a parabolic shape)(judge by eye)"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-diagram",
+      "text" : "Example diagram"
+    } ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q17aii",
+    "label" : "17(a)(ii)",
+    "number" : 17,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of $v^{2}=u^{2}+2as$(with $v=0$)(1)\nUse of appropriate trigonometry to determine initial velocity(1)\n$u=57(m/s^{-1})$(to at least 2 significant figures)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of $v^{2}=u^{2}+2as$(with $v=0$)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $v^{2}=u^{2}+2as$(with $v=0$)"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of appropriate trigonometry to determine initial velocity",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry to determine initial velocity"
+    }, {
+      "ordinal" : 3,
+      "text" : "$u=57(m/s^{-1})$(to at least 2 significant figures)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "$u=57(m/s^{-1})$(to at least 2 significant figures)"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow use of appropriate suvat equations to determine $u$"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q17aiii",
+    "label" : "17(a)(iii)",
+    "number" : 17,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of suitable equation(s) of motion for vertical motion to determine the time of flight(with $a=9.81$)(1)\nUse of appropriate trigonometry to determine horizontal component of velocity(1)\nUse of $s=ut+\\frac{1}{2}at^{2}$ for horizontal motion(with $a=0$)(1)\nTotal horizontal distance travelled $=290m$, which is greater than 200m so flare can be seen(show that value gives 320m)(ecf from(a)(ii))",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of suitable equation(s) of motion for vertical motion to determine the time of flight(with $a=9.81$)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of suitable equation(s) of motion for vertical motion to determine the time of flight(with $a=9.81$)"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of appropriate trigonometry to determine horizontal component of velocity",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry to determine horizontal component of velocity"
+    }, {
+      "ordinal" : 3,
+      "text" : "Use of $s=ut+\\frac{1}{2}at^{2}$ for horizontal motion(with $a=0$)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $s=ut+\\frac{1}{2}at^{2}$ for horizontal motion(with $a=0$)"
+    }, {
+      "ordinal" : 4,
+      "text" : "Total horizontal distance travelled $=290m$, which is greater than 200m so flare can be seen(show that value gives 320m)(ecf from(a)(ii))",
+      "marks" : null,
+      "dependentOn" : [ ],
+      "ecf" : true,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Total horizontal distance travelled $=290m$, which is greater than 200m so flare can be seen(show that value gives 320m)(ecf from(a)(ii))"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$t=\\frac{2\\times57.4m/s^{-1}\\times\\sin(30^{\\circ})}{9.81m/s^{-2}}=\\frac{57.4m/s^{-1}}{9.81m/s^{-2}}=5.85s$"
+    }, {
+      "kind" : "note",
+      "text" : "$u_{horizontal}=57.4m/s^{-1}\\times\\cos(30^{\\circ})=49.7m/s^{-1}$"
+    }, {
+      "kind" : "note",
+      "text" : "$s=49.7m/s^{-1}\\times5.85s=291m$"
+    }, {
+      "kind" : "note",
+      "text" : "$291m<200m$ so yes"
+    } ],
+    "marks" : null,
+    "marksCellSource" : null,
+    "confidence" : 0.5
+  }, {
+    "entryId" : "ms-159ee2a7-q18a",
+    "label" : "18(a)",
+    "number" : 18,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of p=mv(1)Use of principle of conservation of momentum(1)v=6.3m s-1(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of p=mv",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of p=mv"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of principle of conservation of momentum",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of principle of conservation of momentum"
+    }, {
+      "ordinal" : 3,
+      "text" : "v=6.3m s-1",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "v=6.3m s-1"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculation0.17kg×1.6m s-1=0.17kg×0.30m s-1+0.035kg×vv=0.272kgm s-1-0.051kgm s-1/0.035kg=6.31m s-1"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q18b",
+    "label" : "18(b)",
+    "number" : 18,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of Ek=1/2mv2(1)Use of appropriate trigonometry to determine vertical height moved by discOr use of appropriate trigonometry to determine component of weight acting along slope(1)Use of ΔEgrav=mgΔhOr use of W=Fs to determine work done against gravity(1)Use of principle of conservation of energy(1)Use of W=Fs(1)F=6.6N(1)ORUse of W=mg(1)Use of appropriate trigonometry to determine component of weight acting along slope(1)Use of v2=u2+2as to determine acceleration of disc(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of Ek=1/2mv2",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of Ek=1/2mv2"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of appropriate trigonometry to determine vertical height moved by discOr use of appropriate trigonometry to determine component of weight acting along slope",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry to determine vertical height moved by discOr use of appropriate trigonometry to determine component of weight acting along slope"
+    }, {
+      "ordinal" : 3,
+      "text" : "Use of ΔEgrav=mgΔhOr use of W=Fs to determine work done against gravity",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of ΔEgrav=mgΔhOr use of W=Fs to determine work done against gravity"
+    }, {
+      "ordinal" : 4,
+      "text" : "Use of principle of conservation of energy",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of principle of conservation of energy"
+    }, {
+      "ordinal" : 5,
+      "text" : "Use of W=Fs",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of W=Fs"
+    }, {
+      "ordinal" : 6,
+      "text" : "F=6.6N",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "F=6.6N"
+    }, {
+      "ordinal" : 7,
+      "text" : "ORUse of W=mg",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "ORUse of W=mg"
+    }, {
+      "ordinal" : 8,
+      "text" : "Use of appropriate trigonometry to determine component of weight acting along slope",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry to determine component of weight acting along slope"
+    }, {
+      "ordinal" : 9,
+      "text" : "Use of v2=u2+2as to determine acceleration of disc",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of v2=u2+2as to determine acceleration of disc"
+    } ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "See 0.035kg×9.81N kg-1×sin(30°)Or see sin(30°)×0.065mSee 0.035kg×9.81N kg-1×sin(30°)Or see 0.34×sin(30°)"
+    } ],
+    "marks" : null,
+    "marksCellSource" : null,
+    "confidence" : 0.5
+  }, {
+    "entryId" : "ms-159ee2a7-q19a",
+    "label" : "19(a)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Upwards arrow labelled upthrust / Uand Upwards arrow labelled tension / T/F/Fthread(1)Downwards arrow labelled Weight / W/mg(1)Length of downwards arrow≈total length of upwards arrows(dependent on MP1 or MP2)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Upwards arrow labelled upthrust / Uand Upwards arrow labelled tension / T/F/Fthread",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Upwards arrow labelled upthrust / Uand Upwards arrow labelled tension / T/F/Fthread"
+    }, {
+      "ordinal" : 2,
+      "text" : "Downwards arrow labelled Weight / W/mg",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Downwards arrow labelled Weight / W/mg"
+    }, {
+      "ordinal" : 3,
+      "text" : "Length of downwards arrow≈total length of upwards arrows(dependent on MP1",
+      "marks" : 1,
+      "dependentOn" : [ "MP1", "MP2" ],
+      "ecf" : false,
+      "alternatives" : [ "MP2)" ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Length of downwards arrow≈total length of upwards arrows(dependent on MP1 or MP2)"
+    } ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "Arrows must start from dotExample diagrams"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q19bi",
+    "label" : "19(b)(i)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "The water exerts an upwards force on the sphereOr the water exerts an upthrust on the sphereby Newton's third law the sphere exerts a downward/opposite force on water(dependent on MP1)(so)the force on the balance increases(and the reading increases)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "The water exerts an upwards force on the sphereOr the water exerts an upthrust on the sphereby Newton's third law the sphere exerts a downward/opposite force on water(dependent on MP1)(so)the force on the balance increases(and the reading increases)",
+      "marks" : 1,
+      "dependentOn" : [ "MP1" ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "The water exerts an upwards force on the sphereOr the water exerts an upthrust on the sphereby Newton's third law the sphere exerts a downward/opposite force on water(dependent on MP1)(so)the force on the balance increases(and the reading increases)"
+    } ],
+    "guidance" : [ ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q19bii",
+    "label" : "19(b)(ii)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "mass of displaced water=0.150kg(1)Use of ρ=m/Vwith ρ=1000kgm-3to determine volume of sphere(1)Use of ρ=m/Vwith ρ=2000kgm-3to determine mass of sphere(1)Mass of sphere=0.30kg",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "mass of displaced water=0.150kg",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "mass of displaced water=0.150kg"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of ρ=m/Vwith ρ=1000kgm-3to determine volume of sphere",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of ρ=m/Vwith ρ=1000kgm-3to determine volume of sphere"
+    }, {
+      "ordinal" : 3,
+      "text" : "Use of ρ=m/Vwith ρ=2000kgm-3to determine mass of sphere",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of ρ=m/Vwith ρ=2000kgm-3to determine mass of sphere"
+    }, {
+      "ordinal" : 4,
+      "text" : "Mass of sphere=0.30kg",
+      "marks" : null,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Mass of sphere=0.30kg"
+    } ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "(credit correct equivalent physics due to the density of the sphere being double the density of the water leading to the answer of0.30kgif correct reasoning shown)Example calculationMass of displaced water=0.465kg-0.315kg=0.150kg"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-159ee2a7-q19biii",
+    "label" : "19(b)(iii)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Upthrust will be less\nOr weight of displaced oil will be less\nOr downwards force of sphere on liquid will be less\n(So) final reading will be less (than 465 g)\nOr (So) the increase/change in reading will be less (than 150 g)",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "dependent",
+      "text" : "MP2 dependent on MP1"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  } ],
+  "questionTotals" : {
+    "19" : 12,
+    "18" : 9,
+    "17" : 8,
+    "16" : 9,
+    "14" : 6,
+    "13" : 6,
+    "12" : 6,
+    "11" : 5
+  },
+  "paperTotal" : 120,
+  "icTable" : {
+    "rows" : [ [ "6", "4", "2", "6" ], [ "5", "3", "2", "5" ], [ "4", "3", "1", "4" ], [ "3", "2", "1", "3" ], [ "2", "2", "0", "2" ], [ "1", "1", "0", "1" ], [ "0", "0", "0", "0" ] ],
+    "location" : "embedded"
+  },
+  "warnings" : [ "*14: bare integer cell \"2\" skipped (rubric/rowspan ambiguity)", "*14: bare integer cell \"1\" skipped (rubric/rowspan ambiguity)", "*14: bare integer cell \"0\" skipped (rubric/rowspan ambiguity)", "orphan row before first entry: Or\nHorizontal distance to maximum height=150m,which is less than200m so flare cannot be seen(show that value gives160m)(ecf from(a)(ii))(1)", "orphan row before first entry: Use of ΣF=ma (1)\nUse of friction=ΣF-(component of weight acting along slope) (1)\nF=6.6N (1)", "orphan row before first entry: Example calculation\nEk=1/2×0.035kg×(5.0m/s-1)2=0.438J\nΔEgrav=0.035kg×9.81N/kg-1×sin(30°)×0.065m\n=0.0112J\nW=0.438J-0.0112J=0.427J\nF=0.427J/0.065m=6.57N", "orphan row before first entry: Volume of sphere $ \\frac{0.150 \\mathrm{~kg}}{1000 \\mathrm{~kg} \\mathrm{m}^{-3}}=1.50 \\times10^{-4} \\mathrm{~m}^{3} $\nMass of sphere $ 2000 \\mathrm{~kg} \\mathrm{m}^{-3} \\times1.5 \\times10^{-4} \\mathrm{~m}^{3}=0.300 \\mathrm{~kg} $" ]
+}

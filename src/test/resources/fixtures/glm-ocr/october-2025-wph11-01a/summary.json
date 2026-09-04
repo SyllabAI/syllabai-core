@@ -1,0 +1,33 @@
+{
+  "pair" : "october-2025-wph11-01a",
+  "qpUri" : "Past-Papers/GLM-markdown-sample/October 2025 - Unit 1A QP-2026-03-31_17-15-58.md",
+  "msUri" : "Past-Papers/GLM-markdown-sample/October 2025 - Unit 1A MS-2026-03-31_17-16-01.md",
+  "qpDocumentId" : "18caf74c-bd15-521e-bbf7-92b0ca87958b",
+  "msDocumentId" : "159ee2a7-982b-58e4-a153-d4681e9efede",
+  "qpChecksum" : "26ec84f10a938d6b50cdf12ca43e0417d3d6f7eb6d7edb1bea98d3cd8e2bacc8",
+  "msChecksum" : "c404343e0370a629c75ac4cdf0037d1fda6f31a4dfc998d3333a36725bb42ddf",
+  "qpQuestions" : 19,
+  "qpMcqCount" : 7,
+  "qpParts" : 25,
+  "qpPaperTotal" : 80,
+  "msEntries" : 33,
+  "msMarkPoints" : 53,
+  "msPaperTotal" : 120,
+  "msQuestionTotals" : {
+    "19" : 12,
+    "18" : 9,
+    "17" : 8,
+    "16" : 9,
+    "14" : 6,
+    "13" : 6,
+    "12" : 6,
+    "11" : 5
+  },
+  "reconciliationFindings" : 19,
+  "mismatchCount" : 0,
+  "paperTotalConflict" : true,
+  "qpWarnings" : 5,
+  "msWarnings" : 7,
+  "qpExtractionMethod" : "glm-ocr-qp-v1",
+  "msExtractionMethod" : "glm-ocr-ms-v1"
+}

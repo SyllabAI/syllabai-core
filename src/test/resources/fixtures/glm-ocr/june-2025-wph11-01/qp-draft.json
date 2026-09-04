@@ -1,0 +1,1330 @@
+{
+  "schemaVersion" : "1.0",
+  "extractionMethod" : "glm-ocr-qp-v1",
+  "reviewRequired" : true,
+  "paper" : {
+    "board" : null,
+    "qualification" : null,
+    "subject" : null,
+    "paperReference" : null,
+    "logNumber" : null,
+    "publicationCode" : null,
+    "session" : null,
+    "examDate" : null,
+    "duration" : null,
+    "canonicalDocumentId" : "4e5d8b47-2dbf-59b4-aaaf-5530c64e7b42"
+  },
+  "questions" : [ {
+    "questionId" : "q01-4e5d8b47",
+    "number" : 1,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "A cube of volume V is placed in a liquid of density $ \\rho $ . The cube displaces a weight W of the liquid. Which of the following gives the magnitude of the upthrust acting on the cube?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "V×W"
+    }, {
+      "letter" : "B",
+      "text" : "V"
+    }, {
+      "letter" : "C",
+      "text" : "$ V\\times \\rho $"
+    }, {
+      "letter" : "D",
+      "text" : "W"
+    } ],
+    "parts" : [ ],
+    "figures" : [ ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q02-4e5d8b47",
+    "number" : 2,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "A see-saw is a uniform beam that balances on a support. The beam can rotate around the top of the support. Two children of equal weight sit on a see-saw at equal distances from the support, as shown. Which row of the table describes the resultant force and resultant moment on the beam?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "zero zero"
+    }, {
+      "letter" : "B",
+      "text" : "zero anticlockwise"
+    }, {
+      "letter" : "C",
+      "text" : "downwards zero"
+    }, {
+      "letter" : "D",
+      "text" : "downwards anticlockwise"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000034",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201073.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201073.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=uArlC2bnLkeVo3rZeqDSIwFJkcw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000038",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201082.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201082.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=ULPR%2FTv3edTMzhxCxksP4AkSxpw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ "e000036" ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q03-4e5d8b47",
+    "number" : 3,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "The diagram shows a ball of mass m moving at speed v along a horizontal table. The ball leaves the table. The time taken between the ball leaving the table and landing on the floor is t. Which of the following gives the time taken between the second ball leaving the table and landing on the floor?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "2t"
+    }, {
+      "letter" : "B",
+      "text" : "t"
+    }, {
+      "letter" : "C",
+      "text" : "$ \\frac{t}{2} $"
+    }, {
+      "letter" : "D",
+      "text" : "$ \\frac{t}{4} $"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000040",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201089.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201089.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=6nOhpUAJsFKJAFrvuW6N8UGmAg8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q04-4e5d8b47",
+    "number" : 4,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "The forces acting on a person sitting on a chair are weight and normal contact force. Which of the following gives a reason why these forces do not form a Newton's third law pair?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "The chair is stationary."
+    }, {
+      "letter" : "B",
+      "text" : "The forces act in opposite directions."
+    }, {
+      "letter" : "C",
+      "text" : "The forces act on the same object."
+    }, {
+      "letter" : "D",
+      "text" : "The forces have the same magnitude."
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000056",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201101.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201101.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=nNweemFfBnlyv9BXmhMyMPLyAUI%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q05-4e5d8b47",
+    "number" : 5,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "A wire is used to hang a picture from a hook on a wall. The wire exerts forces $ T_{1} $ and $ T_{2} $ on the picture. The picture has weight W, as shown. Which of the following describes the relationship between the forces when the picture is hanging on the wall?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "$ \\overrightarrow{W}=\\overrightarrow{T}_{1}+\\overrightarrow{T}_{2} $"
+    }, {
+      "letter" : "B",
+      "text" : "$ \\overrightarrow{W}+\\overrightarrow{T_{1}}+\\overrightarrow{T_{2}}=0 $"
+    }, {
+      "letter" : "C",
+      "text" : "$ \\overrightarrow{W}=\\overrightarrow{T}_{1}-\\overrightarrow{T}_{2} $"
+    }, {
+      "letter" : "D",
+      "text" : "$ \\overrightarrow{W}+\\overrightarrow{T_{1}}-\\overrightarrow{T_{2}}=0 $"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000059",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201109.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201109.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=yeE0933HcGR%2F9KbmfVB%2BkV72vG0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000067",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201115.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201115.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=7fzxv7%2F9Njo1PpHAHNG5dkoDPIk%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q06-4e5d8b47",
+    "number" : 6,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "An object has a constant non-zero acceleration. Which of the following displacement-time graphs could represent the motion of the object? Displacement",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000071",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201123.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201123.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=Wclow9bCjhisgK8sZpVAARfjf8o%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000073",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201133.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201133.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2FHSG9IJcyLaRd3fdTlrCKphZCTk%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000074",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201139.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201139.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=gmxog4yLkvUyb8Ni7U%2F2%2FXaa8cw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000075",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_4_1774977201146.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_4_1774977201146.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=S4wH9DnKMGG5vmUHPqWSlzmPKew%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000080",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_5_1774977201152.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_5_1774977201152.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=0f9ansy9YXpyvNaGgkk24cFzW1I%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000081",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_6_1774977201159.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_6_1774977201159.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=xixwdeCp1F64N%2BqciRBCV%2BAVQj8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 0,
+    "marksKnown" : false,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.45
+  }, {
+    "questionId" : "q07-4e5d8b47",
+    "number" : 7,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "The forces acting on a helicopter are shown. The helicopter is represented by the dot. Which of the following expressions gives the magnitude of the resultant force, in newtons, on the helicopter?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "$ \\left( 1 5 0 0 0^{2}-1 4 5 0 0^{2} \\right)+2 0 0^{2} $"
+    }, {
+      "letter" : "B",
+      "text" : "$ \\sqrt{\\left(1 5 0 0 0^{2}-1 4 5 0 0^{2}\\right)+2 0 0^{2}} $"
+    }, {
+      "letter" : "C",
+      "text" : "$ \\left( 1 5 0 0 0-1 4 5 0 0\\right)^{2}+2 0 0^{2} $"
+    }, {
+      "letter" : "D",
+      "text" : "$ \\sqrt{\\left(1 5 0 0 0-1 4 5 0 0\\right)^{2}+2 0 0^{2}} $"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000083",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201165.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201165.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=MEuyNQh%2FOxF1M1szW17D32eeHAg%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000091",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201171.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201171.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=7DcBC9etyZFHy6UnCu10TdW%2BwAs%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q08-4e5d8b47",
+    "number" : 8,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "A box of weight W slides down a ramp. The ramp is at an angle $ \\theta $ to the horizontal. A frictional force F acts on the box, as shown. Which of the following is correct when the box moves at a constant speed?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "F=Wcosθ"
+    }, {
+      "letter" : "B",
+      "text" : "F<Wcosθ"
+    }, {
+      "letter" : "C",
+      "text" : "F=Wsinθ"
+    }, {
+      "letter" : "D",
+      "text" : "F<Wsinθ"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000093",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201198.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201198.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=Tkn3n99URB8MUwdckMYW6jPqAJw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q09-4e5d8b47",
+    "number" : 9,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "The driver of a car applies the brakes. The frictional force F between the tyres and the road is constant. The average power dissipated by F is 50kW. The car moves a distance of 13 m in a time of 2.3 s before coming to rest. Which of the following expressions gives F in newtons?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "$ \\frac{5 0 \\times1 0^{3} \\times2. 3}{1 3} $"
+    }, {
+      "letter" : "B",
+      "text" : "$ \\frac{5 0 \\times1 0^{3} \\times1 3}{2. 3} $"
+    }, {
+      "letter" : "C",
+      "text" : "$ \\frac{1 3}{5 0 \\times1 0^{3} \\times2. 3} $"
+    }, {
+      "letter" : "D",
+      "text" : "$ \\frac{2. 3}{5 0 \\times1 0^{3} \\times1 3} $"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000108",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201206.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201206.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=GA51OiAN53gBPPZtZhGfICPsOR8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q10-4e5d8b47",
+    "number" : 10,
+    "numberingStyle" : "colon",
+    "section" : "A",
+    "stem" : "A toy train of mass 3m is moving with a speed v. A toy truck of mass m is moving with a speed 2v in the opposite direction, as shown. The train and truck collide and move off together. Which of the following expressions gives the new speed of the train and truck?",
+    "mcq" : true,
+    "options" : [ {
+      "letter" : "A",
+      "text" : "$ \\frac{v}{4} $"
+    }, {
+      "letter" : "B",
+      "text" : "$ \\frac{4v}{5} $"
+    }, {
+      "letter" : "C",
+      "text" : "$ v $"
+    }, {
+      "letter" : "D",
+      "text" : "$ \\frac{5v}{4} $"
+    } ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000110",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201214.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201214.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2FnBWHFBupvgx7EiYLNiW96GygpI%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000111",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201222.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201222.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=Zwt9EIpI15qyiwOb5Cr9FTVq%2BKk%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000120",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201228.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201228.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=qjENvCLf1JqrO5lIEkDlEaTFdoc%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 1,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.8
+  }, {
+    "questionId" : "q11-4e5d8b47",
+    "number" : 11,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A resultant force of 4800 N acts on a boat. The acceleration of the boat is $ 0.31\\mathrm{m s}^{-2}. $ Calculate the weight of the boat.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000128",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201233.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201233.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=y9LP5WONezSeABq0kqjUix4nIOE%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000129",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201240.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201240.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=WAWaI%2FfAhtQjELyf3HCNe2AFX7k%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 3,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ "Weight of boat" ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q12-4e5d8b47",
+    "number" : 12,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A person rides a bicycle along the path shown.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q12-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "At the end of the path, the magnitude of the displacement from the start is less than the distance travelled by the person. Describe why the displacement is less than the distance travelled by the person.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000134",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201268.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201268.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=T%2BUqGF30YheAaMqF0RNqZApU18Y%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q12-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "The velocity-time graph for part of the bicycle ride is shown. Determine the maximum acceleration of the person on the bicycle.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000136",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201276.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201276.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=upCfxOT9OUjUAwJaPNHzw41tyx4%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000138",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201286.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201286.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=i24KgH9FLNnYCPYX1t2k%2B9EjOKg%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000139",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201295.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201295.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=WqD%2B%2BSSBO0C6hp9dkBpMDdq8wfA%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000131",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201249.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201249.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=7PC7W5AM6UyywVnbVAynuLJhyVs%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000134",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201268.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201268.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=T%2BUqGF30YheAaMqF0RNqZApU18Y%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000136",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201276.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201276.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=upCfxOT9OUjUAwJaPNHzw41tyx4%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000138",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201286.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201286.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=i24KgH9FLNnYCPYX1t2k%2B9EjOKg%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000139",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201295.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201295.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=WqD%2B%2BSSBO0C6hp9dkBpMDdq8wfA%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 0,
+    "marksKnown" : false,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.45
+  }, {
+    "questionId" : "q13-4e5d8b47",
+    "number" : 13,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "In a game of basketball, points are scored by throwing a ball so that it falls through a hoop. The rules state that the distance d between the hoop and the floor should be 3.0 m. A basketball player throws the ball so that it falls through the hoop, as shown. The ball was thrown from a height of 1.7 m above the floor. The initial vertical component of the velocity of the ball was $ 5. 1 \\mathrm{~ m s}^{-1}. $ As the ball entered the hoop, the vertical component of the velocity of the ball was $ 2. 1 \\mathrm{~ m s}^{-1}. $ Deduce whether d was 3.0 m.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000142",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201302.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201302.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=C8W78W3D9ubs1EEfmuiaVQ1c%2FYY%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000148",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201307.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201307.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=i6E7SgoCKIRuOfzyFz33m7fzVB0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 3,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q14-4e5d8b47",
+    "number" : 14,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "The brakes in a car reduce the kinetic energy of the car. In an electric car, some of this energy is transferred to the battery in the car. An electric car of mass 1800kg moves at a speed of $ 1 4 \\mathrm{m s}^{-1} $ up a hill, as shown. The driver applies the brakes to bring the car to a stop. During braking, the vertical displacement of the car is 0.76m and the energy stored in the battery increases by 45 kJ. Calculate the efficiency of using the brakes to charge the battery.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ ],
+    "figures" : [ {
+      "elementId" : "e000155",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201313.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201313.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=fSDcDT6k57XhzQzUg4KGtio5uBA%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000156",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201318.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201318.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=U82ZtqkH1GORCTTSvOJaWx8q1sk%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 4,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ "Efficiency" ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q15-4e5d8b47",
+    "number" : 15,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A builder uses bricks to build a wall. As the wall gets taller, the force on a brick at the bottom of the wall increases. A force-compression graph for this brick is shown.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q15-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "Determine the increase in elastic strain energy in the brick as the force increases from 85N to 140N.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ ],
+      "answerPrompts" : [ "Increase in elastic strain energy" ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q15-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "The brick undergoes elastic deformation. State what is meant by elastic deformation.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000164",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201330.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201330.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=JSd4eOvfhdo8uezDVUtQrVfo4RA%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000166",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201338.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201338.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=kJxlUFwvfiNpyy8DlpSLTJhCdBQ%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000167",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201343.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201343.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=uBHgL25ux3tM2yHR7wFKg%2FSNxXA%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000160",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201323.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201323.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=npQS4xysvLI9bYfnmLr8yfKVzAU%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000164",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201330.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201330.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=JSd4eOvfhdo8uezDVUtQrVfo4RA%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000166",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201338.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201338.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=kJxlUFwvfiNpyy8DlpSLTJhCdBQ%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000167",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201343.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201343.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=uBHgL25ux3tM2yHR7wFKg%2FSNxXA%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 0,
+    "marksKnown" : false,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.45
+  }, {
+    "questionId" : "q16-4e5d8b47",
+    "number" : 16,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A student used a falling-ball method to determine the viscosity of vegetable oil. He measured the diameter of a ball-bearing. He dropped the ball-bearing into a measuring cylinder containing vegetable oil, as shown. The ball-bearing reached terminal velocity. The student then measured the time taken for the ball-bearing to fall 20.0 cm.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q16-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "Give one other measurement needed to determine the viscosity of the oil.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q16-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "The diameter of the ball-bearing was 1.24mm.The time taken to fall 20.0cm was 1.3s. The student calculated a value of $ 5. 6 \\times1 0^{-5} \\mathrm{N} $ for the viscous drag on the ball-bearing. Calculate the viscosity of the oil.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000176",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201353.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201353.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=ec682gwMIUPaoBT%2FAZftm%2FRsL6c%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q16-4e5d8b47-pc",
+      "label" : "c",
+      "text" : "The student repeated the experiment. He used the same oil at a lower temperature Explain how using oil at a lower temperature affected the time taken for the ball-bearing to fall 20.0 cm.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000179",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201357.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201357.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=FMDJuBkfj60l9EWErPv0uqM5PHw%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000180",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201369.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201369.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=fMocx3g%2BAAFPWyrKSIMj07BhlHA%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000171",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201348.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201348.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=7ZEMt1ederzGonlCSYFvd1Fskl0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000176",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201353.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201353.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=ec682gwMIUPaoBT%2FAZftm%2FRsL6c%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000179",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201357.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201357.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=FMDJuBkfj60l9EWErPv0uqM5PHw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000180",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201369.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201369.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=fMocx3g%2BAAFPWyrKSIMj07BhlHA%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 7,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q17-4e5d8b47",
+    "number" : 17,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A violin is a musical instrument that has four strings, as shown.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q17-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "A force-extension graph for a sample of one of the strings is shown below. The table shows the stiffness for samples of three of the strings on the violin. Each sample was the same original length as the sample used to obtain the graph. Deduce which string was used to obtain the force-extension graph.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000185",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201381.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201381.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=U86%2FlmqUuOLmPQ0vD97OHEGo9DM%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000186",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201419.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201419.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=8GFjqoFjs%2FDDV3gmtAZzHUhYps8%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000191",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201430.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201430.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=6Pe1kbkU6h7hMG92eBHls4vjlyQ%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000192",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201437.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201437.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=hcLQN%2BSj11l9pE%2BKntVlSSo299c%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000193",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201447.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201447.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=nEvFee5xhZ0daK2wL6fYLPiEaPM%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q17-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "The fourth string on the violin has an original length of 0.750m. When the tension applied to the string is 36N, the new length of the string is 0.752 m. The radius of the string is $ 0. 8 5 \\times1 0^{-3} \\mathrm{~ m}. $ Determine the Young modulus of the material used to make the string.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000200",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201454.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201454.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=0DyZ5ZCvISgRv%2BOk0BI%2BREpJKS8%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ "Young modulus" ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000182",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201374.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201374.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=cDl96dgW6st6PCoVZwRmAvmpFXM%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000185",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201381.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201381.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=U86%2FlmqUuOLmPQ0vD97OHEGo9DM%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000186",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201419.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201419.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=8GFjqoFjs%2FDDV3gmtAZzHUhYps8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000191",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201430.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201430.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=6Pe1kbkU6h7hMG92eBHls4vjlyQ%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000192",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201437.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201437.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=hcLQN%2BSj11l9pE%2BKntVlSSo299c%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000193",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201447.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201447.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=nEvFee5xhZ0daK2wL6fYLPiEaPM%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000200",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201454.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201454.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=0DyZ5ZCvISgRv%2BOk0BI%2BREpJKS8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ "e000189" ],
+    "marks" : 9,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q18-4e5d8b47",
+    "number" : 18,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A 'Newton's cradle' has five identical steel spheres, A, B, C, D and E. Each sphere hangs on string from a frame, as shown.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q18-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "Each sphere has a radius of $ 7. 0 \\times1 0^{-3} \\mathrm{~ m}. $ Calculate the mass of one sphere. density of steel $ = 7.8\\times10^{3}\\mathrm{kg}\\mathrm{m}^{-3} $",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000208",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201468.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201468.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=JSzvvTYI7LqNZ0zzX%2Bl6JqtfyfU%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000209",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201480.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201480.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=c8YX%2FVD%2F1x%2FBHW7JJk5dvV7xhs0%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ "Mass of one sphere" ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q18-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "A student pulls sphere A, so the string is at an angle of $ 3 8^{\\circ} $ to the vertical, as shown. The student then releases sphere A. Determine the initial acceleration of sphere A when released.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000211",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201486.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201486.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=VPOT1pbhp3w7J5zZL5FgOJDGZl4%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000214",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201494.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201494.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=VtpnMafbx%2Fcao3kS6yJ7e49ghnw%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ "Initial acceleration" ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q18-4e5d8b47-pc",
+      "label" : "c",
+      "text" : "Diagram 1 shows the position of the spheres when sphere A is released. After being released, sphere A collides with sphere B and comes to rest. Spheres B, C and D remain at rest. Sphere E moves away from sphere D. Diagram 2 shows the position of the spheres when sphere E reaches the highest point. Diagram 1 Diagram 2 Describe the changes in energy and momentum of spheres A and E, from the time sphere A is released until sphere E reaches its highest point. Ignore the effects of air resistance.",
+      "marks" : 6,
+      "qwc" : true,
+      "figures" : [ {
+        "elementId" : "e000217",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201504.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201504.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=N7ixdg18p9ttFrOwu2CHGa0m2%2BQ%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000219",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201852.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201852.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=QizDaoTpI%2FyPqPmnKcavV1E8OEk%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000224",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201867.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201867.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=0h4dvVFM1jG3eKT4VB5BZGrolj8%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000225",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_4_1774977201929.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_4_1774977201929.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2BUyoy3YtzE1iruAUfx9V%2FeXrQM0%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000226",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_5_1774977201943.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_5_1774977201943.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=69EyEFCfzus4kY1bGLcMmMDlJQc%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000228",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201949.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201949.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=NJzOoqLRcw2wM%2BX%2B7AoDbyFXxIo%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.8
+    } ],
+    "figures" : [ {
+      "elementId" : "e000202",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201459.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201459.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=O6TWLlZXvcx%2FjeFJBY9tSPOHMTY%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000208",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201468.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201468.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=JSzvvTYI7LqNZ0zzX%2Bl6JqtfyfU%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000209",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201480.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201480.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=c8YX%2FVD%2F1x%2FBHW7JJk5dvV7xhs0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000211",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201486.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201486.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=VPOT1pbhp3w7J5zZL5FgOJDGZl4%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000214",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201494.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201494.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=VtpnMafbx%2Fcao3kS6yJ7e49ghnw%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000217",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201504.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201504.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=N7ixdg18p9ttFrOwu2CHGa0m2%2BQ%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000219",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201852.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201852.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=QizDaoTpI%2FyPqPmnKcavV1E8OEk%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000224",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201867.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201867.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=0h4dvVFM1jG3eKT4VB5BZGrolj8%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000225",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_4_1774977201929.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_4_1774977201929.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2BUyoy3YtzE1iruAUfx9V%2FeXrQM0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000226",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_5_1774977201943.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_5_1774977201943.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=69EyEFCfzus4kY1bGLcMmMDlJQc%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000228",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201949.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201949.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=NJzOoqLRcw2wM%2BX%2B7AoDbyFXxIo%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 11,
+    "marksKnown" : true,
+    "qwc" : true,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q19-4e5d8b47",
+    "number" : 19,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A student stores her bicycle on a rack. The bicycle rests on a rail that can rotate about a pivot. To take the bicycle off the rack, the student uses a handle to lower one end of the rail to the ground. The diagrams show the bicycle on the rack before and after the rail has been lowered to the ground. A piston applies a force to the rail as the rail is lowered to the ground.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q19-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "When the rail is in equilibrium, the principle of moments applies. State what is meant by the principle of moments.",
+      "marks" : 1,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000238",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201966.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201966.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=eq7vBOki1%2BnDNdOkm0D%2F7Zs7jJY%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.8
+    }, {
+      "partId" : "q19-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "After taking the bicycle off the rack, the student lifts the rail back to its original position.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q19-4e5d8b47-pb-i",
+      "label" : "b-i",
+      "text" : "The uniform rail has a length of 1.40m and a weight of 95N. The student applies a force F to the handle, perpendicular to the rail. The piston applies a force of 160N to the rail. The diagram shows these forces acting on the rail. Determine the minimum value of F needed to lift the end of the rail off the ground.",
+      "marks" : 5,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000243",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201975.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201975.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=F%2BLc7yyKitaQDx9w4DX%2Fj%2FU23f0%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000247",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201981.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201981.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=91TJ0%2BgaSLNjMOwBsgCtC7zwijs%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ "Minimum value of F" ],
+      "confidence" : 0.8
+    }, {
+      "partId" : "q19-4e5d8b47-pb-ii",
+      "label" : "b-ii",
+      "text" : "The student could have lifted the rail by applying a vertical upwards force to the handle. The force needed to lift the rail is different when the force is vertical compared with when the force is perpendicular to the rail. Explain how the minimum vertical force needed is different. You do not need to include any further calculations.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000253",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201993.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201993.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=RqSgp%2Bx8EwHmbheXfH4n%2BHk8AKE%3D&Expires=1775582001",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000254",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201999.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201999.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=YBLtn6amxA6pTkJhFICS0i5VMQU%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000234",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201959.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201959.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=Sdey3gVT0hx2LJDpTEiIdawj%2B4U%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000238",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201966.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201966.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=eq7vBOki1%2BnDNdOkm0D%2F7Zs7jJY%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000243",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201975.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201975.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=F%2BLc7yyKitaQDx9w4DX%2Fj%2FU23f0%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000247",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201981.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201981.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=91TJ0%2BgaSLNjMOwBsgCtC7zwijs%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000253",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201993.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201993.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=RqSgp%2Bx8EwHmbheXfH4n%2BHk8AKE%3D&Expires=1775582001",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000254",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201999.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201999.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=YBLtn6amxA6pTkJhFICS0i5VMQU%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 9,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  }, {
+    "questionId" : "q20-4e5d8b47",
+    "number" : 20,
+    "numberingStyle" : "colon",
+    "section" : "B",
+    "stem" : "A skydiver jumped from an aeroplane.",
+    "mcq" : false,
+    "options" : [ ],
+    "parts" : [ {
+      "partId" : "q20-4e5d8b47-pa",
+      "label" : "a",
+      "text" : "The initial vertical velocity of the skydiver was zero. During the first 1.5 s, the skydiver moved a vertical distance of 11 m. Air resistance may be considered negligible if the mean acceleration of the skydiver is greater than 0.95 g. Deduce whether the air resistance acting on the skydiver was negligible during the first 1.5 s.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000260",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202011.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202011.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=mswR%2FORrHOUfkn3TmP04gkx4jXw%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q20-4e5d8b47-pb",
+      "label" : "b",
+      "text" : "The displacement-time graph for the skydiver between jumping from the aeroplane and opening his parachute is shown. Time/s Sketch the velocity-time graph, on the axes below, for the skydiver between jumping from the aeroplane and opening his parachute.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000263",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202022.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202022.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=EetArxRYMzjlT35aCDOnJiy7s0Y%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000265",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977202050.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977202050.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=HavJgklr50zE77RKF1my%2F4KH9uU%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000266",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977202058.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977202058.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=mNb4DkJtgXc8IF%2BveBOT%2BKrYidQ%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000267",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_4_1774977202067.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_4_1774977202067.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=8MIGaBrmuNoOvaMZbKfx8LUEpMU%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q20-4e5d8b47-pc",
+      "label" : "c",
+      "text" : "After jumping from the aeroplane, the skydiver accelerated and then reached a terminal velocity before opening his parachute. Explain how energy conservation applies to the skydiver before opening his parachute.",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000270",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202081.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202081.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=YnZUT%2FwGGmr%2BZT25%2BuyuVmA0JtE%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    }, {
+      "partId" : "q20-4e5d8b47-pd",
+      "label" : "d",
+      "text" : "The skydiver opened his parachute and his speed changed. After a time, he reached a terminal velocity. Explain how the forces on the skydiver caused his acceleration to vary after his parachute opened. $g = 9. 8 1 \\mathrm {m s} ^ {- 2}$ $g = 9. 8 1 \\mathrm {N k g} ^ {- 1}$ $s = \\frac {(u + v) t}{2}$ $v = u + a t$ $s = u t + \\frac {1}{2} a t ^ {2}$ $v ^ {2} = u ^ {2} + 2 a s$ $\\sum F = m a$ $g = \\frac {F}{m}$ $W = m g$ $p = m v$ $\\Delta W = F \\Delta s$ $E _ {\\mathrm {k}} = \\frac {1}{2} m v ^ {2}$ $\\Delta E _ {\\mathrm {g r a v}} = m g \\Delta h$ $P = \\frac {E}{t}$ $P = \\frac {W}{t}$ $\\mathrm {e f f i c i e n c y} = \\frac {\\mathrm {u s e f u l e n e r g y o u t p u t}}{\\mathrm {t o t a l e n e r g y i n p u t}}$ $\\mathrm {e f f i c i e n c y} = \\frac {\\mathrm {u s e f u l p o w e r o u t p u t}}{\\mathrm {t o t a l p o w e r i n p u t}}$ $\\rho = \\frac {m}{V}$ $F = 6 \\pi \\eta r v$ $\\Delta F = k \\Delta x$ $\\Delta E _ {\\mathrm {e l}} = \\frac {1}{2} F \\Delta x$ $E = \\frac {\\sigma}{\\varepsilon} \\mathrm {w h e r e}$ $\\mathrm {S t r e s s} \\sigma = \\frac {F}{A}$ $\\mathrm {S t r a i n} \\varepsilon = \\frac {\\Delta x}{x}$",
+      "marks" : null,
+      "qwc" : false,
+      "figures" : [ {
+        "elementId" : "e000275",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202087.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202087.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2FJIUVlJuD5yKMQAiGydre8kjUlg%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      }, {
+        "elementId" : "e000276",
+        "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977202092.png",
+        "format" : "png",
+        "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977202092.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=aXvBvdckeiyYA2WSsNA6UIsyJoQ%3D&Expires=1775582002",
+        "availability" : "unavailable-signed-url"
+      } ],
+      "answerPrompts" : [ ],
+      "confidence" : 0.55
+    } ],
+    "figures" : [ {
+      "elementId" : "e000260",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202011.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202011.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=mswR%2FORrHOUfkn3TmP04gkx4jXw%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000263",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202022.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202022.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=EetArxRYMzjlT35aCDOnJiy7s0Y%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000265",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977202050.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977202050.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=HavJgklr50zE77RKF1my%2F4KH9uU%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000266",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977202058.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977202058.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=mNb4DkJtgXc8IF%2BveBOT%2BKrYidQ%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000267",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_4_1774977202067.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_4_1774977202067.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=8MIGaBrmuNoOvaMZbKfx8LUEpMU%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000270",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202081.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202081.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=YnZUT%2FwGGmr%2BZT25%2BuyuVmA0JtE%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000275",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202087.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202087.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=%2FJIUVlJuD5yKMQAiGydre8kjUlg%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000276",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977202092.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977202092.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=aXvBvdckeiyYA2WSsNA6UIsyJoQ%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    }, {
+      "elementId" : "e000322",
+      "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977202100.png",
+      "format" : "png",
+      "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977202100.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=fR976u47GGwo1G0kAAw3V9IJ7wY%3D&Expires=1775582002",
+      "availability" : "unavailable-signed-url"
+    } ],
+    "tableElementIds" : [ ],
+    "marks" : 15,
+    "marksKnown" : true,
+    "qwc" : false,
+    "answerPrompts" : [ ],
+    "confidence" : 0.6
+  } ],
+  "questionTotals" : {
+    "9" : 1,
+    "8" : 1,
+    "7" : 1,
+    "5" : 1,
+    "4" : 1,
+    "3" : 1,
+    "2" : 1,
+    "1" : 1,
+    "19" : 9,
+    "18" : 11,
+    "17" : 9,
+    "16" : 7,
+    "14" : 4,
+    "13" : 3,
+    "11" : 3,
+    "10" : 1,
+    "20" : 15
+  },
+  "paperTotal" : 80,
+  "sectionTotals" : {
+    "A" : 10,
+    "B" : 70
+  },
+  "frontMatterFigures" : [ {
+    "elementId" : "e000000",
+    "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_1_1774977201004.png",
+    "format" : "png",
+    "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_1_1774977201004.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=1k%2FVKOGeZIdvio3rlNA5LLwGI70%3D&Expires=1775582001",
+    "availability" : "unavailable-signed-url"
+  }, {
+    "elementId" : "e000020",
+    "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_2_1774977201060.png",
+    "format" : "png",
+    "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_2_1774977201060.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=qG27Q5Z6lplZbtvG4v2nSEkHZ9Q%3D&Expires=1775582001",
+    "availability" : "unavailable-signed-url"
+  }, {
+    "elementId" : "e000021",
+    "sourceName" : "/ocr/crop/20260401011237bdcb318a204246a2/crop_3_1774977201066.png",
+    "format" : "png",
+    "url" : "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/ocr%2Fcrop%2F20260401011237bdcb318a204246a2%2Fcrop_3_1774977201066.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=9g1Id6Q0hG5hg8uU1oNEhgRaJok%3D&Expires=1775582001",
+    "availability" : "unavailable-signed-url"
+  } ],
+  "warnings" : [ "unclassified heading: Information:", "figure attribution Q17: (Source: $ \\textcircled{c} $ bob_sato_1973/Getty Images)", "figure attribution Q18: (Source: $ \\textcircled{c} $f9photos/Getty Images)", "Q6: detached option letters without option text", "Q15: incomplete MCQ option set folded into stem", "Q19: incomplete MCQ option set folded into stem" ]
+}

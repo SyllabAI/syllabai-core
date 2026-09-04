@@ -1,0 +1,102 @@
+{
+  "findings" : [ {
+    "questionNumber" : "1",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "10",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "11",
+    "qpMarks" : 3,
+    "msMarks" : 3,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "13",
+    "qpMarks" : 3,
+    "msMarks" : 3,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "14",
+    "qpMarks" : 4,
+    "msMarks" : 4,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "16",
+    "qpMarks" : 7,
+    "msMarks" : 7,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "17",
+    "qpMarks" : 9,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "18",
+    "qpMarks" : 11,
+    "msMarks" : 11,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "19",
+    "qpMarks" : 9,
+    "msMarks" : 9,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "2",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "20",
+    "qpMarks" : 15,
+    "msMarks" : 15,
+    "severity" : "match"
+  }, {
+    "questionNumber" : "3",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "4",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "5",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "7",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "8",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "9",
+    "qpMarks" : 1,
+    "msMarks" : null,
+    "severity" : "ms-only"
+  }, {
+    "questionNumber" : "12",
+    "qpMarks" : null,
+    "msMarks" : 5,
+    "severity" : "qp-only"
+  }, {
+    "questionNumber" : "15",
+    "qpMarks" : null,
+    "msMarks" : 4,
+    "severity" : "qp-only"
+  } ],
+  "qpPaperTotal" : 80,
+  "msPaperTotal" : 80,
+  "paperTotalConflict" : false,
+  "mismatchCount" : 0
+}

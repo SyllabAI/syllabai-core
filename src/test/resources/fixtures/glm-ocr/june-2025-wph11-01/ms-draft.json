@@ -1,0 +1,938 @@
+{
+  "schemaVersion" : "1.0",
+  "extractionMethod" : "glm-ocr-ms-v1",
+  "reviewRequired" : true,
+  "paper" : {
+    "board" : "Edexcel",
+    "qualification" : "IAL",
+    "subject" : null,
+    "paperReference" : null,
+    "logNumber" : "P78753A",
+    "publicationCode" : "WPH11_01_2506_MS",
+    "session" : "Summer 2025",
+    "examDate" : null,
+    "duration" : null,
+    "canonicalDocumentId" : "4984a548-ba67-5e44-a5e5-8b46cf036826"
+  },
+  "entries" : [ {
+    "entryId" : "ms-4984a548-q1",
+    "label" : "1",
+    "number" : 1,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D(W)\nA is not correct because upthrust is equal to the weight of liquid displaced\nB is not correct because upthrust is equal to the weight of liquid displaced\nC is not correct because upthrust is equal to the weight of liquid displaced",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q2",
+    "label" : "2",
+    "number" : 2,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "A",
+    "answerText" : "The only correct answer is A(The resultant force is zero and the resultant moment is zero)\nB is not correct because the resultant moment should be zero\nC is not correct because the resultant force should be zero\nD is not correct because the resultant force should be zero and the resultant moment should be zero",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q3",
+    "label" : "3",
+    "number" : 3,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B(t)\nA is not correct because the vertical acceleration is the same for both balls and vertical motion is independent of horizontal motion\nC is not correct because the vertical acceleration is the same for both balls and vertical motion is independent of horizontal motion\nD is not correct because the vertical acceleration is the same for both balls and vertical motion is independent of horizontal motion",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q4",
+    "label" : "4",
+    "number" : 4,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "C",
+    "answerText" : "The only correct answer is C(The forces act on the same object.)\nA is not correct because the motion of the chair is not relevant\nB is not correct because forces forming a Newtons' third law pair act in opposite directions\nD is not correct because forces forming a Newtons' third law pair have the same magnitude",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q5",
+    "label" : "5",
+    "number" : 5,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B($\\overrightarrow{W}+\\overrightarrow{T_{1}}+\\overrightarrow{T_{2}}=0$)\nA is not correct because the vector sum of $T_{1}+T_{2}$ is in the opposite direction to W\nC is not correct because $T_{2}$ should not be subtracted from $T_{1}$\nD is not correct because $T_{2}$ should not be subtracted from $T_{1}$",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q6",
+    "label" : "6",
+    "number" : 6,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "B",
+    "answerText" : "The only correct answer is B(parabola-shaped graph)\nA is not correct because the acceleration is zero\nC is not correct because the acceleration is zero\nD is not correct because the acceleration is zero where the line is straight, acceleration changes where the line curves, and acceleration is zero again when the line becomes straight again.",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q7",
+    "label" : "7",
+    "number" : 7,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "D",
+    "answerText" : "The only correct answer is D($\\sqrt{(15000-14500)^{2}+200^{2}}$)\nA is not correct because the answer should be square rooted and the resultant of the vertical forces should be determined before squaring\nB is not correct because the resultant of the vertical forces should be determined before squaring\nC is not correct because the answer should be square rooted",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q8",
+    "label" : "8",
+    "number" : 8,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "C",
+    "answerText" : "The only correct answer is C($F=W\\sin\\theta$)\nA is not correct because $W\\cos\\theta$ is perpendicular to the slope\nB is not correct because $W\\cos\\theta$ is perpendicular to the slope\nD is not correct because the resultant force must be zero",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q9",
+    "label" : "9",
+    "number" : 9,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "A",
+    "answerText" : "The only correct answer is A($\\frac{50\\times10^{3}\\times2.3}{13}$)\nB is not correct because work done should be power $\\times$ time\nC is not correct because the answer is inverted\nD is not correct because work done should be power $\\times$ time and the answer is inverted",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q10",
+    "label" : "10",
+    "number" : 10,
+    "qwc" : false,
+    "mcq" : true,
+    "correctOption" : "A",
+    "answerText" : "The only correct answer is A($\\frac{v}{4}$)\nB is not correct because conserving momentum does not lead to this answer\nC is not correct because the new speed is not just the difference between the initial speeds\nD is not correct because the initial velocities are in opposite directions",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.85
+  }, {
+    "entryId" : "ms-4984a548-q11",
+    "label" : "11",
+    "number" : 11,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of F=ma with F=4800N\nUse of W=mg\nW=150000N",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "m=4800N/0.31mS-2=15500kg"
+    }, {
+      "kind" : "note",
+      "text" : "W=15500kg×9.81Nkg-1=152000N"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q12a",
+    "label" : "12(a)",
+    "number" : 12,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Displacement is a straight line (from start to end)(Whereas) distance is the length of the path",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow (whereas) distance is not a straight lineAllow the person does not travel in a straight lineAllow the path is not a straight lineIf no other mark scored allow 1 mark for‘displacement is a vector but distance is a scalar’"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q12b",
+    "label" : "12(b)",
+    "number" : 12,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Two pairs of corresponding values of velocity and time read from graphCalculates gradient of the line between 4s and 16sMaximum acceleration=0.27m/s-2",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "No tolerance if readings taken at 4s and 16sAllow a tolerance of $ \\pm \\frac{1}{2} $ a small square if readings taken from other points on the graphExample calculation$ a=\\frac{5.0\\text{ m}s^{-1}-1.8\\text{ m}s^{-1}}{16\\text{ s}-4\\text{ s}}=0.267\\text{ m}s^{-2}$"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q13",
+    "label" : "13",
+    "number" : 13,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of $v^{2}=u^{2}+2a\\Delta s$ (1)\n$\\Delta s=1.1\\text{ m}$ (1)\nComparison of (1.7+their calculated $\\Delta s$) with 3.0m and consistent conclusion\nOr\nComparison of their calculated $\\Delta s$ with 1.3m and consistent conclusion\nOr\nComparison of (3.0-their calculated $\\Delta s$) with 1.7m and consistent conclusion (1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of $v^{2}=u^{2}+2a\\Delta s$",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $v^{2}=u^{2}+2a\\Delta s$"
+    }, {
+      "ordinal" : 2,
+      "text" : "$\\Delta s=1.1\\text{ m}$",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "$\\Delta s=1.1\\text{ m}$"
+    }, {
+      "ordinal" : 3,
+      "text" : "Comparison of (1.7+their calculated $\\Delta s$) with 3.0m and consistent conclusion",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ "Comparison of their calculated $\\Delta s$ with 1.3m and consistent conclusion", "Comparison of (3.0-their calculated $\\Delta s$) with 1.7m and consistent conclusion" ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Comparison of (1.7+their calculated $\\Delta s$) with 3.0m and consistent conclusion\nOr\nComparison of their calculated $\\Delta s$ with 1.3m and consistent conclusion\nOr\nComparison of (3.0-their calculated $\\Delta s$) with 1.7m and consistent conclusion"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "allow use of any valid suvat method to determine $\\Delta s$"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$\\Delta s=\\frac{(-2.1\\text{ m}s^{-1})^{2}-(5.1\\text{ m}s^{-1})^{2}}{2\\times(-9.81\\text{ m}s^{-2})}=1.1\\text{ m}$"
+    }, {
+      "kind" : "note",
+      "text" : "$s=1.7\\text{ m}+1.1\\text{ m}=2.8\\text{ m}$"
+    }, {
+      "kind" : "note",
+      "text" : "$2.8\\neq3.0\\text{ m}$, so no"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q14",
+    "label" : "14",
+    "number" : 14,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of $E_{\\mathrm{k}}=\\frac{1}{2}mv^{2}$ (1)\nUse of $\\Delta E_{\\mathrm{grav}}=mg\\Delta h$ (1)\nUse of efficiency=$\\frac{\\mathrm{useful\\ energy\\ output}}{\\mathrm{total\\ energy\\ input}}$ (1)\nEfficiency=0.28 (1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of $E_{\\mathrm{k}}=\\frac{1}{2}mv^{2}$",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $E_{\\mathrm{k}}=\\frac{1}{2}mv^{2}$"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow efficiency=28% (must include % symbol)"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$E_{\\mathrm{k}}=\\frac{1}{2}\\times1800\\mathrm{kg}\\times(14\\mathrm{m}\\mathrm{s}^{-1})^{2}=176000\\mathrm{J}$"
+    }, {
+      "kind" : "note",
+      "text" : "$\\Delta E_{\\mathrm{grav}}=1800\\mathrm{kg}\\times9.81\\mathrm{N}\\mathrm{kg}^{-1}\\times0.76\\mathrm{m}=13400\\mathrm{J}$"
+    }, {
+      "kind" : "note",
+      "text" : "Efficiency=$\\frac{45\\times10^{3}\\mathrm{J}}{176000\\mathrm{J}-13400\\mathrm{J}}=0.277$"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q15a",
+    "label" : "15(a)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Compression changes from 60 nm to 97.5 nm(1)Use of $E_{\\mathrm{el}}=\\frac{1}{2}F\\Delta x$ with corresponding values of $F$ and compressionorDetermines area under graph between 85 N and 140 N(1)Increase in elastic strain energy $=4.3\\times10^{-6}\\mathrm{J}$(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Compression changes from 60 nm to 97.5 nm",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Compression changes from 60 nm to 97.5 nm"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of $E_{\\mathrm{el}}=\\frac{1}{2}F\\Delta x$ with corresponding values of $F$ and compressionorDetermines area under graph between 85 N and 140 N",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of $E_{\\mathrm{el}}=\\frac{1}{2}F\\Delta x$ with corresponding values of $F$ and compressionorDetermines area under graph between 85 N and 140 N"
+    }, {
+      "ordinal" : 3,
+      "text" : "Increase in elastic strain energy $=4.3\\times10^{-6}\\mathrm{J}$",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Increase in elastic strain energy $=4.3\\times10^{-6}\\mathrm{J}$"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow compression changes froma value between 55 nm and 62 nm toa value between 95 nm and 100nmAllow an answer consistent with their allowed readings fromthe graph.Example calculation$E_{\\mathrm{el}}=\\frac{1}{2}140\\mathrm{N}\\times97.5\\times10^{-9}\\mathrm{m}=6.83\\times10^{-6}\\mathrm{J}$$E_{\\mathrm{el}}=\\frac{1}{2}85\\mathrm{N}\\times60\\times10^{-9}\\mathrm{m}=2.55\\times10^{-6}\\mathrm{J}$$\\Delta E_{\\mathrm{el}}=6.83\\times10^{-6}\\mathrm{J}-2.55\\times10^{-6}\\mathrm{J}=4.28\\times10^{-6}\\mathrm{J}$"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q15b",
+    "label" : "15(b)",
+    "number" : 15,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "(The brick) returns to its original size / shape / length when theforce / stress is removed(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "(The brick) returns to its original size / shape / length when theforce / stress is removed",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(The brick) returns to its original size / shape / length when theforce / stress is removed"
+    } ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q16a",
+    "label" : "16(a)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Mass of the ball-bearing(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Mass of the ball-bearing",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Mass of the ball-bearing"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow weight of ball-bearingAllow mass/weight of(a known volume of) oilAllow volume of(a known mass of) oilAllow density of oilIgnore radius/diameter/volume of ball-bearingIgnore density of ball-bearingIgnore temperature of oil"
+    } ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q16b",
+    "label" : "16(b)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use ofs=ut+\\frac{1}{2}at^{2}witha=0(1)Use ofF=6\\pi\\eta rv(1)\\eta=0.031(Pa s)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use ofs=ut+\\frac{1}{2}at^{2}witha=0",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use ofs=ut+\\frac{1}{2}at^{2}witha=0"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use ofF=6\\pi\\eta rv",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use ofF=6\\pi\\eta rv"
+    }, {
+      "ordinal" : 3,
+      "text" : "\\eta=0.031(Pa s)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "\\eta=0.031(Pa s)"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculationv=\\frac{0.20m}{1.3s}=0.154m s^{-1}\\eta=\\frac{5.6\\times10^{-5}N}{6\\times\\pi\\times\\frac{1.24\\times10^{-3}}{2}\\times0.154m s^{-1}}=0.0311Pa s"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q16c",
+    "label" : "16(c)",
+    "number" : 16,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "(At a lower temperature) the oil has a greater viscosity(1)(So) the ball falls at a smaller terminal velocity(1)(So) time taken is greater (for the ball to fall 20.0cm)(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "(At a lower temperature) the oil has a greater viscosity",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(At a lower temperature) the oil has a greater viscosity"
+    }, {
+      "ordinal" : 2,
+      "text" : "(So) the ball falls at a smaller terminal velocity",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(So) the ball falls at a smaller terminal velocity"
+    }, {
+      "ordinal" : 3,
+      "text" : "(So) time taken is greater (for the ball to fall 20.0cm)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(So) time taken is greater (for the ball to fall 20.0cm)"
+    } ],
+    "guidance" : [ {
+      "kind" : "dependent",
+      "text" : "MP3 dependent on MP1 or MP2"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q17a",
+    "label" : "17(a)",
+    "number" : 17,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Corresponding force and extension read from graph\nUse of $\\Delta F=k\\Delta x$\n$k=2760\\text{ N m}^{-1}$\nComparison with 2700(Nm$^{-1}$) and consistent conclusion",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow a tolerance of $\\pm \\frac{1}{2}$ a small square"
+    }, {
+      "kind" : "allow",
+      "text" : "Allow a value of $k$ between 2650 and 2850"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$k=\\frac{80\\text{ N}}{29\\times 10^{-3}\\text{ m}}=2760\\text{ N m}^{-1}$"
+    }, {
+      "kind" : "note",
+      "text" : "$2760\\text{ N m}^{-1}\\approx 2700\\text{ N m}^{-1}$ so this is string Y"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q17b",
+    "label" : "17(b)",
+    "number" : 17,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Calculates cross-sectional area of string\nUse of $\\sigma=\\frac{F}{A}$\nUse of $\\varepsilon=\\frac{\\Delta x}{x}$\nUse of $E=\\frac{\\sigma}{\\varepsilon}$\n$E=6.0\\text{ GPa}$",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$A=\\pi\\times(0.85\\times 10^{-3}\\text{ m})^{2}=2.27\\times 10^{-6}\\text{ m}^{2}$"
+    }, {
+      "kind" : "note",
+      "text" : "$\\sigma=\\frac{36\\text{ N}}{2.27\\times 10^{-6}\\text{ m}^{2}}=15.9\\times 10^{6}\\text{ Pa}$"
+    }, {
+      "kind" : "note",
+      "text" : "$\\varepsilon=\\frac{0.002\\text{ m}}{0.750\\text{ m}}=0.00267$"
+    }, {
+      "kind" : "note",
+      "text" : "$E=\\frac{15.9\\times 10^{6}\\text{ Pa}}{0.00267}=5.96\\times 10^{9}\\text{ Pa}$"
+    } ],
+    "marks" : 5,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q18a",
+    "label" : "18(a)",
+    "number" : 18,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Calculates volume of sphere(1)Use of ρ=m/V(1)m=1.1×10-2kg(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Calculates volume of sphere",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Calculates volume of sphere"
+    }, {
+      "ordinal" : 2,
+      "text" : "Use of ρ=m/V",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of ρ=m/V"
+    }, {
+      "ordinal" : 3,
+      "text" : "m=1.1×10-2kg",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "m=1.1×10-2kg"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculationV=4/3π(7.0×10-3m)3=1.44×10-6m3m=7.8×103kgm-3×1.44×10-6m3=1.12×10-2kg"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q18b",
+    "label" : "18(b)",
+    "number" : 18,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of appropriate trigonometry(1)Initial acceleration=6.0m s-2(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "Use of appropriate trigonometry",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Use of appropriate trigonometry"
+    }, {
+      "ordinal" : 2,
+      "text" : "Initial acceleration=6.0m s-2",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "Initial acceleration=6.0m s-2"
+    } ],
+    "guidance" : [ {
+      "kind" : "example-calculation",
+      "text" : "Example calculationResultant force=m×9.81m s-2×sin(38°)=m×6.04m s-2F=ma,so a=6.04m s-2"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q19a",
+    "label" : "19(a)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Total clockwise moment = total anticlockwise moment\nOr\nResultant moment = zero\nOr\nSum of all moments = zero",
+    "markPoints" : [ ],
+    "guidance" : [ ],
+    "marks" : 1,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q19bi",
+    "label" : "19(b)(i)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of trigonometry to determine appropriate component of piston force\nOr\nUse of trigonometry to determine perpendicular distance from pivot to line of action of piston force",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "note",
+      "text" : "Use of trigonometry to determine appropriate component of weight"
+    }, {
+      "kind" : "note",
+      "text" : "Or"
+    }, {
+      "kind" : "note",
+      "text" : "Use of trigonometry to determine perpendicular distance from pivot to line of action of weight"
+    }, {
+      "kind" : "note",
+      "text" : "Use of moment = Fx"
+    }, {
+      "kind" : "note",
+      "text" : "Use of principle of moments"
+    }, {
+      "kind" : "note",
+      "text" : "Minimum force = 22N"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "Moment of Fpiston about pivot = 160N×sin18°×0.37m"
+    }, {
+      "kind" : "note",
+      "text" : "=18.3Nm"
+    }, {
+      "kind" : "note",
+      "text" : "Moment of weight about pivot = 95N×cos42°×0.70m"
+    }, {
+      "kind" : "note",
+      "text" : "=49.4Nm"
+    }, {
+      "kind" : "note",
+      "text" : "18.3Nm+F×1.40m=49.4Nm"
+    }, {
+      "kind" : "note",
+      "text" : "F=\\frac{49.4Nm-18.3Nm}{1.40m}=22.2N"
+    } ],
+    "marks" : 5,
+    "marksCellSource" : "rowspan continuation row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q19bii",
+    "label" : "19(b)(ii)",
+    "number" : 19,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "(each force applied by the student must cause) the same moment(about the pivot)(1)(When the force is vertical) The component of the force perpendicular to the rail must be the sameOr(When the force is vertical) The perpendicular distance from the(line of action of the) force to the pivot is lessOrIf the same(magnitude) force is applied vertically,the moment of the force(about the pivot) is less)(1)(So when the force is vertical) the force needed is greater(1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "(each force applied by the student must cause) the same moment(about the pivot)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(each force applied by the student must cause) the same moment(about the pivot)"
+    }, {
+      "ordinal" : 2,
+      "text" : "(When the force is vertical) The component of the force perpendicular to the rail must be the sameOr(When the force is vertical) The perpendicular distance from the(line of action of the) force to the pivot is lessOrIf the same(magnitude) force is applied vertically,the moment of the force(about the pivot) is less)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(When the force is vertical) The component of the force perpendicular to the rail must be the sameOr(When the force is vertical) The perpendicular distance from the(line of action of the) force to the pivot is lessOrIf the same(magnitude) force is applied vertically,the moment of the force(about the pivot) is less)"
+    }, {
+      "ordinal" : 3,
+      "text" : "(So when the force is vertical) the force needed is greater",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(So when the force is vertical) the force needed is greater"
+    } ],
+    "guidance" : [ {
+      "kind" : "dependent",
+      "text" : "MP3 dependent on MP1 or MP2"
+    } ],
+    "marks" : 3,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q20a",
+    "label" : "20(a)",
+    "number" : 20,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Use of $s=ut+\\frac{1}{2}at^{2}$ with $u=0$\n$a=9.78\\text{ m s}^{-2}$\nDetermines an appropriate proportion of $g$\nComparison of calculated value of $a$ with $0.95g$ and consistent conclusion",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "allow use of any valid suvat method to determine $a$"
+    }, {
+      "kind" : "dependent",
+      "text" : "MP4 dependent on MP3"
+    }, {
+      "kind" : "example-calculation",
+      "text" : "Example calculation"
+    }, {
+      "kind" : "note",
+      "text" : "$11=(0.0\\times1.5)+\\frac{1}{2}a\\times1.5^{2}$"
+    }, {
+      "kind" : "note",
+      "text" : "$a=\\frac{2\\times11\\text{ m}}{(1.5\\text{ s})^{2}}=9.78\\text{ m s}^{-2}$"
+    }, {
+      "kind" : "note",
+      "text" : "$\\frac{9.78\\text{ m s}^{-2}}{9.81\\text{ m s}^{-2}}=0.997$"
+    }, {
+      "kind" : "note",
+      "text" : "0.997 is greater than 0.95 so air resistance was negligible"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q20b",
+    "label" : "20(b)",
+    "number" : 20,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "Curved line starting at zero with negative gradient decreasing in magnitude\nHorizontal line after 12 seconds",
+    "markPoints" : [ ],
+    "guidance" : [ {
+      "kind" : "ignore",
+      "text" : "ignore any values added to the $y$-axis"
+    }, {
+      "kind" : "note",
+      "text" : "Line should not be along the $x$-axis"
+    }, {
+      "kind" : "example-diagram",
+      "text" : "Example graph:"
+    } ],
+    "marks" : 2,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q20c",
+    "label" : "20(c)",
+    "number" : 20,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "$E_{\\mathrm{grav}}$ decreases (throughout) (1)\nWhile accelerating, $E_{\\mathrm{k}}$ increases (1)\nand work is done against air resistance\nor\nand energy is dissipated due to (work done against) air resistance (1)\nAt terminal velocity ($E_{\\mathrm{k}}$ is constant and) all $\\Delta E_{\\mathrm{grav}}$ is dissipated (due to work done against air resistance) (1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "$E_{\\mathrm{grav}}$ decreases (throughout)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "$E_{\\mathrm{grav}}$ decreases (throughout)"
+    }, {
+      "ordinal" : 2,
+      "text" : "While accelerating, $E_{\\mathrm{k}}$ increases",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "While accelerating, $E_{\\mathrm{k}}$ increases"
+    }, {
+      "ordinal" : 3,
+      "text" : "and work is done against air resistance",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ "and energy is dissipated due to (work done against) air resistance" ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "and work is done against air resistance\nor\nand energy is dissipated due to (work done against) air resistance"
+    }, {
+      "ordinal" : 4,
+      "text" : "At terminal velocity ($E_{\\mathrm{k}}$ is constant and) all $\\Delta E_{\\mathrm{grav}}$ is dissipated (due to work done against air resistance)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "At terminal velocity ($E_{\\mathrm{k}}$ is constant and) all $\\Delta E_{\\mathrm{grav}}$ is dissipated (due to work done against air resistance)"
+    } ],
+    "guidance" : [ {
+      "kind" : "ignore",
+      "text" : "Ignore references to heating"
+    }, {
+      "kind" : "ignore",
+      "text" : "Ignore references to thermal energy"
+    }, {
+      "kind" : "allow",
+      "text" : "Allow energy is transferred to the surroundings due to (work done against) air resistance"
+    } ],
+    "marks" : 4,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  }, {
+    "entryId" : "ms-4984a548-q20d",
+    "label" : "20(d)",
+    "number" : 20,
+    "qwc" : false,
+    "mcq" : false,
+    "correctOption" : null,
+    "answerText" : "(When the parachute opens,) air resistance is greater than weight (1)\n(So) resultant force is upwards and acceleration is upwards\nor\n(so) resultant force is upwards and the skydiver decelerates (1)\n(As speed decreases) air resistance decreases (so acceleration/deceleration decreases) (1)\n(Until upthrust+) air resistance = weight (1)\n(so) resultant force = 0 and acceleration = 0 (1)",
+    "markPoints" : [ {
+      "ordinal" : 1,
+      "text" : "(When the parachute opens,) air resistance is greater than weight",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(When the parachute opens,) air resistance is greater than weight"
+    }, {
+      "ordinal" : 2,
+      "text" : "(So) resultant force is upwards and acceleration is upwards",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ "(so) resultant force is upwards and the skydiver decelerates" ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(So) resultant force is upwards and acceleration is upwards\nor\n(so) resultant force is upwards and the skydiver decelerates"
+    }, {
+      "ordinal" : 3,
+      "text" : "(As speed decreases) air resistance decreases (so acceleration/deceleration decreases)",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(As speed decreases) air resistance decreases (so acceleration/deceleration decreases)"
+    }, {
+      "ordinal" : 4,
+      "text" : "(Until upthrust+) air resistance = weight",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(Until upthrust+) air resistance = weight"
+    }, {
+      "ordinal" : 5,
+      "text" : "(so) resultant force = 0 and acceleration = 0",
+      "marks" : 1,
+      "dependentOn" : [ ],
+      "ecf" : false,
+      "alternatives" : [ ],
+      "anyTwoFrom" : false,
+      "reject" : false,
+      "rawText" : "(so) resultant force = 0 and acceleration = 0"
+    } ],
+    "guidance" : [ {
+      "kind" : "allow",
+      "text" : "Allow drag for air resistance throughout"
+    }, {
+      "kind" : "ignore",
+      "text" : "Ignore speed decreases"
+    } ],
+    "marks" : 5,
+    "marksCellSource" : "label row",
+    "confidence" : 0.75
+  } ],
+  "questionTotals" : {
+    "19" : 9,
+    "18" : 11,
+    "16" : 7,
+    "15" : 4,
+    "14" : 4,
+    "13" : 3,
+    "12" : 5,
+    "11" : 3,
+    "20" : 15
+  },
+  "paperTotal" : 80,
+  "icTable" : {
+    "rows" : [ [ "6", "4", "", "2" ], [ "5–4", "3", "", "" ], [ "3–2", "2", "", "1" ], [ "1", "1", "", "" ], [ "0", "0", "", "0" ] ],
+    "location" : "standalone"
+  },
+  "warnings" : [ ]
+}
