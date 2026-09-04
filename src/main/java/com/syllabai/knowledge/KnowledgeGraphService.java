@@ -70,6 +70,15 @@ public class KnowledgeGraphService {
                 .orElseThrow(() -> new NotFoundException("knowledge node", id));
     }
 
+    /**
+     * Every UNIT/TOPIC/SUBTOPIC node, code-ordered — the deterministic intent
+     * surface for KA-RAG (T-024): query tokens are matched against these
+     * titles; nothing outside the KG may be inferred.
+     */
+    public List<KnowledgeNode> structureNodes() {
+        return nodes.findStructureNodes();
+    }
+
     // ── internals ──────────────────────────────────────────────────
 
     private NodeView toView(KnowledgeNode n, boolean withMisconceptions) {

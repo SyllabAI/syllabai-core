@@ -1,0 +1,348 @@
+{
+  "schemaVersion" : "1.1",
+  "board" : "=Edexcel",
+  "qualification" : "IAL",
+  "code" : "IAL-CHEM-2018",
+  "title" : "Edexcel International Advanced Level Chemistry",
+  "subject" : {
+    "code" : "CH",
+    "name" : "Chemistry"
+  },
+  "units" : [ {
+    "code" : "U1",
+    "title" : "Structure, Bonding and Introduction to Organic Chemistry",
+    "topics" : [ {
+      "code" : "U1-T1",
+      "title" : "Formulae, Equations and Amount of Substance",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s046",
+      "sourceElementIds" : [ "e000181" ],
+      "pageNumber" : 20,
+      "confidence" : 0.95
+    }, {
+      "code" : "U1-T2",
+      "title" : "Atomic Structure and the Periodic Table",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s048",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 22,
+      "confidence" : 0.95
+    }, {
+      "code" : "U1-T3",
+      "title" : "Bonding and Structure",
+      "subtopics" : [ {
+        "code" : "U1-T3-C",
+        "title" : "Shapes of molecules",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s050",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 25,
+        "confidence" : 0.85
+      }, {
+        "code" : "U1-T3-D",
+        "title" : "Metallic bonding",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s051",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 25,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s049",
+      "sourceElementIds" : [ "e000189", "e000190" ],
+      "pageNumber" : 24,
+      "confidence" : 0.95
+    }, {
+      "code" : "U1-T4",
+      "title" : "Introductory Organic Chemistry and Alkanes",
+      "subtopics" : [ {
+        "code" : "U1-T4-A",
+        "title" : "Introduction",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s053",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 26,
+        "confidence" : 0.85
+      }, {
+        "code" : "U1-T4-B",
+        "title" : "Alkanes",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s054",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 27,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s052",
+      "sourceElementIds" : [ "e000198" ],
+      "pageNumber" : 26,
+      "confidence" : 0.95
+    }, {
+      "code" : "U1-T5",
+      "title" : "Alkenes",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s055",
+      "sourceElementIds" : [ "e000204" ],
+      "pageNumber" : 28,
+      "confidence" : 0.95
+    } ],
+    "sourceSectionId" : "s043",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 18,
+    "confidence" : 0.95
+  }, {
+    "code" : "U2",
+    "title" : "Energetics, Group Chemistry, Halogenoalkanes and Alcohols",
+    "topics" : [ {
+      "code" : "U2-T6",
+      "title" : "Energetics",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s060",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 32,
+      "confidence" : 0.95
+    }, {
+      "code" : "U2-T7",
+      "title" : "Intermolecular Forces",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s061",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 34,
+      "confidence" : 0.95
+    }, {
+      "code" : "U2-T8",
+      "title" : "Redox Chemistry and Groups 1, 2 and 7",
+      "subtopics" : [ {
+        "code" : "U2-T8-C",
+        "title" : "Inorganic chemistry of Group 7 (limited to chlorine, bromine and iodine)",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s063",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 37,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s062",
+      "sourceElementIds" : [ "e000242", "e000243" ],
+      "pageNumber" : 35,
+      "confidence" : 0.95
+    }, {
+      "code" : "U2-T9",
+      "title" : "Introduction to Kinetics and Equilibria",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s064",
+      "sourceElementIds" : [ "e000249", "e000250" ],
+      "pageNumber" : 38,
+      "confidence" : 0.95
+    }, {
+      "code" : "U2-T10",
+      "title" : "Organic Chemistry: Halogenoalkanes, Alcohols and Spectra",
+      "subtopics" : [ {
+        "code" : "U2-T10-A",
+        "title" : "General principles",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s066",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 40,
+        "confidence" : 0.85
+      }, {
+        "code" : "U2-T10-B",
+        "title" : "Halogenoalkanes",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s067",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 40,
+        "confidence" : 0.85
+      }, {
+        "code" : "U2-T10-C",
+        "title" : "Alcohols",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s068",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 41,
+        "confidence" : 0.85
+      }, {
+        "code" : "U2-T10-D",
+        "title" : "Mass spectra and IR",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s069",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 42,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s065",
+      "sourceElementIds" : [ "e000254" ],
+      "pageNumber" : 40,
+      "confidence" : 0.95
+    } ],
+    "sourceSectionId" : "s057",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 29,
+    "confidence" : 0.95
+  }, {
+    "code" : "U3",
+    "title" : "Practical Skills in Chemistry I",
+    "topics" : [ ],
+    "sourceSectionId" : "s070",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 43,
+    "confidence" : 0.95
+  }, {
+    "code" : "U4",
+    "title" : "Rates, Equilibria and Further Organic Chemistry",
+    "topics" : [ {
+      "code" : "U4-T11",
+      "title" : "Kinetics",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s078",
+      "sourceElementIds" : [ "e000340" ],
+      "pageNumber" : 49,
+      "confidence" : 0.95
+    }, {
+      "code" : "U4-T12",
+      "title" : "Entropy and Energetics",
+      "subtopics" : [ {
+        "code" : "U4-T12-A",
+        "title" : "Entropy",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s080",
+        "sourceElementIds" : [ "e000345" ],
+        "pageNumber" : 51,
+        "confidence" : 0.85
+      }, {
+        "code" : "U4-T12-B",
+        "title" : "Lattice energy",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s081",
+        "sourceElementIds" : [ "e000349" ],
+        "pageNumber" : 52,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s079",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 51,
+      "confidence" : 0.95
+    }, {
+      "code" : "U4-T13",
+      "title" : "Chemical Equilibria",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s082",
+      "sourceElementIds" : [ "e000352" ],
+      "pageNumber" : 53,
+      "confidence" : 0.95
+    }, {
+      "code" : "U4-T14",
+      "title" : "Acid-base Equilibria",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s083",
+      "sourceElementIds" : [ "e000355" ],
+      "pageNumber" : 54,
+      "confidence" : 0.95
+    }, {
+      "code" : "U4-T15",
+      "title" : "Organic Chemistry: Carbonyls, Carboxylic Acids and Chirality",
+      "subtopics" : [ {
+        "code" : "U4-T15-B",
+        "title" : "Carbonyl compounds",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s086",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 57,
+        "confidence" : 0.85
+      }, {
+        "code" : "U4-T15-C",
+        "title" : "Carboxylic acids",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s087",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 58,
+        "confidence" : 0.85
+      }, {
+        "code" : "U4-T15-D",
+        "title" : "Carboxylic acid derivatives",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s088",
+        "sourceElementIds" : [ ],
+        "pageNumber" : 58,
+        "confidence" : 0.85
+      }, {
+        "code" : "U4-T15-E",
+        "title" : "Spectroscopy and chromatography",
+        "subtopics" : [ ],
+        "sourceSectionId" : "s089",
+        "sourceElementIds" : [ "e000369" ],
+        "pageNumber" : 59,
+        "confidence" : 0.85
+      } ],
+      "sourceSectionId" : "s085",
+      "sourceElementIds" : [ "e000360" ],
+      "pageNumber" : 56,
+      "confidence" : 0.95
+    } ],
+    "sourceSectionId" : "s075",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 46,
+    "confidence" : 0.95
+  }, {
+    "code" : "U5",
+    "title" : "Transition Metals and Organic Nitrogen Chemistry",
+    "topics" : [ {
+      "code" : "U5-T16",
+      "title" : "Redox Equilibria",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s094",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 63,
+      "confidence" : 0.95
+    }, {
+      "code" : "U5-T17",
+      "title" : "Transition Metals and their Chemistry",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s095",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 65,
+      "confidence" : 0.95
+    }, {
+      "code" : "U5-T18",
+      "title" : "Organic Chemistry – Arenes",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s096",
+      "sourceElementIds" : [ "e000406" ],
+      "pageNumber" : 68,
+      "confidence" : 0.95
+    }, {
+      "code" : "U5-T19",
+      "title" : "Organic Nitrogen Compounds: Amines, Amides, Amino Acids and Proteins",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s098",
+      "sourceElementIds" : [ "e000410" ],
+      "pageNumber" : 69,
+      "confidence" : 0.95
+    }, {
+      "code" : "U5-T20",
+      "title" : "Organic Synthesis",
+      "subtopics" : [ ],
+      "sourceSectionId" : "s099",
+      "sourceElementIds" : [ ],
+      "pageNumber" : 71,
+      "confidence" : 0.95
+    } ],
+    "sourceSectionId" : "s091",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 60,
+    "confidence" : 0.95
+  }, {
+    "code" : "U6",
+    "title" : "Practical Skills in Chemistry II",
+    "topics" : [ ],
+    "sourceSectionId" : "s100",
+    "sourceElementIds" : [ ],
+    "pageNumber" : 72,
+    "confidence" : 0.95
+  } ],
+  "provenance" : {
+    "sourceDocumentId" : "2163958d-e912-4b11-b3f1-67f78bff5902",
+    "sourceChecksum" : "1e68fdf7d854f7a61b7d505456fc00eb6727b92bd003d03226963bd8ea6f832c",
+    "engine" : "opendataloader-pdf",
+    "engineVersion" : "2.5.7",
+    "extractionMethod" : "edexcel-numbered-outline-v1",
+    "validationStatus" : "SUGGESTED"
+  }
+}

@@ -31,7 +31,8 @@ public class TelemetryEvent {
         DECAY_APPLIED,
         SELF_DOUBT_FLAGGED,
         SMART_MARK_COMPLETED,
-        HUMAN_MARK_RECORDED
+        HUMAN_MARK_RECORDED,
+        KA_RAG_COMPLETED
     }
 
     @Id

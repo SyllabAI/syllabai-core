@@ -64,6 +64,15 @@ springdoc:
     path: /api/v1/docs
 
 syllabai:
+  tutor:
+    # KA-RAG pipeline bounds (T-024) — @Value defaults mirror these
+    max-topics: 5            # intent-matched KG topics per query
+    vector-candidates: 12    # chunk candidates fetched pre-fusion
+    evidence-limit: 6        # evidence items grounding an answer
+    rrf-k: 60                # reciprocal-rank-fusion smoothing constant
+    temperature: 0.2         # grounded generation (prompt: tutor-grounded/v1)
+    max-tokens: 900
+
   security:
     jwt-secret: ${SYLLABAI_JWT_SECRET:}          # required; blank fails fast with a clear message
     jwt-ttl: PT12H

@@ -34,6 +34,10 @@ public class GlobalExceptionHandler {
         // full invariant list preserved — corpus operators fix a bad document in one pass
         return build(HttpStatus.BAD_REQUEST, "invalid_document", ex.getMessage());
     }
+    @ExceptionHandler(com.syllabai.tutor.TutorGenerationException.class)
+    ResponseEntity<ApiError> tutorUnavailable(com.syllabai.tutor.TutorGenerationException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "tutor_unavailable", ex.getMessage());
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex) {

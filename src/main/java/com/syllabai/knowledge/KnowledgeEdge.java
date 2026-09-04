@@ -107,4 +107,9 @@ public class KnowledgeEdge {
     public String createdBy() { return createdBy; }
     public int version() { return version; }
     public Instant createdAt() { return createdAt; }
+
+    /** §7 review workflow transitions (SUGGESTED → VALIDATED / back to UNVALIDATED). */
+    public void validate() { this.validationStatus = KnowledgeNode.ValidationStatus.VALIDATED; }
+
+    public void markUnvalidated() { this.validationStatus = KnowledgeNode.ValidationStatus.UNVALIDATED; }
 }

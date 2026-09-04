@@ -1,6 +1,7 @@
 package com.syllabai.knowledge;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -34,4 +35,16 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
               and e.relationType = com.syllabai.knowledge.RelationType.MISCONCEPTION_OF
             """)
     List<KnowledgeEdge> findMisconceptionEdgesFrom(@Param("nodeId") UUID nodeId);
+
+    /** The PART_OF edge that hangs a node under its parent (§7 review workflow). */
+    Optional<KnowledgeEdge> findBySourceIdAndRelationType(
+            @Param("sourceId") UUID sourceId, @Param("relationType") RelationType relationType);
+
+    /** All PART_OF edges inside a subtree — bulk validation (version gate). */
+    @Query("""
+            select e from KnowledgeEdge e
+            where e.relationType = com.syllabai.knowledge.RelationType.PART_OF
+              and e.source.id in :nodeIds
+            """)
+    List<KnowledgeEdge> findPartOfEdgesFrom(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
 }

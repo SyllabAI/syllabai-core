@@ -7,6 +7,7 @@ import com.syllabai.shared.events.MasteryUpdatedEvent;
 import com.syllabai.shared.events.MisconceptionUpdatedEvent;
 import com.syllabai.shared.events.ReviewScheduledEvent;
 import com.syllabai.shared.events.SmartMarkCompletedEvent;
+import com.syllabai.shared.events.TutorAnsweredEvent;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -174,5 +175,33 @@ public class TelemetryService {
                 event.learnerId(), TelemetryEvent.Type.HUMAN_MARK_RECORDED,
                 payload, event.occurredAt()));
         log.debug("HUMAN_MARK_RECORDED telemetry appended for answer {}", event.answerId());
+    }
+
+    /**
+     * KA-RAG chat-exchange record (T-024, Paper B §3.5): what was asked, which
+     * evidence grounded the answer, which model/prompt answered, and whether
+     * the pipeline refused (empty evidence). Append-only; anonymous previews
+     * are logged with a null learner under the reserved
+     * 00000000-0000-0000-0000-000000000000 id to keep the FK-shaped column.
+     */
+    @EventListener
+    @Transactional
+    public void onTutorAnswered(TutorAnsweredEvent event) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("question", event.question());
+        payload.put("matchedTopicIds",
+                event.matchedTopicIds().stream().map(UUID::toString).toList());
+        payload.put("evidenceCount", event.evidenceCount());
+        payload.put("evidenceSources", event.evidenceSources());
+        payload.put("refused", event.refused());
+        payload.put("answerModel", event.answerModel() == null ? "" : event.answerModel());
+        payload.put("promptVersion", event.promptVersion());
+        payload.put("latencyMs", event.latencyMs());
+        payload.put("provenance", "ka-rag-pipeline/1.0.0");
+        events.save(new TelemetryEvent(
+                event.learnerId() == null ? new UUID(0, 0) : event.learnerId(),
+                TelemetryEvent.Type.KA_RAG_COMPLETED,
+                payload,
+                event.occurredAt()));
     }
 }

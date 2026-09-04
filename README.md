@@ -25,10 +25,10 @@ com.syllabai
 ├── knowledge         (KG nodes/edges, misconceptions, traversal)
 ├── content           (canonical document store, chunking, embeddings, vector retrieval)
 ├── assessment        (question bank, attempts, evidence contract)
-├── smartmark         (AI marking, kappa gate — Wave 2, placeholder)
+├── smartmark         (AI marking, deterministic validators, κ gate)
 ├── learner           (BKT, BDT, Ebbinghaus decay, learner state)
-├── tutor             (KA-RAG orchestration — Wave 3, placeholder)
-├── diagnostic        (struggle inference — Wave 3, placeholder)
+├── tutor             (KA-RAG: hybrid retrieval, fusion, grounded generation, citations)
+├── diagnostic        (struggle inference — Wave 4, placeholder)
 ├── recommendation    (next-best-step — Wave 3, placeholder)
 ├── teacher           (class views — Wave 4, placeholder)
 ├── research          (learning-log telemetry, model/prompt/experiment registries)
@@ -37,7 +37,7 @@ com.syllabai
 
 Each module owns its application services, domain objects, ports, and persistence adapters. Cross-module communication via domain events and contracts — never direct repository access.
 
-## Implemented so far (Wave 0–2 + science core)
+## Implemented so far (Wave 0–2 + science core + KA-RAG foundation)
 
 | Task | Status | What |
 |------|--------|------|
@@ -57,6 +57,8 @@ Each module owns its application services, domain objects, ports, and persistenc
 | T-023 | ✅ (core) | `LlmProvider` port + Spring AI adapters + `FailoverLlmChain` (Groq→Gemini→OpenRouter, health/cooldown, admin health endpoint, **experiment pinning** via config + experiments registry — unpinned experiments fail loudly, pinned never fail over) |
 | T-008–T-011, T-019, T-021, T-022 | ✅ | Wave-1/2 content+assessment fabric: V8 multi-part model (ExamPaper/QuestionVersion/QuestionPart/MarkScheme/MarkPoint/Answer/SmartMarkResult/HumanMark + κ evaluations), timed/untimed fluency gap, Smart Mark Strategy pipeline (candidate → bounds/coverage/mark-sum validators → append-only results; blank answers deterministic; LLM never final truth), κ ≥ 0.60 release gate, T-011 parser draft bridge + teacher validation workflow + ingestion anchors, ServableQuestionSpec (unvalidated content never serves) |
 | T-013 | ✅ | V11 content module: canonical document store (verbatim JSONB, checksum-idempotent), deterministic chunking (element-ordered, block-bound, provenance element_ids), `EmbeddingProvider` port + Gemini text-embedding-004 (768-dim, no failover by design), pgvector `vector(768)` + HNSW cosine search, teacher content APIs (ingest/embed/search), model-registry seed `content-embedding` (§19) |
+| T-010 | ✅ | Curriculum ingestion (V12-adjacent, no schema change): parser `curriculum-draft.json` (schema 1.1, per-node §17 provenance: section id, element ids, page, confidence) → `CurriculumIngestionService` (idempotent by provenance fingerprint, namespaced KG codes, all-SUGGESTED) + `CurriculumReviewService` node/version validation gate → teacher curriculum API; real Edexcel IAL Chemistry 2018 spec ingested: 6 units / 20 topics / 15 subtopics |
+| T-024 | ✅ (v0) | KA-RAG foundation (tutor package): deterministic intent (`GraphKnowledgeRetriever`, VALIDATED nodes only), `ContentVectorRetriever` adapter (cosine floor), `ReciprocalRankFusion` (rank-only, k=60), `NoReranker` Strategy, `LearnerContextAssembler` (mastery/misconceptions/fluency-gap briefs), `GroundedTutorGenerator` (prompt `tutor-grounded/v1`, temp 0.2, free-LLM chain), `SimpleCitationResolver` (deep links), `KaRagService` orchestration + grounding gate (empty evidence → deterministic refusal, no LLM call), `POST /api/v1/tutor/ask`, V12 (KA_RAG_COMPLETED telemetry + §19 registries) |
 
 ## Quickstart (local)
 
@@ -107,6 +109,22 @@ curl -s -X POST localhost:8080/api/v1/teacher/content/documents/<id>/embed \
 curl -s "localhost:8080/api/v1/teacher/content/documents/search?query=chlorine%20iodine&kind=MARK_SCHEME" \
   -H "Authorization: Bearer $TEACHER" | jq
 
+# T-010 curriculum ingestion: POST the parser's curriculum-draft.json
+# (real Edexcel IAL Chemistry 2018 spec: 6 units / 20 topics / 15 subtopics)
+curl -s -X POST "localhost:8080/api/v1/teacher/curriculum/drafts" \
+  -H "Authorization: Bearer $TEACHER" -H 'Content-Type: application/json' \
+  --data-binary @curriculum-draft.json | jq
+curl -s "localhost:8080/api/v1/teacher/curriculum/versions" \
+  -H "Authorization: Bearer $TEACHER" | jq
+curl -s -X POST "localhost:8080/api/v1/teacher/curriculum/nodes/<nodeId>/validate" \
+  -H "Authorization: Bearer $TEACHER" | jq
+
+# T-024 KA-RAG: ask the tutor (backend surface; chat UI is T-025)
+curl -s -X POST "localhost:8080/api/v1/tutor/ask" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"question":"bonding and structure of molecules"}' | jq
+# → answer with [n] citations, matched spec topics, evidence count, refusal flag
+
 # OpenAPI
 open http://localhost:8080/api/v1/docs
 ```
@@ -121,15 +139,19 @@ moles/grams misconception — watch `misconceptionStates.probability` jump from 
 ## Tests
 
 ```bash
-mvn test    # 121 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
+mvn test    # 159 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
             # evidence assembly, telemetry coverage, decay formula/bands/floor,
             # decay-job events, chain failover, experiment pinning, storage,
             # Smart Mark pipeline + κ gate, multi-part ingestion bridge,
-            # canonical validation, deterministic chunking, embedding idempotency
+            # canonical validation, deterministic chunking, embedding idempotency,
+            # curriculum ingestion + review gate, RRF fusion, deterministic intent,
+            # learner context assembly, citations, grounded generation, KA-RAG orchestration
 
 mvn verify   # + Testcontainers ITs (CI, Docker): full marking loop
              # (MultipartMarkingFlowIT), content pipeline ingest→chunk→embed→
-             # cosine search (ContentPipelineIT)
+             # cosine search (ContentPipelineIT), real-spec curriculum ingestion +
+             # validation gate (CurriculumIngestionIT), KA-RAG end-to-end with
+             # real-corpus fixtures + stub generator (KaRagFlowIT)
 ```
 
 ## OOP expectations (graded course project)

@@ -73,4 +73,9 @@ public class CurriculumVersion {
     public String title() { return title; }
     public Status status() { return status; }
     public Instant createdAt() { return createdAt; }
+
+    /** §7 review workflow: a curriculum becomes ACTIVE only via teacher validation. */
+    public void activate() { this.status = Status.ACTIVE; }
+
+    public void archive() { this.status = Status.ARCHIVED; }
 }

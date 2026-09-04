@@ -13,6 +13,18 @@ public interface KnowledgeNodeRepository extends JpaRepository<KnowledgeNode, UU
 
     List<KnowledgeNode> findByNodeTypeOrderByCode(NodeType nodeType);
 
+    /**
+     * All UNIT/TOPIC/SUBTOPIC nodes — the curriculum structure the T-024
+     * deterministic intent matcher token-matches queries against.
+     */
+    @Query("""
+            select n from KnowledgeNode n
+            where n.nodeType <> com.syllabai.knowledge.NodeType.SUBJECT
+              and n.nodeType <> com.syllabai.knowledge.NodeType.MISCONCEPTION
+            order by n.code
+            """)
+    List<KnowledgeNode> findStructureNodes();
+
     @Query(value = """
             WITH RECURSIVE subtree AS (
                 SELECT n.id
