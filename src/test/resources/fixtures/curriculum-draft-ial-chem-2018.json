@@ -1,6 +1,6 @@
 {
   "schemaVersion" : "1.1",
-  "board" : "=Edexcel",
+  "board" : "Edexcel",
   "qualification" : "IAL",
   "code" : "IAL-CHEM-2018",
   "title" : "Edexcel International Advanced Level Chemistry",
@@ -338,7 +338,7 @@
     "confidence" : 0.95
   } ],
   "provenance" : {
-    "sourceDocumentId" : "4937f827-4bf9-4fcc-99b7-95bb3831952e",
+    "sourceDocumentId" : "805b4411-2be2-40e1-a831-9591f79dd6f1",
     "sourceChecksum" : "1e68fdf7d854f7a61b7d505456fc00eb6727b92bd003d03226963bd8ea6f832c",
     "engine" : "opendataloader-pdf",
     "engineVersion" : "2.5.7",
