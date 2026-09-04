@@ -24,4 +24,11 @@ public interface MarkSchemeRepository extends JpaRepository<MarkScheme, UUID> {
             order by s.createdAt desc
             """)
     List<MarkScheme> findSuggested();
+
+    /** T-C02 bridge reporting: the schemes of one imported paper's questions. */
+    @Query("""
+            select s from MarkScheme s
+            where s.questionVersion.question.examPaperId = :paperId
+            """)
+    List<MarkScheme> findByPaperId(@Param("paperId") UUID paperId);
 }
