@@ -97,9 +97,11 @@ class GlmOcrBatchIT {
             assertThat(p.idempotencyPass().paperId()).isEqualTo(p.firstPass().paperId());
         });
 
-        // the real corpus counts (the T-C02-verified facts, now batch-borne)
+        // the real corpus counts (the T-C02-verified facts, now batch-borne).
+        // October's MS draft has NO printed paper total (msPaperTotal null) —
+        // an honest extraction gap, preserved verbatim like everything else.
         assertPair(report, 0, "june-2025-wph11-01", "OK", 20, 20, 20, 51, 80, 80);
-        assertPair(report, 1, "october-2025-wph11-01", "OK", 20, 26, 20, 53, 80, 80);
+        assertPair(report, 1, "october-2025-wph11-01", "OK", 20, 26, 20, 53, 80, null);
         assertPair(report, 2, "october-2025-wph11-01a", "REVIEW_REQUIRED", 19, 25, 19, 69,
                 80, 120);
 
