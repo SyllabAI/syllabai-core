@@ -16,6 +16,7 @@ import com.syllabai.shared.ConflictException;
 import com.syllabai.teacher.ingestion.GlmOcrDraftMapper.ReviewFinding;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,12 +165,17 @@ public class GlmOcrIngestionService {
                 true); // embedding skipped — explicit T-013 operation remains available
     }
 
-    /** Review surface: the persisted findings for one imported paper. */
+    /**
+     * Review surface: the persisted findings for one imported paper. The
+     * {@link Optional} distinguishes a MISSING bridge record (empty — the
+     * caller decides, e.g. HTTP 404) from an existing record whose findings
+     * list is legitimately empty (present, {@code []}): a clean pair (no
+     * conflicts, no warnings) has zero findings and that is NOT "not found".
+     */
     @Transactional(readOnly = true)
-    public List<ReviewFinding> reviewFindingsForPaper(UUID paperId) {
-        return bridgeRecords.findByPaperId(paperId).stream()
-                .flatMap(r -> deserialize(r.reviewFindings()).stream())
-                .toList();
+    public Optional<List<ReviewFinding>> reviewFindingsForPaper(UUID paperId) {
+        return bridgeRecords.findByPaperId(paperId)
+                .map(r -> deserialize(r.reviewFindings()));
     }
 
     /**

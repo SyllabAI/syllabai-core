@@ -17,6 +17,7 @@ import com.syllabai.teacher.ingestion.GlmOcrIngestionService;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -87,9 +88,9 @@ class GlmOcrIngestionControllerTest {
     @DisplayName("the review-findings endpoint serves persisted findings for a paper")
     void findingsEndpoint() {
         UUID paperId = UUID.randomUUID();
-        when(bridge.reviewFindingsForPaper(paperId)).thenReturn(List.of(
+        when(bridge.reviewFindingsForPaper(paperId)).thenReturn(Optional.of(List.of(
                 new ReviewFinding("RECONCILIATION", "paper-total-conflict", null, 80, 120,
-                        "QP paper total 80 vs MS paper total 120 — both preserved, never merged")));
+                        "QP paper total 80 vs MS paper total 120 — both preserved, never merged"))));
 
         List<GlmOcrIngestionController.FindingView> findings = controller.findings(paperId);
         assertThat(findings).hasSize(1);
@@ -99,10 +100,23 @@ class GlmOcrIngestionControllerTest {
     }
 
     @Test
-    @DisplayName("unknown papers fail with a clean 404, not an empty list")
+    @DisplayName("a clean paper (existing record, empty findings) returns 200 [] — not 404")
+    void findingsEmptyForCleanPaper() {
+        // an existing bridge record whose review_findings JSONB is an empty array:
+        // zero findings is a legitimate clean state, NOT a missing record
+        UUID paperId = UUID.randomUUID();
+        when(bridge.reviewFindingsForPaper(paperId)).thenReturn(Optional.of(List.of()));
+
+        List<GlmOcrIngestionController.FindingView> findings = controller.findings(paperId);
+        assertThat(findings).isNotNull();
+        assertThat(findings).isEmpty(); // 200 with [] — no NotFoundException raised
+    }
+
+    @Test
+    @DisplayName("unknown papers (no bridge record) fail with a clean 404, not an empty list")
     void findingsNotFound() {
         UUID unknown = UUID.randomUUID();
-        when(bridge.reviewFindingsForPaper(unknown)).thenReturn(List.of());
+        when(bridge.reviewFindingsForPaper(unknown)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> controller.findings(unknown))
                 .isInstanceOf(NotFoundException.class);
     }

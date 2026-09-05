@@ -32,6 +32,8 @@ import com.syllabai.teacher.ingestion.GlmOcrIngestionService;
 import com.syllabai.teacher.ingestion.GlmOcrMarkSchemeDraftDto;
 import com.syllabai.teacher.ingestion.GlmOcrPaperDraftDto;
 import com.syllabai.teacher.ingestion.GlmOcrReconciliationDto;
+import com.syllabai.teacher.ingestion.PastPaperDraftDto;
+import com.syllabai.teacher.ingestion.PastPaperIngestionService;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -92,6 +94,8 @@ class GlmOcrBridgeIT {
 
     @Autowired
     private GlmOcrIngestionService bridge;
+    @Autowired
+    private PastPaperIngestionService pastPaperIngestion;
     @Autowired
     private GlmOcrBridgeRecordRepository bridgeRecords;
     @Autowired
@@ -304,7 +308,8 @@ class GlmOcrBridgeIT {
         assertThat(record.reconciliationStatus()).isEqualTo("OK"); // no paper-total conflict…
 
         // …but the warning evidence is still a review finding
-        List<ReviewFinding> findings = bridge.reviewFindingsForPaper(result.examPaper().paperId());
+        List<ReviewFinding> findings = bridge
+                .reviewFindingsForPaper(result.examPaper().paperId()).orElseThrow();
         assertThat(findings.stream().map(ReviewFinding::detail))
                 .contains("Q18: part marks sum (2) conflicts with printed total (8)");
 
@@ -339,11 +344,51 @@ class GlmOcrBridgeIT {
         assertThat(reconciliation.get("msPaperTotal").asInt()).isEqualTo(120);
         assertThat(reconciliation.get("paperTotalConflict").asBoolean()).isTrue();
 
-        List<ReviewFinding> findings = bridge.reviewFindingsForPaper(result.examPaper().paperId());
+        List<ReviewFinding> findings = bridge
+                .reviewFindingsForPaper(result.examPaper().paperId()).orElseThrow();
         assertThat(findings.stream()
                 .filter(f -> "paper-total-conflict".equals(f.severity()))
                 .map(ReviewFinding::detail))
                 .anySatisfy(d -> assertThat(d).contains("80").contains("120"));
+    }
+
+    // ── 3b. review-surface semantics (record existence ≠ finding count) ───────
+
+    @Test
+    @Order(45)
+    @DisplayName("review surface: empty review_findings JSONB [] is present-empty, never 404")
+    void emptyFindingsStayAPresentRecord() {
+        // a clean pair (no conflicts, no warnings) legitimately persists an
+        // empty findings array — that record exists and must never read as
+        // "missing" (the old empty-list-as-sentinel bug). The paper is created
+        // through the real T-011 path so the bridge record's FKs are honest.
+        UUID paperId = pastPaperIngestion.ingest(new PastPaperDraftDto(
+                "1.0",
+                new PastPaperDraftDto.PaperMeta("Edexcel", "IAL", "Physics",
+                        "Unit 1", "clean-empty-findings-" + UUID.randomUUID().toString().substring(0, 8),
+                        "WPH11/01-clean", "qp-doc-clean", "ms-doc-clean"),
+                List.of(new PastPaperDraftDto.QuestionDraft("q1", "1", "stem",
+                        "State", 2, "STRUCTURED", 1, 0.6,
+                        List.of(new PastPaperDraftDto.PartDraft("a", "prompt",
+                                "State", 2, 0.6)))),
+                new PastPaperDraftDto.MarkSchemeDraft("1", "ms-doc-clean", List.of(
+                        new PastPaperDraftDto.MarkPointDraft("1-a", 1, "content", 2,
+                                List.of(), 0.6))),
+                "it-test-method", true), null).paperId();
+
+        bridgeRecords.save(new GlmOcrBridgeRecord(
+                paperId, "qp-doc-empty-findings", "ms-doc-empty-findings",
+                null, null,
+                "qp-checksum", "ms-checksum",
+                "glm-ocr-qp-v1+glm-ocr-ms-v1", "OK",
+                "[]", "{}", "{}", "{}", null));
+
+        var findings = bridge.reviewFindingsForPaper(paperId);
+        assertThat(findings).isPresent();   // the record exists → not a 404
+        assertThat(findings.get()).isEmpty(); // and its findings list is []
+
+        // unknown paper ids still read as missing (the 404 path)
+        assertThat(bridge.reviewFindingsForPaper(UUID.randomUUID())).isEmpty();
     }
 
     // ── 4. rerun idempotency ─────────────────────────────────────────────────────

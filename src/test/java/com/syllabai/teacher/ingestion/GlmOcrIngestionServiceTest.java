@@ -186,10 +186,40 @@ class GlmOcrIngestionServiceTest {
                         && !"paper-total-conflict".equals(f.severity())))
                 .hasSize(pair.reconciliation().findings().size());
         // the stored findings JSON round-trips through the review surface
+        // (present Optional — the record exists, and its findings list equals
+        // the ingested result's, whether empty or not)
         when(bridgeRecords.findByPaperId(result.examPaper().paperId()))
                 .thenReturn(Optional.of(captor.getValue()));
         assertThat(service.reviewFindingsForPaper(result.examPaper().paperId()))
-                .isEqualTo(result.reviewFindings());
+                .contains(result.reviewFindings());
+    }
+
+    @Test
+    @DisplayName("review surface: an existing record with empty findings is present-empty, not missing")
+    void emptyFindingsArePresentNotMissing() {
+        // a valid bridge record whose review_findings JSONB is "[]" — a clean
+        // pair (no reconciliation conflicts, no parser warnings). The service
+        // must distinguish this existing record from a missing one.
+        UUID paperId = UUID.randomUUID();
+        GlmOcrBridgeRecord cleanRecord = new GlmOcrBridgeRecord(
+                paperId, "qp-doc-id", "ms-doc-id",
+                UUID.randomUUID(), UUID.randomUUID(),
+                "qp-checksum", "ms-checksum",
+                "glm-ocr-qp-v1+glm-ocr-ms-v1", "OK",
+                "[]", "{}", "{}", "{}", null);
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.of(cleanRecord));
+
+        assertThat(service.reviewFindingsForPaper(paperId)).isPresent();
+        assertThat(service.reviewFindingsForPaper(paperId)).contains(List.of());
+    }
+
+    @Test
+    @DisplayName("review surface: unknown paper (no bridge record) is an empty Optional")
+    void missingRecordIsEmptyOptional() {
+        UUID unknown = UUID.randomUUID();
+        when(bridgeRecords.findByPaperId(unknown)).thenReturn(Optional.empty());
+
+        assertThat(service.reviewFindingsForPaper(unknown)).isEmpty();
     }
 
     @Test

@@ -57,16 +57,18 @@ public class GlmOcrIngestionController {
         return PairResultView.from(result);
     }
 
-    /** The persisted review findings (reconciliation + warnings) for one paper. */
+    /**
+     * The persisted review findings (reconciliation + warnings) for one paper.
+     * A MISSING bridge record is 404; an existing record with an empty
+     * findings list is a clean 200 with {@code []} (record existence and
+     * finding count are different questions — a clean pair has zero findings
+     * and is still reviewable).
+     */
     @GetMapping(value = "/papers/{paperId}/findings", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<FindingView> findings(@PathVariable UUID paperId) {
-        List<FindingView> findings = bridge.reviewFindingsForPaper(paperId).stream()
-                .map(FindingView::from)
-                .toList();
-        if (findings.isEmpty()) {
-            throw new NotFoundException("glm-ocr bridge record for paper", paperId);
-        }
-        return findings;
+        return bridge.reviewFindingsForPaper(paperId)
+                .map(list -> list.stream().map(FindingView::from).toList())
+                .orElseThrow(() -> new NotFoundException("glm-ocr bridge record for paper", paperId));
     }
 
     /**
