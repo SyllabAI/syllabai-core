@@ -105,14 +105,20 @@ class GlmOcrBatchIT {
         assertPair(report, 2, "october-2025-wph11-01a", "REVIEW_REQUIRED", 19, 25, 19, 69,
                 80, 120);
 
-        // row-count evidence: pass 1 created exactly the expected rows…
-        assertThat(report.afterFirstPass().documents()).isEqualTo(6);      // 3 pairs × QP+MS
-        assertThat(report.afterFirstPass().examPapers()).isEqualTo(3);
-        assertThat(report.afterFirstPass().bridgeRecords()).isEqualTo(3);
-        assertThat(report.afterFirstPass().questionVersions()).isEqualTo(59);  // 20+20+19
+        // row-count evidence: pass 1 created exactly the expected rows (deltas
+        // from `before` — the V7 seed migration already populates 8 demo-MCQ
+        // question versions in a fresh database, and the audit counts honestly)
+        assertThat(report.before().documents()).isZero();                  // no seed documents
+        assertThat(report.afterFirstPass().documents() - report.before().documents())
+                .isEqualTo(6);                                            // 3 pairs × QP+MS
+        assertThat(report.afterFirstPass().examPapers() - report.before().examPapers())
+                .isEqualTo(3);
+        assertThat(report.afterFirstPass().bridgeRecords() - report.before().bridgeRecords())
+                .isEqualTo(3);
+        assertThat(report.afterFirstPass().questionVersions()
+                - report.before().questionVersions()).isEqualTo(59);      // 20+20+19
         // …and the idempotency pass added nothing anywhere
         assertThat(report.afterIdempotencyPass().sameAs(report.afterFirstPass())).isTrue();
-        assertThat(report.before().documents()).isZero();                  // started empty
 
         // ALL five invariants verified against the real database
         assertThat(report.invariants())
