@@ -29,4 +29,5 @@ jobs:
           path: |
             target/surefire-reports
             target/failsafe-reports
+            target/t-c03-batch-audit
           if-no-files-found: ignore

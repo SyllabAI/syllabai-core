@@ -59,7 +59,8 @@ Each module owns its application services, domain objects, ports, and persistenc
 | T-013 | ✅ | V11 content module: canonical document store (verbatim JSONB, checksum-idempotent), deterministic chunking (element-ordered, block-bound, provenance element_ids), `EmbeddingProvider` port + Gemini text-embedding-004 (768-dim, no failover by design), pgvector `vector(768)` + HNSW cosine search, teacher content APIs (ingest/embed/search), model-registry seed `content-embedding` (§19) |
 | T-010 | ✅ | Curriculum ingestion (V12-adjacent, no schema change): parser `curriculum-draft.json` (schema 1.1, per-node §17 provenance: section id, element ids, page, confidence) → `CurriculumIngestionService` (idempotent by provenance fingerprint, namespaced KG codes, all-SUGGESTED) + `CurriculumReviewService` node/version validation gate → teacher curriculum API; real Edexcel IAL Chemistry 2018 spec ingested: 6 units / 20 topics / 15 subtopics |
 | T-024 | ✅ (v0) | KA-RAG foundation (tutor package): deterministic intent (`GraphKnowledgeRetriever`, VALIDATED nodes only), `ContentVectorRetriever` adapter (cosine floor), `ReciprocalRankFusion` (rank-only, k=60), `NoReranker` Strategy, `LearnerContextAssembler` (mastery/misconceptions/fluency-gap briefs), `GroundedTutorGenerator` (prompt `tutor-grounded/v1`, temp 0.2, free-LLM chain), `SimpleCitationResolver` (deep links), `KaRagService` orchestration + grounding gate (empty evidence → deterministic refusal, no LLM call), `POST /api/v1/tutor/ask`, V12 (KA_RAG_COMPLETED telemetry + §19 registries) |
-| T-C02 | ✅ (branch) | GLM-OCR bridge (V13): verified parser outputs for one QP/MS pair → existing T-013 canonical store + existing T-011 assessment ingestion (all SUGGESTED), parser contract persisted verbatim in `glm_ocr_bridge_records` (drafts + reconciliation + review findings — October Q18 and 1A 80-vs-120 conflicts stay review-visible), rerun-safe by canonical pair identity, embedding never implicit; controlled entries: `POST /api/v1/teacher/content/glm-ocr/pairs` + ops CLI `--syllabai.glmocr.pair-dir`; verified on the six real GLM-markdown-sample files (3 WPH11 pairs: 20/20/19 questions) — `docs/t-c02-bridge.md` |
+| T-C02 | ✅ (main) | GLM-OCR bridge (V13, merged PR #3 → main `7c6f122`): verified parser outputs for one QP/MS pair → existing T-013 canonical store + existing T-011 assessment ingestion (all SUGGESTED), parser contract persisted verbatim in `glm_ocr_bridge_records` (drafts + reconciliation + review findings — October Q18 and 1A 80-vs-120 conflicts stay review-visible), rerun-safe by canonical pair identity, embedding never implicit; controlled entries: `POST /api/v1/teacher/content/glm-ocr/pairs` + ops CLI `--syllabai.glmocr.pair-dir`; verified on the six real GLM-markdown-sample files (3 WPH11 pairs: 20/20/19 questions) — `docs/t-c02-bridge.md` |
+| T-C03 | 🔄 (branch) | ONE controlled real-corpus batch (not a firehose): batch root of pair bundles → bounded `GlmOcrBatchService` (firehose guard default 10; ONE transaction — all pairs land or none) → DB-verified audit report (`all-content-suggested`, `no-implicit-embedding`, `not-learner-servable`, `conflict-preservation`, `deterministic-rerun` + row-count evidence + in-run idempotency pass) written to `batch-audit-report.json` for human review; ops CLI `--syllabai.glmocr.batch-dir` fails non-zero on any invariant failure; parser side: `GlmOcrPairCli` (syllabai-parser) is the committed markdown→bundle production command; verified on the 3 real WPH11 pairs — `docs/t-c03-batch.md` |
 
 ## Quickstart (local)
 
@@ -138,6 +139,15 @@ curl -s -X POST "localhost:8080/api/v1/teacher/content/glm-ocr/pairs" \
 #   counts, reconciliation status, reviewFindings, embeddingSkipped: true
 curl -s "localhost:8080/api/v1/teacher/content/glm-ocr/papers/<paperId>/findings" \
   -H "Authorization: Bearer $TEACHER" | jq
+
+# T-C03 controlled batch (ops CLI, NOT learner-facing): a batch root of pair
+# bundles (one sub-directory per pair, the five parser outputs each). Bounded
+# (default 10, refuse beyond), ONE transaction, DB-verified safety invariants,
+# audit artifact written to <batch-root>/batch-audit-report.json for human
+# review. Fails non-zero if ANY invariant fails. Safe to re-run: nothing changes.
+# Generate bundles from real GLM-OCR markdown with syllabai-parser's GlmOcrPairCli.
+java -jar syllabai-core.jar --syllabai.glmocr.batch-dir=/path/to/batch-root \
+  [--syllabai.glmocr.batch-max-pairs=10]
 # ops CLI equivalent (no HTTP needed):
 #   java -jar syllabai-core.jar --syllabai.glmocr.pair-dir=/path/to/pair-dir
 
@@ -155,21 +165,24 @@ moles/grams misconception — watch `misconceptionStates.probability` jump from 
 ## Tests
 
 ```bash
-mvn test    # 185 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
+mvn test    # 196 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
             # evidence assembly, telemetry coverage, decay formula/bands/floor,
             # decay-job events, chain failover, experiment pinning, storage,
             # Smart Mark pipeline + κ gate, multi-part ingestion bridge,
             # canonical validation, deterministic chunking, embedding idempotency,
             # curriculum ingestion + review gate, RRF fusion, deterministic intent,
             # learner context assembly, citations, grounded generation, KA-RAG orchestration,
-            # GLM-OCR bridge mapper/service/CLI/controller against the real 3-pair fixtures
+            # GLM-OCR bridge mapper/service/CLI/controller against the real 3-pair fixtures,
+            # T-C03 batch orchestration: bounded discovery, two passes, invariants, audit
 
 mvn verify   # + Testcontainers ITs (CI, Docker): full marking loop
              # (MultipartMarkingFlowIT), content pipeline ingest→chunk→embed→
              # cosine search (ContentPipelineIT), real-spec curriculum ingestion +
              # validation gate (CurriculumIngestionIT), KA-RAG end-to-end with
              # real-corpus fixtures + stub generator (KaRagFlowIT), GLM-OCR bridge
-             # end-to-end incl. rerun idempotency + conflict visibility (GlmOcrBridgeIT)
+             # end-to-end incl. rerun idempotency + conflict visibility (GlmOcrBridgeIT),
+             # T-C03 batch end-to-end: 3 real pairs, invariants, second-run zero-new-rows,
+             # bound refusal, audit artifact (GlmOcrBatchIT)
 ```
 
 ## OOP expectations (graded course project)
