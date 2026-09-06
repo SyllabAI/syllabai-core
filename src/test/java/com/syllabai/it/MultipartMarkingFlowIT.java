@@ -106,11 +106,16 @@ class MultipartMarkingFlowIT {
     private com.syllabai.identity.UserRepository users;
 
     private static PastPaperDraftDto draft() {
+        return draft("4CH0/2C");
+    }
+
+    /** distinct paper codes keep the ingestion-anchor KG node codes unique per test */
+    private static PastPaperDraftDto draft(String paperCode) {
         return new PastPaperDraftDto(
                 "1.0",
                 new PastPaperDraftDto.PaperMeta("Edexcel", "IGCSE", "Chemistry",
                         "Paper 2C", "June 2013-" + UUID.randomUUID().toString().substring(0, 6),
-                        "4CH0/2C", "it-qp-doc", "it-ms-doc"),
+                        paperCode, "it-qp-doc", "it-ms-doc"),
                 List.of(new PastPaperDraftDto.QuestionDraft("q1", "1", "Question 1 stem",
                         "Explain", 2, "STRUCTURED", 1, 0.6,
                         List.of(new PastPaperDraftDto.PartDraft("a", "Part a prompt",
@@ -275,7 +280,7 @@ class MultipartMarkingFlowIT {
         // the real marking queue composes learner display names server-side:
         // fresh paper (independent of the other test) -> validate -> submit
         PastPaperIngestionService.IngestionSummary summary =
-                ingestion.ingest(draft(), UUID.randomUUID());
+                ingestion.ingest(draft("4CH0/2D"), UUID.randomUUID());
         Question question = questions.findAllByOrderByDifficultyAsc().stream()
                 .filter(q -> summary.paperId().equals(q.examPaperId()))
                 .findFirst().orElseThrow();
