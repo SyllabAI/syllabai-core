@@ -47,4 +47,21 @@ public record DecayParams(
         }
         return Duration.ofDays(tauHighDays);
     }
+
+    /**
+     * Proficiency band label for a (typically decayed) mastery value — the band
+     * vocabulary every learner-facing read model shares (LOW / DEVELOPING /
+     * SECURE). The thresholds live here so the state view and the personalized
+     * knowledge-graph view can never disagree. Strictly below the ceiling is
+     * LOW; at-or-above the floor is SECURE.
+     */
+    public String bandOf(double mastery) {
+        if (mastery < lowBandCeiling) {
+            return "LOW";
+        }
+        if (mastery < highBandFloor) {
+            return "DEVELOPING";
+        }
+        return "SECURE";
+    }
 }

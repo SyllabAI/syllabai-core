@@ -79,6 +79,30 @@ public class KnowledgeGraphService {
         return nodes.findStructureNodes();
     }
 
+    /**
+     * Direct prerequisite relations among the subtree's structure nodes — the
+     * drawable edges for the personalized mastery-map read model (F-034).
+     * One batched query over the recursive-CTE subtree, so graph visualisation
+     * never triggers per-node prerequisite lookups. Misconception nodes cannot
+     * be prerequisites and are excluded by construction (they attach via
+     * MISCONCEPTION_OF, not PART_OF, so the subtree never contains them).
+     */
+    public List<PrerequisiteRelation> prerequisiteRelations(UUID rootId) {
+        List<UUID> ids = graph.findSubtree(rootId).stream()
+                .map(KnowledgeNode::id)
+                .toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return edges.findPrerequisiteEdgesWithin(ids).stream()
+                .map(e -> new PrerequisiteRelation(e.sourceId(), e.targetId()))
+                .toList();
+    }
+
+    /** A drawable prerequisite edge: {@code prerequisiteId} → {@code dependentNodeId}. */
+    public record PrerequisiteRelation(UUID prerequisiteId, UUID dependentNodeId) {
+    }
+
     // ── internals ──────────────────────────────────────────────────
 
     private NodeView toView(KnowledgeNode n, boolean withMisconceptions) {

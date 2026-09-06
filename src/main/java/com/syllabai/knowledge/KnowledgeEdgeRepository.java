@@ -28,6 +28,21 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
             """)
     List<KnowledgeEdge> findDirectPrerequisites(@Param("nodeId") UUID nodeId);
 
+    /**
+     * REQUIRES_PREREQUISITE edges with BOTH endpoints inside the given node set —
+     * the drawable prerequisite relations for the personalized mastery-map read
+     * model (F-034). Source = prerequisite, target = the node that requires it.
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            join fetch e.target
+            where e.relationType = com.syllabai.knowledge.RelationType.REQUIRES_PREREQUISITE
+              and e.source.id in :nodeIds
+              and e.target.id in :nodeIds
+            """)
+    List<KnowledgeEdge> findPrerequisiteEdgesWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
     @Query("""
             select e from KnowledgeEdge e
             join fetch e.target

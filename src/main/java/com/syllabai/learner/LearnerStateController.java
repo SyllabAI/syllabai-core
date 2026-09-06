@@ -2,6 +2,7 @@ package com.syllabai.learner;
 
 import com.syllabai.learner.decay.DecayParams;
 import com.syllabai.learner.decay.EbbinghausDecayService;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
 import com.syllabai.learner.dto.LearnerStateView;
 import com.syllabai.learner.dto.MisconceptionStateView;
 import com.syllabai.learner.dto.SkillStateView;
@@ -11,25 +12,30 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Learner-state read model (Master Spec §22: GET /api/v1/learners/me/state).
+ * Learner-state read model (Master Spec §22: GET /api/v1/learners/me/state and
+ * GET /api/v1/learners/me/knowledge-graph).
  */
 @RestController
 @RequestMapping("/api/v1/learners/me")
 public class LearnerStateController {
 
     private final LearnerModelService learnerModel;
+    private final LearnerKnowledgeGraphService graphs;
     private final ReviewScheduleRepository reviewSchedules;
     private final EbbinghausDecayService decayService;
     private final LearnerProperties properties;
 
     public LearnerStateController(LearnerModelService learnerModel,
+                                  LearnerKnowledgeGraphService graphs,
                                   ReviewScheduleRepository reviewSchedules,
                                   EbbinghausDecayService decayService,
                                   LearnerProperties properties) {
         this.learnerModel = learnerModel;
+        this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
         this.decayService = decayService;
         this.properties = properties;
@@ -68,13 +74,20 @@ public class LearnerStateController {
         return new LearnerStateView(learnerId, skills, misconceptions, reviews);
     }
 
+    /**
+     * The learner's personalized knowledge graph (F-034): the curriculum tree
+     * under {@code rootId} (a subject's KG root, resolvable via
+     * GET /api/v1/curriculum/subjects) annotated with proficiency, misconception
+     * and review state, plus the drawable prerequisite edges. One call replaces
+     * the client-side tree + state join.
+     */
+    @GetMapping("/knowledge-graph")
+    public LearnerKnowledgeGraphView knowledgeGraph(@CurrentUserId UUID learnerId,
+                                                    @RequestParam UUID rootId) {
+        return graphs.graphFor(learnerId, rootId);
+    }
+
     private String bandOf(double mastery, DecayParams params) {
-        if (mastery < params.lowBandCeiling()) {
-            return "LOW";
-        }
-        if (mastery < params.highBandFloor()) {
-            return "DEVELOPING";
-        }
-        return "SECURE";
+        return params.bandOf(mastery);
     }
 }
