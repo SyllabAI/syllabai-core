@@ -3,15 +3,32 @@ package com.syllabai.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.assessment.MarkPointRepository;
+import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.QuestionController;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionVersion;
+import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.assessment.dto.StudentQuestionView;
+import com.syllabai.content.DocumentChunkRepository;
+import com.syllabai.content.DocumentRepository;
 import com.syllabai.content.EmbeddingProvider;
 import com.syllabai.shared.ConflictException;
+import com.syllabai.shared.NotFoundException;
 import com.syllabai.teacher.ingestion.GlmOcrBatchAuditReport;
 import com.syllabai.teacher.ingestion.GlmOcrBatchService;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
 import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -38,6 +55,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * verified against the database. The audit artifact is written to
  * {@code target/t-c03-batch-audit-report.json} — CI uploads it as the
  * human-review deliverable of the batch.
+ *
+ * <p>Two regression proofs beyond the happy path: (1) whole-batch atomicity —
+ * a pair that fails AFTER its own rows were written rolls back the entire
+ * batch (three fully-ingested pairs included); (2) the real learner serving
+ * boundary — imported questions never appear in the actual
+ * {@code QuestionController} selection (topic-scoped or not), direct fetches
+ * refuse with 404, while authoritative seed content still serves (the gate
+ * blocks unvalidated imports, not the endpoint).</p>
  */
 @SpringBootTest
 @ActiveProfiles("it")
@@ -71,11 +96,64 @@ class GlmOcrBatchIT {
     private GlmOcrBatchService batchService;
     @Autowired
     private GlmOcrBridgeRecordRepository bridgeRecords;
+    @Autowired
+    private DocumentRepository documents;
+    @Autowired
+    private DocumentChunkRepository chunks;
+    @Autowired
+    private ExamPaperRepository examPapers;
+    @Autowired
+    private QuestionVersionRepository questionVersions;
+    @Autowired
+    private MarkSchemeRepository markSchemes;
+    @Autowired
+    private MarkPointRepository markPoints;
+    @Autowired
+    private QuestionRepository questions;
+    @Autowired
+    private QuestionController learnerQuestions;
+
+    // ── 0. whole-batch atomicity: a late failure rolls back EVERYTHING ───────────
+
+    @Test
+    @Order(1)
+    @DisplayName("one transaction: a late-failing pair rolls back the whole batch (three ingested pairs + its own partial writes)")
+    void lateFailureRollsBackTheWholeBatch(@TempDir Path root) throws Exception {
+        batchRoot(root);
+        poisonLateFailureBundle(root.resolve("zzz-poisoned-duplicate-paper"));
+
+        // pristine seed state before the batch (V7 seeds 8 demo-MCQ versions, nothing else)
+        long seedVersions = questionVersions.count();
+        assertThat(seedVersions).isEqualTo(8);
+        assertThat(documents.count()).isZero();
+        assertThat(examPapers.count()).isZero();
+        assertThat(bridgeRecords.count()).isZero();
+
+        // the poison strikes LATE: pairs 1-3 ingest fully, then the poisoned pair's
+        // two canonical documents ingest BEFORE PastPaperIngestionService refuses
+        // its duplicate paper (WPH11/01A + October 2025 = pair 3, same transaction) —
+        // the exception is T-011's duplicate refusal, not early bundle validation
+        assertThatThrownBy(() -> batchService.runBatch(root, null,
+                GlmOcrBatchService.DEFAULT_MAX_PAIRS))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already ingested");
+
+        // ROLLBACK EVERYTHING: the three fully-processed pairs AND the poisoned
+        // pair's own partial writes (its canonical documents + chunks) — nothing
+        // of the batch survived; the database is the pristine seed again
+        assertThat(documents.count()).as("documents").isZero();
+        assertThat(chunks.count()).as("chunks").isZero();
+        assertThat(examPapers.count()).as("papers").isZero();
+        assertThat(questionVersions.count()).as("versions").isEqualTo(seedVersions);
+        assertThat(markSchemes.count()).as("schemes").isZero();
+        assertThat(markPoints.count()).as("mark points").isZero();
+        assertThat(bridgeRecords.count()).as("bridge records").isZero();
+    }
 
     // ── 1. the batch: first run ingests everything, all invariants pass ─────────
 
     @Test
-    @Order(1)
+    @Order(2)
     @DisplayName("first batch run: 3 real pairs INGESTED, all invariants verified, audit artifact written")
     void firstBatchRun(@TempDir Path root) throws Exception {
         batchRoot(root);
@@ -151,7 +229,7 @@ class GlmOcrBatchIT {
     // ── 2. deterministic rerun: a full second batch run changes NOTHING ─────────
 
     @Test
-    @Order(2)
+    @Order(3)
     @DisplayName("second batch run (new transaction): everything DUPLICATE, zero new rows, invariants still pass")
     void secondBatchRunChangesNothing(@TempDir Path root) throws Exception {
         // the first run landed in test 1; this root holds the SAME bundles
@@ -181,7 +259,7 @@ class GlmOcrBatchIT {
     // ── 3. the firehose guard ────────────────────────────────────────────────────
 
     @Test
-    @Order(3)
+    @Order(4)
     @DisplayName("a batch beyond the bound is refused before any row is written")
     void boundIsRefusedLoudly(@TempDir Path root) throws Exception {
         batchRoot(root);
@@ -192,6 +270,41 @@ class GlmOcrBatchIT {
 
         // still exactly three bridge records — the refused run wrote nothing
         assertThat(bridgeRecords.count()).isEqualTo(3);
+    }
+
+    // ── 4. the real learner-serving boundary (not a state-field check) ──────────
+
+    @Test
+    @Order(5)
+    @DisplayName("real serving path: imported questions never serve (list + topic query + fetch 404); authoritative content still does")
+    void importedBatchContentNeverServesToLearners() {
+        // every question id the batch imported, from the durable bridge records
+        Set<UUID> imported = new HashSet<>();
+        for (GlmOcrBridgeRecord record : bridgeRecords.findAll()) {
+            imported.addAll(questionVersions.findByPaperId(record.paperId()).stream()
+                    .map(QuestionVersion::questionId).toList());
+        }
+        assertThat(imported).hasSize(59); // 20 + 20 + 19
+
+        // the REAL serving projection: the learner selection excludes every import…
+        List<StudentQuestionView> served = learnerQuestions.list(null);
+        assertThat(served).extracting(StudentQuestionView::id).noneMatch(imported::contains);
+        // …while authoritative content remains servable (the gate blocks
+        // unvalidated imports, not the endpoint — 8 seed MCQs still serve)
+        assertThat(served).isNotEmpty();
+
+        // the topic-scoped practice query (the anchor topic of an imported paper):
+        // its questions are found by topic, then refused by the servable spec
+        UUID anyImported = imported.iterator().next();
+        UUID anchorTopic = questions.findById(anyImported).orElseThrow().primaryTopicNodeId();
+        assertThat(learnerQuestions.list(anchorTopic)).isEmpty();
+
+        // direct fetch of an imported question refuses (unvalidated → 404)…
+        assertThatThrownBy(() -> learnerQuestions.get(anyImported))
+                .isInstanceOf(NotFoundException.class);
+        // …while direct fetch of an authoritative question serves
+        UUID authoritative = served.get(0).id();
+        assertThat(learnerQuestions.get(authoritative).id()).isEqualTo(authoritative);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
@@ -206,6 +319,45 @@ class GlmOcrBatchIT {
                 Files.copy(FIXTURES.resolve(pair).resolve(file), dir.resolve(file));
             }
         }
+    }
+
+    /**
+     * A LATE-STAGE poison (the atomicity regression): a copy of the 1A bundle
+     * re-identified so its canonical documents ingest FRESH (new documentId +
+     * checksum, claimed by the patched drafts — bundle validation passes),
+     * after which PastPaperIngestionService refuses the duplicate paper
+     * (WPH11/01A + October 2025, ingested by pair 3 earlier in the same
+     * transaction). The failure therefore arrives after real rows were
+     * written — exactly the shape whole-batch rollback must survive.
+     */
+    private static void poisonLateFailureBundle(Path target) throws IOException {
+        Files.createDirectories(target);
+        for (String file : GlmOcrBatchService.BUNDLE_FILES) {
+            Files.copy(FIXTURES.resolve("october-2025-wph11-01a").resolve(file),
+                    target.resolve(file));
+        }
+        reIdentify(target.resolve("qp-canonical.json"), target.resolve("qp-draft.json"),
+                "qp");
+        reIdentify(target.resolve("ms-canonical.json"), target.resolve("ms-draft.json"),
+                "ms");
+    }
+
+    /** fresh canonical identity (documentId + source checksum) that the draft
+     *  claims — the bundle stays internally consistent, only its identity differs */
+    private static void reIdentify(Path canonicalFile, Path draftFile, String side)
+            throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        String freshDocumentId = "00000000-0000-5000-8000-0000000000" + ("qp".equals(side) ? "1" : "2");
+        String freshChecksum = "deadbeef0000400080000000000000" + ("qp".equals(side) ? "1" : "2");
+
+        ObjectNode canonical = (ObjectNode) mapper.readTree(Files.readString(canonicalFile));
+        canonical.put("documentId", freshDocumentId);
+        ((ObjectNode) canonical.get("source")).put("checksum", freshChecksum);
+        Files.writeString(canonicalFile, mapper.writeValueAsString(canonical));
+
+        ObjectNode draft = (ObjectNode) mapper.readTree(Files.readString(draftFile));
+        ((ObjectNode) draft.get("paper")).put("canonicalDocumentId", freshDocumentId);
+        Files.writeString(draftFile, mapper.writeValueAsString(draft));
     }
 
     private static void assertPair(GlmOcrBatchAuditReport report, int index,

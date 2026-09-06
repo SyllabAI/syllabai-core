@@ -1,7 +1,7 @@
 # T-C03 — one controlled real-corpus batch + bridge audit
 
-**Status:** implemented on branch `codex/t-c03-batch` (PR #4); merge is a human
-decision. Builds on T-C02 (merged, main `7c6f122`); the T-C02 bridge itself is
+**Status:** implemented on branch `codex/t-c03-batch` (PR #5, issue #4); merge is a
+human decision. Builds on T-C02 (merged, main `7c6f122`); the T-C02 bridge itself is
 **unchanged** — this task adds bounded batch orchestration and a durable audit
 around it, plus the parser-side production command that turns real GLM-OCR
 Markdown pairs into bridge bundles.
@@ -110,6 +110,17 @@ as a workflow artifact) contains:
   3 bridge records / 59 versions); full second batch run in a NEW transaction —
   everything `DUPLICATE`, zero new rows; bound refusal writes nothing; audit
   artifact round-trips.
+- **Two regression proofs in the same IT:** (1) *whole-batch atomicity* — a
+  fourth pair whose canonical documents ingest FRESH (re-identified bundle) and
+  then fails LATE at T-011's duplicate-paper refusal must roll back the ENTIRE
+  batch: the three fully-ingested pairs AND the poisoned pair's own partial
+  writes (its two canonical documents + chunks) — the database returns to the
+  pristine V7 seed state; (2) *the real learner-serving boundary* — through the
+  actual `QuestionController`: the learner selection contains none of the 59
+  imported question ids while the 8 seed MCQs still serve (the gate blocks
+  unvalidated imports, not the endpoint), the topic-scoped query on an imported
+  paper's anchor topic returns nothing, and direct fetch of an imported question
+  refuses with 404 while direct fetch of an authoritative question serves.
 - **Parser (71/71):** `GlmOcrPairCliTest` — five-file bundle, deterministic
   ids on rerun, drafts claim their canonical ids, June clean 80/80, 1A
   80-vs-120 written out.

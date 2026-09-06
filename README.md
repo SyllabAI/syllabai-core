@@ -182,7 +182,8 @@ mvn verify   # + Testcontainers ITs (CI, Docker): full marking loop
              # real-corpus fixtures + stub generator (KaRagFlowIT), GLM-OCR bridge
              # end-to-end incl. rerun idempotency + conflict visibility (GlmOcrBridgeIT),
              # T-C03 batch end-to-end: 3 real pairs, invariants, second-run zero-new-rows,
-             # bound refusal, audit artifact (GlmOcrBatchIT)
+             # bound refusal, whole-batch rollback on a late-failing pair, learner-serving
+             # boundary through the real QuestionController, audit artifact (GlmOcrBatchIT)
 ```
 
 ## OOP expectations (graded course project)
