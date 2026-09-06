@@ -26,7 +26,9 @@ import com.syllabai.smartmark.SmartMarkAgreementEvaluation;
 import com.syllabai.smartmark.SmartMarkResult;
 import com.syllabai.smartmark.SmartMarkService;
 import com.syllabai.teacher.ContentReviewService;
+import com.syllabai.teacher.TeacherMarkingController;
 import com.syllabai.teacher.TeacherMarkingService;
+import com.syllabai.teacher.TeacherRosterController;
 import com.syllabai.teacher.ingestion.PastPaperDraftDto;
 import com.syllabai.teacher.ingestion.PastPaperIngestionService;
 import java.util.LinkedHashMap;
@@ -96,6 +98,12 @@ class MultipartMarkingFlowIT {
     private SkillStateRepository skillStates;
     @Autowired
     private TelemetryEventRepository telemetry;
+    @Autowired
+    private TeacherRosterController rosterController;
+    @Autowired
+    private TeacherMarkingController markingController;
+    @Autowired
+    private com.syllabai.identity.UserRepository users;
 
     private static PastPaperDraftDto draft() {
         return new PastPaperDraftDto(
@@ -245,5 +253,56 @@ class MultipartMarkingFlowIT {
         assertThat(telemetry.findAll().stream()
                 .filter(e -> e.type() == com.syllabai.research.TelemetryEvent.Type.SELF_DOUBT_FLAGGED)
                 .count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("T-029: the real roster query + marking queue carry learner identity")
+    void teacherRosterAndQueueCarryLearnerIdentity() {
+        // a learner and a teacher exist; the roster must list ONLY enabled students
+        UUID learner = newLearner();
+        authService.provisionUser(
+                "it-teacher-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
+                "ItTeacher123!", "It Teacher", java.util.Set.of(com.syllabai.identity.Role.TEACHER));
+
+        var roster = rosterController.learners();
+        assertThat(roster.stream().map(v -> v.id())).contains(learner);
+        assertThat(roster.stream().map(v -> v.displayName())).contains("It Learner");
+        assertThat(roster.stream().noneMatch(v -> v.displayName().equals("It Teacher"))).isTrue();
+        var row = roster.stream().filter(v -> v.id().equals(learner)).findFirst().orElseThrow();
+        assertThat(row.email()).contains("@syllabai.test");
+        assertThat(row.createdAt()).isNotNull();
+
+        // the real marking queue composes learner display names server-side:
+        // fresh paper (independent of the other test) -> validate -> submit
+        PastPaperIngestionService.IngestionSummary summary =
+                ingestion.ingest(draft(), UUID.randomUUID());
+        Question question = questions.findAllByOrderByDifficultyAsc().stream()
+                .filter(q -> summary.paperId().equals(q.examPaperId()))
+                .findFirst().orElseThrow();
+        QuestionVersion version = questionVersions
+                .findByQuestionIdOrderByVersionDesc(question.id()).get(0);
+        review.validateQuestionVersion(version.id());
+        UUID partId = version.parts().get(0).id();
+        StructuredAttemptResultView submitted = assessment.submitStructured(learner,
+                new StructuredSubmitRequest(question.id(),
+                        List.of(new PartAnswerRequest(partId, "some answer")),
+                        15000L, 3, false, true));
+        UUID answerId = answers.findByAttemptIdOrderByQuestionPartId(
+                submitted.attemptId()).get(0).id();
+
+        var pending = markingController.queue("PENDING");
+        var item = pending.stream().filter(v -> v.answerId().equals(answerId))
+                .findFirst().orElseThrow();
+        assertThat(item.learnerId()).isEqualTo(learner);
+        assertThat(item.learnerDisplayName()).isEqualTo("It Learner");
+        assertThat(item.partMarks()).isEqualTo(2);
+
+        var detail = markingController.answer(answerId);
+        assertThat(detail.learnerDisplayName()).isEqualTo("It Learner");
+        assertThat(detail.answerText()).isEqualTo("some answer");
+
+        // the roster is ordered by display name and stable across reads
+        assertThat(rosterController.learners().stream().map(v -> v.displayName()))
+                .isSorted();
     }
 }

@@ -3,6 +3,8 @@ package com.syllabai.teacher;
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.identity.CurrentUserId;
+import com.syllabai.identity.User;
+import com.syllabai.identity.UserRepository;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.smartmark.HumanMark;
 import com.syllabai.smartmark.HumanMarkRepository;
@@ -18,7 +20,9 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,19 +47,22 @@ public class TeacherMarkingController {
     private final SmartMarkResultRepository smartMarkResults;
     private final HumanMarkRepository humanMarks;
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations;
+    private final UserRepository users;
 
     public TeacherMarkingController(AnswerRepository answers,
                                     SmartMarkService smartMarkService,
                                     TeacherMarkingService teacherMarkingService,
                                     SmartMarkResultRepository smartMarkResults,
                                     HumanMarkRepository humanMarks,
-                                    SmartMarkAgreementEvaluationRepository agreementEvaluations) {
+                                    SmartMarkAgreementEvaluationRepository agreementEvaluations,
+                                    UserRepository users) {
         this.answers = answers;
         this.smartMarkService = smartMarkService;
         this.teacherMarkingService = teacherMarkingService;
         this.smartMarkResults = smartMarkResults;
         this.humanMarks = humanMarks;
         this.agreementEvaluations = agreementEvaluations;
+        this.users = users;
     }
 
     /** marking queue by state (PENDING / SMART_MARKED / HUMAN_MARKED / OVERRIDDEN) */
@@ -68,8 +75,13 @@ public class TeacherMarkingController {
         } catch (IllegalArgumentException e) {
             throw new NotFoundException("marking state", state);
         }
-        return answers.findByMarkingState(filter).stream()
-                .map(TeacherViews::answer)
+        List<Answer> queue = answers.findByMarkingState(filter);
+        // one batched identity lookup so the queue is self-contained (T-029:
+        // the teacher reads whose answer it is without a client-side join)
+        Map<UUID, String> names = learnerNames(
+                queue.stream().map(a -> a.attempt().learnerId()).collect(Collectors.toSet()));
+        return queue.stream()
+                .map(a -> TeacherViews.answer(a, names.get(a.attempt().learnerId())))
                 .toList();
     }
 
@@ -79,7 +91,9 @@ public class TeacherMarkingController {
                 .orElseThrow(() -> new NotFoundException("answer", id));
         SmartMarkResult smart = smartMarkResults.findLatest(id).orElse(null);
         HumanMark human = humanMarks.findLatest(id).orElse(null);
-        return TeacherViews.answer(answer, smart, human);
+        String learnerName = learnerNames(Set.of(answer.attempt().learnerId()))
+                .get(answer.attempt().learnerId());
+        return TeacherViews.answer(answer, learnerName, smart, human);
     }
 
     /** run the Smart Mark pipeline once against one answer (append-only history) */
@@ -135,6 +149,15 @@ public class TeacherMarkingController {
     }
 
     public record KappaScopeRequest(UUID paperId) {
+    }
+
+    /** display names for the queue read model; unknown ids resolve to null */
+    private Map<UUID, String> learnerNames(Set<UUID> learnerIds) {
+        if (learnerIds.isEmpty()) {
+            return Map.of();
+        }
+        return users.findAllById(learnerIds).stream()
+                .collect(Collectors.toMap(User::id, User::displayName, (a, b) -> a));
     }
 
     public record KappaEvaluationView(UUID id, String scope, UUID paperId, int sampleSize,
