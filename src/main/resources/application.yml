@@ -73,6 +73,18 @@ syllabai:
     temperature: 0.2         # grounded generation (prompt: tutor-grounded/v1)
     max-tokens: 900
 
+  recommendation:
+    # nba-rules/v1 deterministic baseline (T-033 / ADR-017) — product tuning
+    # parameters, not scientific claims; overridable per environment
+    weak-mastery-ceiling: 0.45       # below the decay LOW band ceiling ⇒ practice
+    fluency-gap-threshold: 0.2       # |untimed − timed| accuracy gap ⇒ timed exercise
+    problem-mark-ratio: 0.5          # awarded/max at or below ⇒ retry the question
+    min-attempts-for-weakness: 2     # evidence floor before "weak mastery" advice
+    max-actions: 8                   # response cap (portfolio, not a feed)
+    uncovered-topic-cap: 2           # constrained exploration per response
+    problem-question-cap: 2          # retry actions per response
+
+
   security:
     jwt-secret: ${SYLLABAI_JWT_SECRET:}          # required; blank fails fast with a clear message
     jwt-ttl: PT12H
