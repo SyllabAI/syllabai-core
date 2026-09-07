@@ -1,0 +1,56 @@
+# Render Blueprint — SyllabAI core (T-031 pilot deployment, ADR-009 free tier).
+#
+# Usage: Render dashboard → New → Blueprint → point at SyllabAI/syllabai-core.
+# Secrets marked `sync: false` are entered in the dashboard once and never
+# committed. Docker build runs mvn package (tests run in GitHub Actions, not
+# in the deploy build — keeps free-tier minutes for CI).
+#
+# Cold starts are accepted per ADR-009 (free tier spins down on idle);
+# the web client surfaces honest "backend unavailable" states, it does not
+# hang silently.
+
+services:
+  - type: web
+    name: syllabai-core
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # ── database (Neon Postgres + pgvector) ──
+      - key: SYLLABAI_DATABASE_URL
+        sync: false # e.g. jdbc:postgresql://ep-...neon.tech/syllabai?sslmode=require
+      - key: SYLLABAI_DATABASE_USERNAME
+        sync: false
+      - key: SYLLABAI_DATABASE_PASSWORD
+        sync: false
+      # ── auth (fails fast if blank) ──
+      - key: SYLLABAI_JWT_SECRET
+        generateValue: true # rotate to an operator-chosen secret in the dashboard
+      # ── browser access: the Vercel origin(s), comma-separated ──
+      - key: SYLLABAI_CORS_ORIGINS
+        sync: false # e.g. https://syllabai.vercel.app,http://localhost:3000
+      # ── free-LLM chain (Groq → Gemini → OpenRouter; all optional, chain degrades to deterministic refusal) ──
+      - key: SYLLABAI_GROQ_API_KEY
+        sync: false
+      - key: SYLLABAI_GEMINI_API_KEY
+        sync: false
+      - key: SYLLABAI_OPENROUTER_API_KEY
+        sync: false
+      # ── embeddings (Gemini, optional; content pipeline) ──
+      - key: SYLLABAI_EMBEDDING_API_KEY
+        sync: false
+      # ── object storage (R2; optional — GLM-OCR/ingestion pipeline only) ──
+      - key: SYLLABAI_STORAGE_TYPE
+        value: r2
+      - key: SYLLABAI_R2_ACCOUNT_ID
+        sync: false
+      - key: SYLLABAI_R2_ACCESS_KEY_ID
+        sync: false
+      - key: SYLLABAI_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: SYLLABAI_R2_BUCKET
+        sync: false
