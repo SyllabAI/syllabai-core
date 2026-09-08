@@ -43,7 +43,10 @@ services:
       # ── embeddings (Gemini, optional; content pipeline) ──
       - key: SYLLABAI_EMBEDDING_API_KEY
         sync: false
-      # ── object storage (R2; optional — GLM-OCR/ingestion pipeline only) ──
+      # ── object storage (R2; optional — GLM-OCR/ingestion pipeline only).
+      # The app boots fine without the R2 secrets (boot-time WARN); storage
+      # operations fail loudly with the missing setting names on first use.
+      # The student loop never touches storage. ──
       - key: SYLLABAI_STORAGE_TYPE
         value: r2
       - key: SYLLABAI_R2_ACCOUNT_ID

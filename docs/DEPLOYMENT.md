@@ -30,6 +30,15 @@ Vercel project settings (web). Nothing here changes application code.
 4. **LLM keys** (optional per provider — the chain degrades to deterministic
    refusal when all are down): Groq first, Gemini, OpenRouter. Embedding key
    (Gemini) only if running the content pipeline.
+5. **Cloudflare R2** (optional — only the GLM-OCR/ingestion pipeline uses
+   object storage; the pilot student loop does not). The blueprint selects
+   `SYLLABAI_STORAGE_TYPE=r2` unconditionally, but the app **boots fine
+   without R2 secrets**: it logs a boot-time WARN, and any storage operation
+   then fails loudly with the missing setting names (there is no silent
+   fallback to local/ephemeral disk, by design). To enable R2: create a
+   bucket (free tier: 10 GB), create an R2 API token, and fill
+   `SYLLABAI_R2_ACCOUNT_ID` / `SYLLABAI_R2_ACCESS_KEY_ID` /
+   `SYLLABAI_R2_SECRET_ACCESS_KEY` / `SYLLABAI_R2_BUCKET` in the dashboard.
 
 ## 2. Accounts
 
