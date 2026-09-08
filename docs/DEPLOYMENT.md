@@ -20,7 +20,10 @@ Vercel project settings (web). Nothing here changes application code.
    seed (V6) and the 8 demo MCQs (V7). Seeding is automatic — never run SQL
    by hand.
 3. **Vercel** — import `SyllabAI/syllabai-web`, set the environment variable
-   `NEXT_PUBLIC_API_BASE_URL=https://<render-service>.onrender.com/api/v1`.
+   `NEXT_PUBLIC_API_BASE_URL=https://<render-service>.onrender.com` — the bare
+   API origin **without** a trailing `/api/v1` (client paths already carry the
+   `/api/v1` prefix; a trailing `/api/v1` is tolerated — the client normalizes
+   it away — but the bare origin is the canonical form).
    The default CORS allow-list already covers `https://syllabai.vercel.app`;
    if the project gets a different Vercel URL (or a custom domain), add it to
    `SYLLABAI_CORS_ORIGINS` on Render.

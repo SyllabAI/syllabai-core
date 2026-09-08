@@ -45,11 +45,11 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
 
     @Query("""
             select e from KnowledgeEdge e
-            join fetch e.target
-            where e.source.id = :nodeId
+            join fetch e.source
+            where e.target.id = :nodeId
               and e.relationType = com.syllabai.knowledge.RelationType.MISCONCEPTION_OF
             """)
-    List<KnowledgeEdge> findMisconceptionEdgesFrom(@Param("nodeId") UUID nodeId);
+    List<KnowledgeEdge> findMisconceptionEdgesTo(@Param("nodeId") UUID nodeId);
 
     /** The PART_OF edge that hangs a node under its parent (§7 review workflow). */
     Optional<KnowledgeEdge> findBySourceIdAndRelationType(

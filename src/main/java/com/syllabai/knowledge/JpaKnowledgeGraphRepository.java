@@ -57,8 +57,14 @@ public class JpaKnowledgeGraphRepository implements KnowledgeGraphRepository {
     @Override
     public List<KnowledgeNode> findMisconceptions(UUID topicNodeId) {
         requireNode(topicNodeId);
-        return edges.findMisconceptionEdgesFrom(topicNodeId).stream()
-                .map(KnowledgeEdge::target)
+        // MISCONCEPTION_OF runs misconception → topic (source = the misconception,
+        // §7 seed contract): select edges pointing AT the topic and return their
+        // sources. The pre-fix query read edges FROM the topic and mapped targets —
+        // both directions inverted, so misconceptions never appeared on any read
+        // surface (tree, mastery map, NBA MISCONCEPTION_SUSPECTED) despite the
+        // BDT learner state being correct. Found in live browser verification.
+        return edges.findMisconceptionEdgesTo(topicNodeId).stream()
+                .map(KnowledgeEdge::source)
                 .toList();
     }
 
