@@ -23,10 +23,19 @@ Vercel project settings (web). Nothing here changes application code.
    `NEXT_PUBLIC_API_BASE_URL=https://<render-service>.onrender.com` — the bare
    API origin **without** a trailing `/api/v1` (client paths already carry the
    `/api/v1` prefix; a trailing `/api/v1` is tolerated — the client normalizes
-   it away — but the bare origin is the canonical form).
-   The default CORS allow-list already covers `https://syllabai.vercel.app`;
-   if the project gets a different Vercel URL (or a custom domain), add it to
-   `SYLLABAI_CORS_ORIGINS` on Render.
+   it away — but the bare origin is the canonical form). It is inlined at
+   **build time**: changing it requires a Vercel redeploy (verified 2026-09-10
+   by inspecting the deployed JS bundle).
+   **CORS — do not skip this:** the default allow-list covers only
+   `https://syllabai.vercel.app` (project name `syllabai`), but the actual
+   deployment is `https://syllabai-web.vercel.app` (project name `syllabai-web`)
+   — **the default does NOT match** (empirically confirmed 2026-09-10:
+   preflight from the real origin returns 403 until `SYLLABAI_CORS_ORIGINS`
+   is set). On Render set:
+   `SYLLABAI_CORS_ORIGINS=https://syllabai-web.vercel.app,http://localhost:3000`
+   (add any custom domain or preview URL to the same comma-separated list).
+   The web app itself will load fine without it — only browser sign-in fails,
+   which makes the omission easy to misdiagnose.
 4. **LLM keys** (optional per provider — the chain degrades to deterministic
    refusal when all are down): Groq first, Gemini, OpenRouter. Embedding key
    (Gemini) only if running the content pipeline.
@@ -64,7 +73,12 @@ Vercel project settings (web). Nothing here changes application code.
 
 ## 3. Pre-pilot verification checklist (T-032 gate inputs)
 
-Run against the deployed Render URL (not localhost):
+Run against the deployed Render URL (not localhost).
+
+**Status 2026-09-10 (automated pass against `https://syllabai-core.onrender.com`,
+12/12 via `scripts/t036_verify_deploy.py`):** every API item below passed;
+the two web items remain pending the `SYLLABAI_CORS_ORIGINS` setting — see
+`download/t036/RENDER_FAILED_DEPLOY_TRIAGE.md` for the full table.
 
 - [ ] `GET /actuator/health` → `{"status":"UP"}` after cold start
 - [ ] `POST /api/v1/auth/register` → 201 + token; login works

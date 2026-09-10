@@ -14,7 +14,7 @@ SyllabAI backend — the **Java modular monolith**. This is where the course pro
 - Free-LLM chain behind `LlmProvider`: Groq `llama-3.3-70b-versatile` → Gemini 2.5 Flash → OpenRouter
 - In-process PDF extraction: `opendataloader-pdf` (Apache-2.0, Maven Central) — lands in `syllabai-parser` / Wave 1
 - Object storage behind `ObjectStorage`: local dev filesystem / **Cloudflare R2** (S3 SDK)
-- Deploy: Docker on **Render free tier** (no state on local filesystem; cold starts accepted)
+- Deploy: Docker on **Render free tier** (no state on local filesystem; cold starts accepted) — **LIVE since 2026-09-10 at `https://syllabai-core.onrender.com`** (deploy runbook: `docs/DEPLOYMENT.md`; failure triage history + post-deploy verification 12/12: `download/t036/RENDER_FAILED_DEPLOY_TRIAGE.md` — the 512 MB JVM recipe in the Dockerfile is load-bearing, do not remove it)
 
 ## Modules (packages, not microservices — ADR-012)
 
