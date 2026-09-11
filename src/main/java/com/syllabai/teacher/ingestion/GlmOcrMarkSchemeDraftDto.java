@@ -1,5 +1,6 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.syllabai.teacher.ingestion.GlmOcrPaperDraftDto.PaperMeta;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.Map;
  * Ignore / dependent-on-MP / ecf / Or / Any-two-from) survives here as structured
  * metadata; the bridge persists it verbatim and never flattens or repairs it.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record GlmOcrMarkSchemeDraftDto(
         @JsonProperty("schemaVersion") String schemaVersion,
         @JsonProperty("extractionMethod") String extractionMethod,
@@ -41,6 +43,7 @@ public record GlmOcrMarkSchemeDraftDto(
      * "13(b)(i)"). {@code marks} is the printed Mark cell — null when
      * rowspan-deferred or absent (never guessed).
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkSchemeEntry(
             @JsonProperty("entryId") String entryId,
             @JsonProperty("label") String label,
@@ -66,6 +69,7 @@ public record GlmOcrMarkSchemeDraftDto(
      * the segment carried no marker — the bridge materializes 0 (unknown), never
      * a guessed value, with the raw evidence preserved.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkPoint(
             @JsonProperty("ordinal") int ordinal,
             @JsonProperty("text") String text,
@@ -84,12 +88,14 @@ public record GlmOcrMarkSchemeDraftDto(
     }
 
     /** One Additional-Guidance line, classified by leading keyword. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record GuidanceLine(
             @JsonProperty("kind") String kind,
             @JsonProperty("text") String text) {
     }
 
     /** Indicative-content table (QWC questions). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record IcTable(
             @JsonProperty("rows") List<List<String>> rows,
             @JsonProperty("location") String location) {
