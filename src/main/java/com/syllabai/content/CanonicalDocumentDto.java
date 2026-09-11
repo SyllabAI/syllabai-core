@@ -1,5 +1,6 @@
 package com.syllabai.content;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
  * re-validates every invariant the parser guarantees — never trust input across a
  * process boundary — see {@link CanonicalDocumentValidator}.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record CanonicalDocumentDto(
         @JsonProperty("documentId") String documentId,
         @JsonProperty("schemaVersion") String schemaVersion,
@@ -31,6 +33,7 @@ public record CanonicalDocumentDto(
 
     public static final String SUPPORTED_SCHEMA = "1.0";
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record SourceInfo(
             @JsonProperty("uri") String uri,
             @JsonProperty("checksum") String checksum,
@@ -39,12 +42,14 @@ public record CanonicalDocumentDto(
             @JsonProperty("fileName") String fileName) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record PageInfo(
             @JsonProperty("pageNumber") Integer pageNumber,
             @JsonProperty("width") Double width,
             @JsonProperty("height") Double height) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record SectionInfo(
             @JsonProperty("sectionId") String sectionId,
             @JsonProperty("title") String title,
@@ -53,6 +58,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("elementIds") List<String> elementIds) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record BoundingBox(
             @JsonProperty("x") Double x,
             @JsonProperty("y") Double y,
@@ -61,6 +67,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("unit") String unit) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record TextBlockElement(
             @JsonProperty("element_id") String elementId,
             @JsonProperty("element_type") String elementType,
@@ -75,6 +82,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("source_engine_version") String sourceEngineVersion) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record TableElement(
             @JsonProperty("element_id") String elementId,
             @JsonProperty("element_type") String elementType,
@@ -90,6 +98,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("source_engine_version") String sourceEngineVersion) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record FigureElement(
             @JsonProperty("element_id") String elementId,
             @JsonProperty("element_type") String elementType,
@@ -105,6 +114,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("source_engine_version") String sourceEngineVersion) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record EquationElement(
             @JsonProperty("element_id") String elementId,
             @JsonProperty("element_type") String elementType,
@@ -118,6 +128,7 @@ public record CanonicalDocumentDto(
             @JsonProperty("source_engine_version") String sourceEngineVersion) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ProvenanceInfo(
             @JsonProperty("engine") String engine,
             @JsonProperty("engineVersion") String engineVersion,
