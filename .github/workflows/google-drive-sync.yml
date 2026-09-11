@@ -1,15 +1,17 @@
 name: Google Drive Sync
 
 # Syncs the entire repository to Google Drive on every push to any branch.
-# Target: gdrive:SyllabAI-GitHub/<repo-name>
 #
-# Prerequisites (one-time, see GOOGLE_DRIVE_SETUP_GUIDE.md):
-#   1. Repo secret  GDRIVE_SERVICE_ACCOUNT  = full service-account JSON key
-#   2. Google Drive folder "SyllabAI-GitHub" shared with the service-account
-#      email as Editor (optional but recommended: set repo variable
-#      GDRIVE_FOLDER_ID to the folder's ID for a bulletproof link).
+# Two auth modes (checked in this order):
+#   1. OAuth (personal Drive, works with free Gmail):
+#        secret GDRIVE_RCLONE_OAUTH = rclone config block ([gdrive] type=drive ... token=...)
+#        optional variable GDRIVE_FOLDER_ID = target folder ID (pinned via --drive-root-folder-id)
+#   2. Service account (requires a Workspace SHARED DRIVE - Google blocks SA uploads
+#      to personal My Drive with "Service Accounts do not have storage quota"):
+#        secret GDRIVE_SERVICE_ACCOUNT = service-account JSON key
+#        variable GDRIVE_TEAM_DRIVE    = shared drive ID
 #
-# Until the secret exists this workflow exits gracefully with a notice.
+# Until a credential exists this workflow exits gracefully with a notice.
 
 on:
   push:
@@ -38,12 +40,17 @@ jobs:
         id: prereq
         env:
           SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          RCLONE_OAUTH: ${{ secrets.GDRIVE_RCLONE_OAUTH }}
         run: |
-          if [ -z "$SA_JSON" ]; then
-            echo "::notice::Secret GDRIVE_SERVICE_ACCOUNT is not set yet - sync skipped. See repo wiki / setup guide."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ -n "$RCLONE_OAUTH" ]; then
+            echo "mode=oauth" >> "$GITHUB_OUTPUT"
             echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$SA_JSON" ]; then
+            echo "mode=sa" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No Google credential found (set secret GDRIVE_RCLONE_OAUTH or GDRIVE_SERVICE_ACCOUNT) - sync skipped."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install rclone
@@ -55,27 +62,37 @@ jobs:
           sudo chmod 755 /usr/local/bin/rclone
           rclone version | head -2
 
-      - name: Configure rclone (service account)
+      - name: Configure rclone
         if: steps.prereq.outputs.skip == 'false'
         env:
           SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          RCLONE_OAUTH: ${{ secrets.GDRIVE_RCLONE_OAUTH }}
         run: |
           mkdir -p "$HOME/.config/rclone"
-          printf '%s' "$SA_JSON" > "$HOME/gdrive-sa.json"
-          chmod 600 "$HOME/gdrive-sa.json"
-          {
-            echo "[gdrive]"
-            echo "type = drive"
-            echo "scope = drive"
-            echo "service_account_file = $HOME/gdrive-sa.json"
-          } > "$HOME/.config/rclone/rclone.conf"
+          chmod 700 "$HOME/.config/rclone"
+          if [ "${{ steps.prereq.outputs.mode }}" = "sa" ]; then
+            echo "Auth mode: service account (Shared Drive required)"
+            printf '%s' "$SA_JSON" > "$HOME/gdrive-sa.json"
+            chmod 600 "$HOME/gdrive-sa.json"
+            {
+              echo "[gdrive]"
+              echo "type = drive"
+              echo "scope = drive"
+              echo "service_account_file = $HOME/gdrive-sa.json"
+            } > "$HOME/.config/rclone/rclone.conf"
+          else
+            echo "Auth mode: OAuth (personal Drive)"
+            printf '%s\n' "$RCLONE_OAUTH" > "$HOME/.config/rclone/rclone.conf"
+          fi
 
       - name: Sync repository to Google Drive
         if: steps.prereq.outputs.skip == 'false'
         env:
           FOLDER_ID: ${{ vars.GDRIVE_FOLDER_ID }}
+          TEAM_DRIVE: ${{ vars.GDRIVE_TEAM_DRIVE }}
           REPO: ${{ github.event.repository.name }}
         run: |
+          set -o pipefail
           EXCLUDES=(
             --exclude ".git/**"
             --exclude "node_modules/**"
@@ -86,20 +103,32 @@ jobs:
           )
           DEST="gdrive:SyllabAI-GitHub/$REPO"
           EXTRA=""
-          if [ -n "$FOLDER_ID" ]; then
-            echo "Pinning destination to Drive folder ID: $FOLDER_ID"
+          if [ -n "$TEAM_DRIVE" ]; then
+            echo "Destination: Shared Drive $TEAM_DRIVE / $REPO"
+            EXTRA="--drive-team-drive=$TEAM_DRIVE"
+            DEST="gdrive:$REPO"
+          elif [ -n "$FOLDER_ID" ]; then
+            echo "Destination: Drive folder $FOLDER_ID / $REPO"
             EXTRA="--drive-root-folder-id=$FOLDER_ID"
             DEST="gdrive:$REPO"
+          else
+            echo "Destination: $DEST (by name)"
           fi
-          set -o pipefail
           rclone sync . "$DEST" "${EXCLUDES[@]}" $EXTRA \
             --transfers 8 --checkers 16 --fast-list \
             --stats-one-line --stats 30s -v 2>&1 | tee /tmp/rclone.log \
           || {
-            echo "::notice::Primary path failed - retrying with --drive-shared-with-me"
-            rclone sync . "$DEST" "${EXCLUDES[@]}" $EXTRA --drive-shared-with-me \
-              --transfers 8 --checkers 16 --fast-list \
-              --stats-one-line --stats 30s -v
+            if grep -q "storage quota" /tmp/rclone.log; then
+              echo "::error::Google blocks service-account uploads to personal My Drive. Fix: (A) Workspace Shared Drive -> add SA as Content Manager, set repo variable GDRIVE_TEAM_DRIVE to its ID; or (B) OAuth -> set secret GDRIVE_RCLONE_OAUTH. See GOOGLE_DRIVE_SETUP_GUIDE.md."
+            fi
+            if [ -z "$EXTRA" ]; then
+              echo "::notice::Retrying with --drive-shared-with-me"
+              rclone sync . "$DEST" "${EXCLUDES[@]}" --drive-shared-with-me \
+                --transfers 8 --checkers 16 --fast-list \
+                --stats-one-line --stats 30s -v
+            else
+              exit 1
+            fi
           }
 
       - name: Sync summary
@@ -107,7 +136,7 @@ jobs:
         run: |
           echo "### Google Drive sync result" >> "$GITHUB_STEP_SUMMARY"
           echo "- Repository: \`${{ github.event.repository.name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Destination: \`SyllabAI-GitHub/${{ github.event.repository.name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Auth mode: \`${{ steps.prereq.outputs.mode }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Log tail:" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 15 /tmp/rclone.log 2>/dev/null || echo "(no log - skipped)" >> "$GITHUB_STEP_SUMMARY"
