@@ -1,0 +1,114 @@
+name: Google Drive Sync
+
+# Syncs the entire repository to Google Drive on every push to any branch.
+# Target: gdrive:SyllabAI-GitHub/<repo-name>
+#
+# Prerequisites (one-time, see GOOGLE_DRIVE_SETUP_GUIDE.md):
+#   1. Repo secret  GDRIVE_SERVICE_ACCOUNT  = full service-account JSON key
+#   2. Google Drive folder "SyllabAI-GitHub" shared with the service-account
+#      email as Editor (optional but recommended: set repo variable
+#      GDRIVE_FOLDER_ID to the folder's ID for a bulletproof link).
+#
+# Until the secret exists this workflow exits gracefully with a notice.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gdrive-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout current snapshot
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check prerequisites
+        id: prereq
+        env:
+          SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::notice::Secret GDRIVE_SERVICE_ACCOUNT is not set yet - sync skipped. See repo wiki / setup guide."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install rclone
+        if: steps.prereq.outputs.skip == 'false'
+        run: |
+          curl -sSL --retry 3 -o /tmp/rclone.zip https://downloads.rclone.org/rclone-current-linux-amd64.zip
+          cd /tmp && unzip -o -q rclone.zip
+          sudo cp /tmp/rclone-*/rclone /usr/local/bin/rclone
+          sudo chmod 755 /usr/local/bin/rclone
+          rclone version | head -2
+
+      - name: Configure rclone (service account)
+        if: steps.prereq.outputs.skip == 'false'
+        env:
+          SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+        run: |
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s' "$SA_JSON" > "$HOME/gdrive-sa.json"
+          chmod 600 "$HOME/gdrive-sa.json"
+          {
+            echo "[gdrive]"
+            echo "type = drive"
+            echo "scope = drive"
+            echo "service_account_file = $HOME/gdrive-sa.json"
+          } > "$HOME/.config/rclone/rclone.conf"
+
+      - name: Sync repository to Google Drive
+        if: steps.prereq.outputs.skip == 'false'
+        env:
+          FOLDER_ID: ${{ vars.GDRIVE_FOLDER_ID }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          EXCLUDES=(
+            --exclude ".git/**"
+            --exclude "node_modules/**"
+            --exclude "__pycache__/**"
+            --exclude ".venv/**"
+            --exclude "venv/**"
+            --exclude "*.pyc"
+          )
+          DEST="gdrive:SyllabAI-GitHub/$REPO"
+          EXTRA=""
+          if [ -n "$FOLDER_ID" ]; then
+            echo "Pinning destination to Drive folder ID: $FOLDER_ID"
+            EXTRA="--drive-root-folder-id=$FOLDER_ID"
+            DEST="gdrive:$REPO"
+          fi
+          set -o pipefail
+          rclone sync . "$DEST" "${EXCLUDES[@]}" $EXTRA \
+            --transfers 8 --checkers 16 --fast-list \
+            --stats-one-line --stats 30s -v 2>&1 | tee /tmp/rclone.log \
+          || {
+            echo "::notice::Primary path failed - retrying with --drive-shared-with-me"
+            rclone sync . "$DEST" "${EXCLUDES[@]}" $EXTRA --drive-shared-with-me \
+              --transfers 8 --checkers 16 --fast-list \
+              --stats-one-line --stats 30s -v
+          }
+
+      - name: Sync summary
+        if: steps.prereq.outputs.skip == 'false' && always()
+        run: |
+          echo "### Google Drive sync result" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Repository: \`${{ github.event.repository.name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Destination: \`SyllabAI-GitHub/${{ github.event.repository.name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Log tail:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 15 /tmp/rclone.log 2>/dev/null || echo "(no log - skipped)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
