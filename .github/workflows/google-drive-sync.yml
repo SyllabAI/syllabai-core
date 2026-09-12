@@ -166,7 +166,8 @@ jobs:
               }],
           }
           req = urllib.request.Request(wh, data=json.dumps(payload).encode(),
-                                       headers={"Content-Type": "application/json"})
+                                       headers={"Content-Type": "application/json",
+                                                "User-Agent": "SyllabAI-Notifier/1.0 (+https://github.com/SyllabAI)"})
           try:
               urllib.request.urlopen(req, timeout=15)
               print("[OK] failure alert posted to Discord")

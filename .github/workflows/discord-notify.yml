@@ -40,6 +40,15 @@ jobs:
           if not commits:
               print("no distinct commits - nothing to send")
               raise SystemExit(0)
+          # skip automation-only pushes (workflows, dashboard scripts) - announce real code only
+          auto = (".github/", "scripts/")
+          def bot_only(c):
+              paths = (c.get("added") or []) + (c.get("modified") or []) + (c.get("removed") or [])
+              return bool(paths) and all(p.startswith(auto) for p in paths)
+          commits = [c for c in commits if not bot_only(c)]
+          if not commits:
+              print("automation-only push (workflows/scripts) - skipped")
+              raise SystemExit(0)
           branch = (ev.get("ref") or "").replace("refs/heads/", "")
           pusher = (ev.get("pusher") or {}).get("name", "unknown")
           repo = os.environ["REPO"]
@@ -66,7 +75,8 @@ jobs:
               }],
           }
           req = urllib.request.Request(wh, data=json.dumps(payload).encode(),
-                                       headers={"Content-Type": "application/json"})
+                                       headers={"Content-Type": "application/json",
+                                                "User-Agent": "SyllabAI-Notifier/1.0 (+https://github.com/SyllabAI)"})
           try:
               urllib.request.urlopen(req, timeout=15)
               print(f"[OK] posted {len(commits)} commits to Discord")
