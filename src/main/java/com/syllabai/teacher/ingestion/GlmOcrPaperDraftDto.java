@@ -106,14 +106,32 @@ public record GlmOcrPaperDraftDto(
     }
 
     /**
-     * Figure reference. In the audited corpus bytes are gone (expired signed URLs):
-     * {@code availability="unavailable-signed-url"}, never fetched, never faked.
+     * Figure reference. Two corpus generations share this contract:
+     * <ul>
+     *   <li>the audited WPH11 sample (expired signed URLs): {@code availability=
+     *       "unavailable-signed-url"}, bytes gone, never fetched, never faked;</li>
+     *   <li>the 4CH1 local-asset corpus (parser hardening b837fa0): when the
+     *       operator passes {@code --assets-dir} and the reference resolves,
+     *       {@code availability="available"} plus the content-derived enrichment
+     *       fields {@code assetId} ({@code img:<sha256>}), {@code sha256},
+     *       {@code mimeType}, {@code width}, {@code height}, {@code formatMismatch}
+     *       — all opt-in and omitted (NON_NULL) for unresolvable references, so
+     *       unenriched bundles stay byte-identical.</li>
+     * </ul>
+     * Unknown fields still fail loud (no IGNORE_UNKNOWN_PROPERTIES anywhere on the
+     * bridge): a producer/contract drift must never be silently dropped.
      */
     public record FigureRef(
             @JsonProperty("elementId") String elementId,
             @JsonProperty("sourceName") String sourceName,
             @JsonProperty("format") String format,
             @JsonProperty("url") String url,
-            @JsonProperty("availability") String availability) {
+            @JsonProperty("availability") String availability,
+            @JsonProperty("assetId") String assetId,
+            @JsonProperty("sha256") String sha256,
+            @JsonProperty("mimeType") String mimeType,
+            @JsonProperty("width") Integer width,
+            @JsonProperty("height") Integer height,
+            @JsonProperty("formatMismatch") Boolean formatMismatch) {
     }
 }
