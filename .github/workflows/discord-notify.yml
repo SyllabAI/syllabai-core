@@ -27,6 +27,7 @@ jobs:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           EVENT: ${{ toJSON(github.event) }}
           REPO: ${{ github.event.repository.name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           import json, os, urllib.request
@@ -40,15 +41,40 @@ jobs:
           if not commits:
               print("no distinct commits - nothing to send")
               raise SystemExit(0)
-          # skip automation-only pushes (workflows, dashboard scripts) - announce real code only
+
+          # Skip automation-only pushes (workflows / dashboard scripts):
+          # announce real code changes only. Push events made via the API omit
+          # per-commit file paths, so use fast path when present, else the
+          # Compare API (before...after) for the definitive file list.
           auto = (".github/", "scripts/")
-          def bot_only(c):
-              paths = (c.get("added") or []) + (c.get("modified") or []) + (c.get("removed") or [])
+          def all_auto(paths):
               return bool(paths) and all(p.startswith(auto) for p in paths)
-          commits = [c for c in commits if not bot_only(c)]
-          if not commits:
+          event_paths = []
+          for c in commits:
+              event_paths += (c.get("added") or []) + (c.get("modified") or []) + (c.get("removed") or [])
+          if all_auto(event_paths):
               print("automation-only push (workflows/scripts) - skipped")
               raise SystemExit(0)
+          before, after = ev.get("before") or "", ev.get("after") or ""
+          zero = "0" * 40
+          if before and after and before != zero and after != zero:
+              try:
+                  creq = urllib.request.Request(
+                      f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                      f"/compare/{before}...{after}",
+                      headers={"Authorization": f"token {os.environ['GH_TOKEN']}",
+                               "Accept": "application/vnd.github+json",
+                               "User-Agent": "syllabai-notify"})
+                  cmp = json.loads(urllib.request.urlopen(creq, timeout=30).read().decode())
+                  files = [f.get("filename", "") for f in cmp.get("files", [])]
+                  if all_auto(files):
+                      print("automation-only push (workflows/scripts) - skipped (compare)")
+                      raise SystemExit(0)
+              except SystemExit:
+                  raise
+              except Exception as e:
+                  print(f"compare check failed ({e}) - proceeding with notification")
+
           branch = (ev.get("ref") or "").replace("refs/heads/", "")
           pusher = (ev.get("pusher") or {}).get("name", "unknown")
           repo = os.environ["REPO"]
