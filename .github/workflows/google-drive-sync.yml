@@ -141,3 +141,35 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 15 /tmp/rclone.log 2>/dev/null || echo "(no log - skipped)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Discord on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          wh = os.environ.get("WEBHOOK", "")
+          if not wh:
+              print("::notice::DISCORD_WEBHOOK_URL not set - failure alert skipped")
+              raise SystemExit(0)
+          payload = {
+              "username": "SyllabAI Sync",
+              "embeds": [{
+                  "title": f"\U0001F534 {os.environ['REPO_NAME']} — Google Drive sync failed",
+                  "url": os.environ["RUN_URL"],
+                  "description": "The Drive mirror may be out of date. Open the run for logs.",
+                  "color": 15158332,
+                  "footer": {"text": "Google Drive Sync · GitHub Actions"},
+              }],
+          }
+          req = urllib.request.Request(wh, data=json.dumps(payload).encode(),
+                                       headers={"Content-Type": "application/json"})
+          try:
+              urllib.request.urlopen(req, timeout=15)
+              print("[OK] failure alert posted to Discord")
+          except Exception as e:
+              print(f"::notice::Discord webhook failed (non-fatal): {e}")
+          PY
