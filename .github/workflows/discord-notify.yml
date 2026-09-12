@@ -1,0 +1,75 @@
+name: Discord Commit Notify
+
+# Posts an embed to a Discord channel whenever commits land on the default
+# branch. Uses a Discord webhook (free, no bot required):
+#   secret DISCORD_WEBHOOK_URL = https://discord.com/api/webhooks/...
+# If the secret is absent the job exits gracefully (no failures).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-notify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send commit updates to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EVENT: ${{ toJSON(github.event) }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          wh = os.environ.get("WEBHOOK", "")
+          if not wh:
+              print("::notice::DISCORD_WEBHOOK_URL not set - commit notify skipped")
+              raise SystemExit(0)
+          ev = json.loads(os.environ["EVENT"])
+          commits = [c for c in (ev.get("commits") or []) if c.get("distinct", True)]
+          if not commits:
+              print("no distinct commits - nothing to send")
+              raise SystemExit(0)
+          branch = (ev.get("ref") or "").replace("refs/heads/", "")
+          pusher = (ev.get("pusher") or {}).get("name", "unknown")
+          repo = os.environ["REPO"]
+
+          lines = []
+          for c in commits[:10]:
+              msg = (c.get("message") or "").splitlines()[0][:120]
+              a = c.get("author") or {}
+              author = a.get("name") or a.get("username") or "?"
+              lines.append(f"[`{c['id'][:7]}`]({c['url']}) {msg} — **{author}**")
+          extra = len(commits) - 10
+          if extra > 0:
+              lines.append(f"*…and {extra} more*")
+
+          payload = {
+              "username": "SyllabAI Commits",
+              "embeds": [{
+                  "title": f"{repo} · {len(commits)} new commit"
+                           f"{'s' if len(commits) != 1 else ''} → {branch}",
+                  "url": ev.get("compare") or f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/commits/{branch}",
+                  "description": "\n".join(lines),
+                  "color": 3447003,
+                  "footer": {"text": f"pushed by {pusher} · mirroring to Google Drive"},
+              }],
+          }
+          req = urllib.request.Request(wh, data=json.dumps(payload).encode(),
+                                       headers={"Content-Type": "application/json"})
+          try:
+              urllib.request.urlopen(req, timeout=15)
+              print(f"[OK] posted {len(commits)} commits to Discord")
+          except Exception as e:
+              print(f"::notice::Discord webhook failed (non-fatal): {e}")
+          PY
