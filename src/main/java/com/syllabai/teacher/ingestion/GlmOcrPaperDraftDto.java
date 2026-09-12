@@ -1,5 +1,6 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,7 @@ import java.util.Map;
  * prompts, figure refs, numbering style, marks-known states, warnings) is silently
  * discarded.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record GlmOcrPaperDraftDto(
         @JsonProperty("schemaVersion") String schemaVersion,
         @JsonProperty("extractionMethod") String extractionMethod,
@@ -41,6 +43,7 @@ public record GlmOcrPaperDraftDto(
     }
 
     /** Content-derived identity; the canonical document id links to the T-013 store. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record PaperMeta(
             @JsonProperty("board") String board,
             @JsonProperty("qualification") String qualification,
@@ -55,6 +58,7 @@ public record GlmOcrPaperDraftDto(
     }
 
     /** One extracted question (MCQ or structured with letter/roman parts). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record QuestionDraft(
             @JsonProperty("questionId") String questionId,
             @JsonProperty("number") int number,
@@ -83,6 +87,7 @@ public record GlmOcrPaperDraftDto(
     }
 
     /** Letter part, optionally with roman subparts labelled "b-i" style. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record PartDraft(
             @JsonProperty("partId") String partId,
             @JsonProperty("label") String label,
@@ -100,6 +105,7 @@ public record GlmOcrPaperDraftDto(
     }
 
     /** MCQ option; letters may arrive out of order (documented corpus defect #9). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record McqOption(
             @JsonProperty("letter") String letter,
             @JsonProperty("text") String text) {
@@ -121,6 +127,7 @@ public record GlmOcrPaperDraftDto(
      * Unknown fields still fail loud (no IGNORE_UNKNOWN_PROPERTIES anywhere on the
      * bridge): a producer/contract drift must never be silently dropped.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record FigureRef(
             @JsonProperty("elementId") String elementId,
             @JsonProperty("sourceName") String sourceName,
