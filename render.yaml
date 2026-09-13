@@ -41,7 +41,7 @@ services:
       - key: SYLLABAI_OPENROUTER_API_KEY
         sync: false
       # ── embeddings (Gemini, optional; content pipeline) ──
-      - key: SYLLABAI_EMBEDDING_API_KEY
+      - key: SYLLABAI_EMBEDDING_GEMINI_API_KEY
         sync: false
       # ── object storage (R2; optional — GLM-OCR/ingestion pipeline only).
       # The app boots fine without the R2 secrets (boot-time WARN); storage

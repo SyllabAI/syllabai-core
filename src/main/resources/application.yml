@@ -120,6 +120,15 @@ syllabai:
     #  cycle1-baseline: groq
     #  cycle1-rag-pilot: groq:llama-3.3-70b-versatile
 
+  # Embeddings (T-013): optional — the key's non-blank presence is the provider
+  # switch (see EmbeddingConfig). No bean is built without it; ingestion and
+  # chunking work fully and embedding/search fail loudly on explicit use.
+  embedding:
+    gemini:
+      api-key: ${SYLLABAI_EMBEDDING_GEMINI_API_KEY:}
+      model: text-embedding-004
+      dimension: 768
+
   learner:
     bkt:
       l0: 0.1          # Paper B §3.3 Cycle-1 research design

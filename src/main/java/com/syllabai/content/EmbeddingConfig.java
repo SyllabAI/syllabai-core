@@ -1,8 +1,11 @@
 package com.syllabai.content;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 
 /**
  * Builds the {@link EmbeddingProvider} from {@code syllabai.embedding.*} properties
@@ -15,8 +18,26 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class EmbeddingConfig {
 
+    /**
+     * True when {@code syllabai.embedding.gemini.api-key} binds to a non-blank
+     * value. A dedicated condition (rather than {@code @ConditionalOnProperty}) is
+     * required because application.yml bridges the documented
+     * {@code SYLLABAI_EMBEDDING_GEMINI_API_KEY} environment variable with an empty
+     * default (the same bridging every other dashed property uses) — a property
+     * that is present-but-blank must still count as "no key" so the app boots
+     * provider-less exactly as it did before the bridge existed.
+     */
+    static class GeminiApiKeyPresent implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            String key = context.getEnvironment()
+                    .getProperty("syllabai.embedding.gemini.api-key");
+            return key != null && !key.isBlank();
+        }
+    }
+
     @Bean
-    @ConditionalOnProperty(prefix = "syllabai.embedding.gemini", name = "api-key")
+    @Conditional(GeminiApiKeyPresent.class)
     public EmbeddingProvider geminiEmbeddingProvider(EmbeddingProperties properties) {
         var gemini = properties.gemini();
         if (gemini.dimension() != 768) {
