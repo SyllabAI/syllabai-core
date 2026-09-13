@@ -365,7 +365,12 @@ public class NextBestActionService {
             if (node == null || node.type().equals("MISCONCEPTION")) continue;
             SkillState s = e.getValue();
             Double gap = s.proceduralFluencyGap();
-            if (gap == null || Math.abs(gap) < properties.fluencyGapThreshold()) continue;
+            // Signed semantics, matching StruggleInferenceService: the gap is
+            // untimed − timed accuracy, so only a POSITIVE gap (the learner does
+            // WORSE under timed conditions) justifies a timed-practice action.
+            // A large negative gap (better under timed) is not a fluency problem;
+            // gating on |gap| here prescribed TIMED_EXERCISE to exactly those learners.
+            if (gap == null || gap < properties.fluencyGapThreshold()) continue;
             fluencyCandidates.add(new FluencyCandidate(gap, s, node));
         }
         fluencyCandidates.sort(Comparator
