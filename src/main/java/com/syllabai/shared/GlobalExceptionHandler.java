@@ -29,6 +29,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());
     }
 
+    // A concurrent write to an optimistic-locked row (learner state aggregates
+    // carry @Version, C-4) surfaces here instead of silently dropping one update.
+    // 409 tells the client the operation collided with another write and can be
+    // retried; the nightly decay batch treats the same failure as a lost night
+    // that self-heals on its next idempotent run.
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> concurrentModification(
+            org.springframework.dao.OptimisticLockingFailureException ex) {
+        log.warn("Concurrent modification on an optimistic-locked row: {}", ex.getMessage());
+        return build(HttpStatus.CONFLICT, "conflict",
+                "state changed concurrently — retry the operation");
+    }
+
     @ExceptionHandler(com.syllabai.content.InvalidDocumentException.class)
     ResponseEntity<ApiError> invalidDocument(com.syllabai.content.InvalidDocumentException ex) {
         // full invariant list preserved — corpus operators fix a bad document in one pass

@@ -45,6 +45,17 @@ public class MisconceptionState {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Optimistic-lock version (C-4): the evidence path does read-modify-write on
+     * this row inside the assessment submit flow; two concurrent submissions for
+     * the same misconception used to silently lose one update — BDT state
+     * under-counted evidence. A conflicting write now fails its transaction with
+     * OptimisticLockingFailureException, mapped to HTTP 409 by the shared handler.
+     */
+    @jakarta.persistence.Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     protected MisconceptionState() {
         // JPA
     }

@@ -53,6 +53,19 @@ public class SkillState {
      * null until the learner has answered under BOTH conditions (F-162). Derived
      * metric only — BKT mastery itself is condition-agnostic.
      */
+    /**
+     * Optimistic-lock version (C-4): the evidence path does read-modify-write on
+     * this row inside the assessment submit flow, so two concurrent writes (two
+     * submissions, or a submission racing the nightly decay batch) used to
+     * silently lose one update — BKT state under-counted evidence. A conflicting
+     * write now fails its transaction with OptimisticLockingFailureException,
+     * mapped to HTTP 409 by the shared handler; the nightly decay batch rolls
+     * back as a whole and recomputes idempotently on its next run.
+     */
+    @jakarta.persistence.Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     @Column(name = "procedural_fluency_gap")
     private Double proceduralFluencyGap;
 

@@ -25,6 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
  * scheduled review is also published as a domain event so the research module can
  * log DECAY_APPLIED / REVIEW_SCHEDULED telemetry (§18). Disabled by default; enable
  * in the production profile via {@code syllabai.learner.decay-job.enabled=true}.</p>
+ *
+ * <p>Conflict posture (C-4): {@code skill_states} rows carry an optimistic-lock
+ * version. If a learner submits evidence while this batch holds the same row, the
+ * batch transaction fails at flush and rolls back as a whole — the decay is
+ * recomputed from the stored (still pre-decay) state on the next night, so a lost
+ * run self-heals and no decay is ever applied twice.</p>
  */
 @Component
 public class NightlyDecayJob {
