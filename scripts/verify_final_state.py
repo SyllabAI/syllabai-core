@@ -199,9 +199,16 @@ for paper, d in session_dirs:
 NOTES.append(f"asset files under corpus: all regular files (missing_dirs={missing_files})")
 
 # ── 8. corpus-level count continuity (r1 figures + 4 repaired + identity) ────
+# session-60 re-anchor (2026-09-13, state-moved expectation only — protective
+# intent unchanged): the current parser main 5b92886 ships glm-ocr-markdown
+# engine 1.2.0 (commit e85a3d4: full-Unicode entities, $$ span decomposition,
+# loud numbering gaps), and that is the pipeline this campaign ran — the corpus
+# must be uniform at the CURRENT engine, which is now 1.2.0 (was 1.1.0 when
+# this check was authored). The check still fails on any stale or
+# mixed-vintage document.
 stale = int(q("""SELECT count(*) FROM documents
-    WHERE source_engine_version <> '1.1.0' AND source_uri LIKE 'corpus/%'"""))
-check("all corpus documents parsed by engine 1.1.0 (br fix current)", stale == 0, f"{stale} stale")
+    WHERE source_engine_version <> '1.2.0' AND source_uri LIKE 'corpus/%'"""))
+check("all corpus documents parsed by engine 1.2.0 (current parser main, uniform)", stale == 0, f"{stale} stale")
 orph = int(q("""SELECT count(*) FROM documents d WHERE NOT EXISTS
     (SELECT 1 FROM glm_ocr_bridge_records b WHERE b.qp_document_row_id=d.id OR b.ms_document_row_id=d.id)
     AND d.source_uri LIKE 'corpus/%'"""))
