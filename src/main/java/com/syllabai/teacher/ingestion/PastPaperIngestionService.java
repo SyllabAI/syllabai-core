@@ -232,15 +232,31 @@ public class PastPaperIngestionService {
         KnowledgeNode subjectRoot = subject.knowledgeNodeId() != null
                 ? knowledgeNodes.findById(subject.knowledgeNodeId()).orElse(null)
                 : null;
-        KnowledgeNode anchor = knowledgeNodes.save(new KnowledgeNode(
-                anchorCode, NodeType.TOPIC,
-                "Ingestion anchor: " + nullSafe(meta.paperCode(), meta.unit()),
-                "Auto-created topic for past-paper ingestion — remap during review "
-                        + "(Master Spec §7: pipeline never guesses curriculum placement).",
-                KnowledgeNode.ValidationStatus.UNVALIDATED,
-                "past-paper draft " + nullSafe(meta.paperCode(), "unknown"),
-                ingestedBy == null ? "ingestion-v1" : ingestedBy.toString()));
-        if (subjectRoot != null) {
+        // Find-or-create, mirroring CurriculumIngestionService's anchor handling:
+        // two papers of the SAME exam session derive the same anchor code (e.g.
+        // June 2013 and its regional retake 2013-Jun-R both print "Summer 2013"
+        // on the cover → ING-SUMMER2013). The anchor is a placeholder ("remap
+        // during review", Master Spec §7 — the pipeline never guesses curriculum
+        // placement), so one anchor per exam session is the correct sharing;
+        // an unconditional insert violates uq_knowledge_node_code and fails the
+        // whole batch. Found anchors keep their original provenance untouched.
+        final String anchorCodeForInsert = anchorCode; // lambda capture (reassigned above)
+        KnowledgeNode anchor = knowledgeNodes.findByCode(anchorCode).orElseGet(
+                () -> knowledgeNodes.save(new KnowledgeNode(
+                        anchorCodeForInsert, NodeType.TOPIC,
+                        "Ingestion anchor: " + nullSafe(meta.paperCode(), meta.unit()),
+                        "Auto-created topic for past-paper ingestion — remap during review "
+                                + "(Master Spec §7: pipeline never guesses curriculum placement).",
+                        KnowledgeNode.ValidationStatus.UNVALIDATED,
+                        "past-paper draft " + nullSafe(meta.paperCode(), "unknown"),
+                        ingestedBy == null ? "ingestion-v1" : ingestedBy.toString())));
+        // Same sharing rule for the PART_OF edge (uq_edge is source+target+type):
+        // skip only when this exact (anchor → subjectRoot) edge already exists.
+        if (subjectRoot != null
+                && knowledgeEdges.findBySourceIdAndRelationType(
+                                anchor.id(), com.syllabai.knowledge.RelationType.PART_OF)
+                        .map(e -> !subjectRoot.id().equals(e.target().id()))
+                        .orElse(true)) {
             knowledgeEdges.save(new KnowledgeEdge(anchor, subjectRoot,
                     com.syllabai.knowledge.RelationType.PART_OF, null,
                     "ingestion anchor under subject root",
