@@ -27,7 +27,8 @@ mkdir -p "$EVIDENCE_DIR"
 TABLES="exam_papers questions question_versions question_parts mark_schemes mark_points
         documents document_chunks glm_ocr_bridge_records knowledge_nodes knowledge_edges
         question_topics question_options attempts answers smart_mark_results subjects
-        curriculum_versions campaign_db_identity"
+        curriculum_versions campaign_db_identity
+        teacher_validation_events"
 
 snapshot() {
     local out_prefix="$1"
