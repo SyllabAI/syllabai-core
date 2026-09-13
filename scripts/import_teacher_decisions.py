@@ -25,6 +25,25 @@ changing serving state):
   REVERSE  -> restores SUGGESTED (or clears a flag); prior decision must be
               the last applied event on that target.
 
+Hardening (audit findings F-1/F-2/F-3, 2026-09-14):
+  * F-1 — the strict reader validates every entry BEFORE interpolation:
+    targetId must parse as a UUID; hash/prevHash must be 64 lowercase hex
+    chars. The hash chain proves log integrity, not content safety — a
+    signed entry still reaches SQL text, so the interpolatable fields are
+    validated independently of the chain.
+  * F-2 — state-changing UPDATEs are conditional on the exact state plan()
+    gated against (expect_state) and asserted in-transaction: a decision
+    landing on the same target between plan and apply aborts the whole
+    transaction instead of being silently overwritten.
+  * F-3 — REVERSE accepts an optional structured `reverses` field
+    (integer seq of the prior decision). The field is deliberately OUTSIDE
+    the entry hash (that base is frozen to match the workbench writer;
+    changing it would invalidate every recorded chain), so plan()
+    re-validates the referenced prior entry against live state — tampering
+    with it can only redirect a REVERSE to another currently eligible
+    prior decision, still fail-closed and fully audited. Legacy logs keep
+    the prose fallback (first integer in the note).
+
 Usage:
   import_teacher_decisions.py check  [--log-file PATH]
   import_teacher_decisions.py apply  [--log-file PATH]
@@ -87,6 +106,30 @@ def table_sha(table):
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def validate_entry_fields(e, where):
+    """F-1 hardening: validate the fields that would later be interpolated
+    into SQL, at every stop between the log and SQL text. Chain membership
+    proves the entry was not tampered with after signing — it says nothing
+    about the signed content itself. Shared by read_log() and plan()."""
+    try:
+        uuid.UUID(e["targetId"])
+    except (ValueError, TypeError, AttributeError):
+        raise RuntimeError(
+            f"{where} targetId is not a valid UUID: {e['targetId']!r}")
+    for k in ("hash", "prevHash"):
+        v = e[k]
+        if (not isinstance(v, str) or len(v) != 64
+                or any(c not in "0123456789abcdef" for c in v)):
+            raise RuntimeError(
+                f"{where} {k} is not 64 lowercase hex chars")
+    if e.get("reverses") is not None and (
+            not isinstance(e["reverses"], int)
+            or isinstance(e["reverses"], bool)):
+        raise RuntimeError(
+            f"{where} field reverses must be an integer, "
+            f"got {type(e['reverses']).__name__}")
+
+
 def read_log(path: Path):
     """STRICT reader — a torn or malformed line aborts (importer is not a
     best-effort reader; the workbench log is fsync'd appends only)."""
@@ -104,6 +147,7 @@ def read_log(path: Path):
                   "targetLabel", "reviewer", "note", "prevHash", "hash"):
             if k not in e:
                 raise RuntimeError(f"chain error: line {ln} missing field {k}")
+        validate_entry_fields(e, f"chain error: line {ln}")
         entries.append(e)
     return entries
 
@@ -186,6 +230,10 @@ def plan(entries, mode):
         if (seq, h) in applied:
             dup += 1
             continue
+        # F-1 defense-in-depth: read_log() validates every entry, but plan()
+        # is the last stop before SQL text — never interpolate an id that was
+        # not validated on this path too.
+        validate_entry_fields(e, f"gate: seq {seq}")
         table = TARGET_TABLE[e["targetType"]]
         tid = e["targetId"]
         if action in ("VALIDATE", "REJECT", "FLAG"):
@@ -200,20 +248,30 @@ def plan(entries, mode):
                     f"{cur}, not SUGGESTED (seed lock / lifecycle violation) — aborting")
             if action == "VALIDATE":
                 ops.append({"seq": seq, "hash": h, "table": table, "tid": tid,
-                            "set_state": "VALIDATED", "result_state": "VALIDATED"})
+                            "set_state": "VALIDATED", "result_state": "VALIDATED",
+                            "expect_state": cur})
             elif action == "REJECT":
                 ops.append({"seq": seq, "hash": h, "table": table, "tid": tid,
-                            "set_state": "REJECTED", "result_state": "REJECTED"})
+                            "set_state": "REJECTED", "result_state": "REJECTED",
+                            "expect_state": cur})
             else:  # FLAG — annotation only, serving state unchanged
                 events_only += 1
                 ops.append({"seq": seq, "hash": h, "table": table, "tid": tid,
                             "set_state": None, "result_state": "SUGGESTED"})
         elif action == "REVERSE":
-            prior_seq = None
-            for tok in e["note"].split():
-                if tok.isdigit():
-                    prior_seq = int(tok)
-                    break
+            # F-3: structured `reverses` field first; the legacy prose
+            # fallback (first integer in the note) keeps pre-field logs —
+            # including the durable tranche-1 export — replayable.
+            prior_seq = e.get("reverses")
+            if prior_seq is None:
+                for tok in e["note"].split():
+                    if tok.isdigit():
+                        prior_seq = int(tok)
+                        break
+            if prior_seq is None:
+                raise RuntimeError(
+                    f"gate: seq {seq} REVERSE carries no reverses field and "
+                    "its note names no prior seq — aborting")
             prior = next((x for x in entries if x["seq"] == prior_seq), None)
             if prior is None or prior["action"] not in ("VALIDATE", "REJECT", "FLAG"):
                 raise RuntimeError(
@@ -235,7 +293,7 @@ def plan(entries, mode):
                     f"{cur}/last-event {last} != {expected} — state moved on since; refusing")
             ops.append({"seq": seq, "hash": h, "table": ptable, "tid": ptid,
                         "set_state": "SUGGESTED", "result_state": "SUGGESTED",
-                        "reverses": prior_seq})
+                        "expect_state": expected, "reverses": prior_seq})
     return ops, dup, events_only, chain_ok, chain_msg
 
 
@@ -263,9 +321,22 @@ def apply_ops(ops, entries, log_sha, mode):
     for o in ops:
         entry = next(x for x in entries if x["seq"] == o["seq"])
         if o["set_state"] is not None:
+            # F-2: conditional update + in-transaction guard. plan() gated
+            # against live state, but state can move on between plan and
+            # apply; the UNIQUE(seq,hash) guard only stops double-apply of
+            # the SAME decision, not a DIFFERENT decision on the same target.
             stmts.append(
                 f"UPDATE {o['table']} SET validation_state='{o['set_state']}' "
-                f"WHERE id='{o['tid']}'")
+                f"WHERE id='{o['tid']}' "
+                f"AND validation_state='{o['expect_state']}'")
+            stmts.append(
+                f"DO $guard$ BEGIN "
+                f"IF (SELECT validation_state FROM {o['table']} "
+                f"WHERE id='{o['tid']}') IS DISTINCT FROM '{o['set_state']}' "
+                f"THEN RAISE EXCEPTION 'TOCTOU guard (seq {o['seq']}): "
+                f"{o['table']}.{o['tid']} not in expected state "
+                f"{o['expect_state']} at apply time — state moved on since "
+                f"plan'; END IF; END $guard$")
         stmts.append(
             "INSERT INTO teacher_validation_events (importer_run_id, decision_seq, "
             "decision_hash, action, target_type, target_id, target_label, reviewer, "
@@ -360,7 +431,25 @@ def main():
         if not ops:
             print("nothing to apply (all entries already applied) — idempotent no-op")
         else:
-            result = apply_ops(ops, entries, log_sha, mode)
+            try:
+                result = apply_ops(ops, entries, log_sha, mode)
+            except RuntimeError as ex:
+                # apply-time failure (incl. the F-2 TOCTOU guard): the
+                # transaction is already rolled back server-side; record a
+                # graceful ABORT manifest like the plan gates do.
+                RUNS_DIR.mkdir(parents=True, exist_ok=True)
+                out = RUNS_DIR / (f"importer-apply-ABORT-"
+                                  f"{datetime.now(timezone.utc).strftime('%H%M%S%f')}.json")
+                out.write_text(json.dumps({
+                    "mode": "apply",
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "log_file": str(log_path), "log_sha256": log_sha,
+                    "entries": len(entries), "reason": str(ex),
+                    "decision": "ABORT — apply failed; transaction rolled back, nothing written",
+                }, indent=1))
+                print(f"APPLY FAILED (transaction rolled back, nothing written): {ex}")
+                print(f"manifest: {out}")
+                sys.exit(1)
             print(f"applied run {result['importer_run_id']}: "
                   f"{len(ops)} op(s), evidence tables byte-identical: "
                   f"{all(result['evidence_byte_identical'].values())}, "
