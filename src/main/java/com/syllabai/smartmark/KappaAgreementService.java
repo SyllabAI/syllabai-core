@@ -29,9 +29,15 @@ public final class KappaAgreementService {
         int bothYes = 0;
         int bothNo = 0;
         for (int[] pair : pairs) {
+            // length check must precede element access — a 0/1-element array
+            // would otherwise throw ArrayIndexOutOfBoundsException instead of
+            // the documented IllegalArgumentException
+            if (pair.length != 2) {
+                throw new IllegalArgumentException("decisions must be binary 0/1 pairs");
+            }
             int smart = pair[0];
             int human = pair[1];
-            if (pair.length != 2 || (smart != 0 && smart != 1) || (human != 0 && human != 1)) {
+            if ((smart != 0 && smart != 1) || (human != 0 && human != 1)) {
                 throw new IllegalArgumentException("decisions must be binary 0/1 pairs");
             }
             if (smart == 1) smartYes++;
