@@ -3,12 +3,12 @@
     "questionNumber" : "1",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "10",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "11",
     "qpMarks" : 2,
@@ -33,7 +33,7 @@
     "questionNumber" : "15",
     "qpMarks" : 7,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "16",
     "qpMarks" : 8,
@@ -48,7 +48,7 @@
     "questionNumber" : "18",
     "qpMarks" : 8,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "19",
     "qpMarks" : 9,
@@ -58,7 +58,7 @@
     "questionNumber" : "2",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "20",
     "qpMarks" : 10,
@@ -68,32 +68,32 @@
     "questionNumber" : "3",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "4",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "5",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "6",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "7",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   }, {
     "questionNumber" : "8",
     "qpMarks" : 1,
     "msMarks" : null,
-    "severity" : "ms-only"
+    "severity" : "qp-only"
   } ],
   "qpPaperTotal" : 80,
   "msPaperTotal" : null,
