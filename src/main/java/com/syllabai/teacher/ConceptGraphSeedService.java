@@ -110,9 +110,13 @@ public class ConceptGraphSeedService {
 
         CurriculumVersion version = resolveVersion();
         Subject subject = resolveSubject(version);
-        KnowledgeNode root = resolveRoot(subject, activatedBy);
-
+        // the counters must see the root too: the summary's created/reused
+        // counts report EVERY row the seed owns, root included (pilot-readiness
+        // session-56 finding — the IT and the UI both count 1 + structure +
+        // concept nodes, the counter was one short)
         Counters counters = new Counters();
+        KnowledgeNode root = resolveRoot(subject, activatedBy, counters);
+
         Map<String, KnowledgeNode> byCode = new HashMap<>();
         byCode.put(root.code(), root);
 
@@ -234,7 +238,7 @@ public class ConceptGraphSeedService {
                 .orElseGet(() -> subjects.save(new Subject(version, SUBJECT_CODE, SUBJECT_NAME)));
     }
 
-    private KnowledgeNode resolveRoot(Subject subject, UUID activatedBy) {
+    private KnowledgeNode resolveRoot(Subject subject, UUID activatedBy, Counters counters) {
         KnowledgeNode root = knowledgeNodes.findByCode(ROOT_NODE_CODE).orElse(null);
         if (root == null && subject.knowledgeNodeId() != null) {
             root = knowledgeNodes.findById(subject.knowledgeNodeId()).orElse(null);
@@ -245,11 +249,13 @@ public class ConceptGraphSeedService {
         }
         if (root != null) {
             requireSeedNode(root, ROOT_NODE_CODE, STRUCTURE_PROVENANCE);
+            counters.nodesReused++;
         } else {
             root = knowledgeNodes.save(new KnowledgeNode(
                     ROOT_NODE_CODE, NodeType.SUBJECT, SUBJECT_NAME,
                     CURRICULUM_TITLE, KnowledgeNode.ValidationStatus.VALIDATED,
                     STRUCTURE_PROVENANCE, author(activatedBy)));
+            counters.nodesCreated++;
         }
         if (!root.id().equals(subject.knowledgeNodeId())) {
             subject.linkKnowledgeNode(root.id());

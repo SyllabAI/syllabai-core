@@ -69,13 +69,24 @@ public class TeacherConceptGraphController {
      * code. PART_OF is excluded — curriculum structure is the tree read
      * model's authority; this carries only conceptual relationships, each
      * with its validation status and T-C11 provenance intact.
+     *
+     * <p>The endpoint scope is the PART_OF subtree PLUS the misconceptions that
+     * attach to it through misconception-family edges (they are edge sources,
+     * not PART_OF members — the same widening the tree fold applies). Without
+     * them the read model dropped every REMEDIATED_BY / WRONG_ANSWER_PATTERN /
+     * MISCONCEPTION_OF edge of the settled store (29 of 153; pilot-readiness
+     * session-56 fix — the ConceptGraphSeedFlowIT's 153-edge assertion and the
+     * web ConceptGraphView's attach-edge filter both expect them).
      */
     @GetMapping("/edges")
     public ConceptGraphEdgesView edges(@RequestParam UUID rootId) {
         KnowledgeNode root = nodes.findById(rootId)
                 .orElseThrow(() -> new NotFoundException("knowledge node", rootId));
         List<UUID> subtreeIds = graph.subtreeIds(root.id());
-        List<ConceptGraphEdgeView> views = edges.findSemanticEdgesWithin(subtreeIds).stream()
+        List<UUID> scope = new java.util.ArrayList<>(subtreeIds);
+        edges.findMisconceptionFamilyEdgesWithin(subtreeIds)
+                .forEach(e -> scope.add(e.source().id()));
+        List<ConceptGraphEdgeView> views = edges.findSemanticEdgesWithin(scope).stream()
                 .map(ConceptGraphEdgeView::from)
                 .sorted(Comparator.comparing(ConceptGraphEdgeView::relation)
                         .thenComparing(e -> e.source().code())

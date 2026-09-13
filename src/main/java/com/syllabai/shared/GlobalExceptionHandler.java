@@ -53,6 +53,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "bad_request", "malformed request");
     }
 
+    // 400, not 500, when a required query parameter is absent (pilot-readiness
+    // session-56 finding: /api/v1/learners/me/recommendations without rootId
+    // surfaced a generic 500 — honest body, wrong status)
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    ResponseEntity<ApiError> missingParam(
+            org.springframework.web.bind.MissingServletRequestParameterException ex) {
+        return build(HttpStatus.BAD_REQUEST, "validation_failed",
+                "missing required parameter: " + ex.getParameterName());
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiError> noResource(NoResourceFoundException ex) {
         return build(HttpStatus.NOT_FOUND, "not_found", "resource not found");

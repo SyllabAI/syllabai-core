@@ -78,6 +78,27 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
     List<KnowledgeEdge> findMisconceptionFamilyEdgesTo(@Param("nodeId") UUID nodeId);
 
     /**
+     * Misconception-family edges whose TARGET is inside the given node set —
+     * the bulk form of {@link #findMisconceptionFamilyEdgesTo(UUID)}. The teacher
+     * concept-graph edge read model (V15) uses it to widen the endpoint scope:
+     * misconceptions attach to the PART_OF subtree through these edges (they are
+     * edge sources, not PART_OF members), so the remediation / wrong-answer-pattern
+     * edges are visible alongside the prerequisite ones (pilot-readiness
+     * session-56 fix — the read model previously dropped all 29 misconception-family
+     * edges of the settled store).
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            where e.target.id in :nodeIds
+              and e.relationType in (com.syllabai.knowledge.RelationType.MISCONCEPTION_OF,
+                                     com.syllabai.knowledge.RelationType.REMEDIATED_BY,
+                                     com.syllabai.knowledge.RelationType.WRONG_ANSWER_PATTERN)
+            """)
+    List<KnowledgeEdge> findMisconceptionFamilyEdgesWithin(
+            @Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
+    /**
      * Every non-PART_OF edge with BOTH endpoints inside the given node set —
      * the teacher-facing concept-graph read model (V15). PART_OF is excluded:
      * curriculum structure is the tree's job, this carries semantic relations.
