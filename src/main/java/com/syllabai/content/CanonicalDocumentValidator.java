@@ -60,6 +60,20 @@ public class CanonicalDocumentValidator {
             if (isBlank(doc.provenance().engineVersion())) {
                 violations.add("provenance.engineVersion is required");
             }
+            // P-6 mirror: documentId is DERIVED, not free-form — re-derive it from
+            // the identity material and fail on drift. A mismatched id would
+            // silently break consumer dedup across process boundaries.
+            if (!isBlank(doc.documentId()) && doc.source() != null
+                    && !isBlank(doc.source().checksum())
+                    && !isBlank(doc.provenance().engine())
+                    && !isBlank(doc.provenance().engineVersion())) {
+                String derived = derivedDocumentId(doc.source().checksum(),
+                        doc.provenance().engine(), doc.provenance().engineVersion());
+                if (!derived.equals(doc.documentId())) {
+                    violations.add("documentId does not match its checksum+engine+"
+                            + "engineVersion derivation (expected " + derived + ")");
+                }
+            }
         }
 
         // text may legitimately be null (layout-only elements — the real 4CH0 QP
@@ -166,5 +180,37 @@ public class CanonicalDocumentValidator {
 
     private static String quote(String s) {
         return s == null ? "null" : "\"" + s + "\"";
+    }
+
+    /**
+     * Byte-exact mirror of the parser's {@code CanonicalIdentity} (Master Spec
+     * §19 — the two MUST stay in lockstep or every legit document would be
+     * rejected): SHA-256 over
+     * {@code "sha256:<checksum>|engine:<engine>|version:<engineVersion>"}
+     * (components lowercased/stripped, null → ""), first 128 bits as a UUID
+     * with version nibble 5 and RFC-4122 variant bits. Package-private so test
+     * fixtures mint valid derived ids through the same code.
+     */
+    static String derivedDocumentId(String checksumHex, String engine,
+                                            String engineVersion) {
+        String material = "sha256:" + component(checksumHex)
+                + "|engine:" + component(engine)
+                + "|version:" + component(engineVersion);
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] uuidBytes = new byte[16];
+            System.arraycopy(hash, 0, uuidBytes, 0, 16);
+            uuidBytes[6] = (byte) ((uuidBytes[6] & 0x0f) | 0x50); // version 5
+            uuidBytes[8] = (byte) ((uuidBytes[8] & 0x3f) | 0x80); // RFC 4122 variant
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(uuidBytes);
+            return new java.util.UUID(buffer.getLong(), buffer.getLong()).toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private static String component(String value) {
+        return value == null ? "" : value.strip().toLowerCase(java.util.Locale.ROOT);
     }
 }

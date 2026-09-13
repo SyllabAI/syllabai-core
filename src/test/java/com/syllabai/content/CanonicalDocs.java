@@ -14,11 +14,17 @@ final class CanonicalDocs {
     }
 
     static CanonicalDocumentDto valid() {
+        // P-6: documentId is derived (checksum+engine+engineVersion), not
+        // free-form — the fixture mints it through the validator's identity
+        // mirror so the derivation check holds.
+        String checksum = sha256();
+        String documentId = CanonicalDocumentValidator.derivedDocumentId(
+                checksum, "opendataloader-pdf", "2.5.7");
         return new CanonicalDocumentDto(
-                UUID.randomUUID().toString(),
+                documentId,
                 "1.0",
                 1,
-                new CanonicalDocumentDto.SourceInfo("qp.pdf", sha256(), "SHA-256",
+                new CanonicalDocumentDto.SourceInfo("qp.pdf", checksum, "SHA-256",
                         "application/pdf", "qp.pdf"),
                 2,
                 List.of(new CanonicalDocumentDto.PageInfo(1, 595.0, 842.0),
