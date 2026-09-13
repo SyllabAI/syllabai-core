@@ -236,9 +236,9 @@ class PastPaperIngestionServiceTest {
         service.ingest(d1, null);
         service.ingest(d2, null);
 
-        assertThat(anchors).containsKeys("ING-4CH01C", "ING-4CH02C");
-        assertThat(anchors.get("ING-4CH01C").id())
-                .isNotEqualTo(anchors.get("ING-4CH02C").id());
+        assertThat(anchors).containsKeys("ING-4CH01CSUMMER2013", "ING-4CH02CSUMMER2013");
+        assertThat(anchors.get("ING-4CH01CSUMMER2013").id())
+                .isNotEqualTo(anchors.get("ING-4CH02CSUMMER2013").id());
     }
 
     /** same as {@link #sameSessionDraft} but with the printed paper reference present */

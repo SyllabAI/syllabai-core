@@ -229,13 +229,21 @@ public class PastPaperIngestionService {
 
     private UUID createIngestionAnchor(PastPaperDraftDto.PaperMeta meta, Subject subject,
                                        UUID ingestedBy) {
-        // knowledge_nodes.code is VARCHAR(40): cap deterministically, keeping uniqueness
-        // with a 8-hex hash suffix when the raw identity is longer.
+        // Anchor identity = ONE PER PAPER (javadoc contract above): printed paper
+        // code + session label when available. knowledge_nodes.code is VARCHAR(40):
+        // cap deterministically with an 8-hex hash suffix when the raw identity is
+        // longer. A paper without a session label cannot reach here (identity gate);
+        // a paper without a printed paper code falls back to its session label, and
+        // the find-or-create below keeps papers of the same session (e.g. 1C + 2C
+        // drafts that printed no code) on ONE shared placeholder — the r1 collision
+        // shape — instead of failing on uq_knowledge_node_code.
         String rawIdentity = (meta.paperCode() == null
                 ? (meta.sessionLabel() == null
                         ? UUID.randomUUID().toString().substring(0, 8)
                         : meta.sessionLabel().replaceAll("\\W+", "").toUpperCase())
-                : meta.paperCode().replaceAll("\\W+", ""));
+                : (meta.paperCode().replaceAll("\\W+", "")
+                        + (meta.sessionLabel() == null ? ""
+                        : meta.sessionLabel().replaceAll("\\W+", "").toUpperCase())));
         String anchorCode = "ING-" + rawIdentity;
         if (anchorCode.length() > 40) {
             anchorCode = anchorCode.substring(0, 31) + "-"
