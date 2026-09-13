@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,7 +62,14 @@ public class NightlyDecayJob {
 
         int decayed = 0;
         int reviewsScheduled = 0;
-        Pageable page = PageRequest.of(0, 500);
+        // Stable sort is mandatory here: the batch mutates the rows it pages over
+        // (applyDecay rewrites mastery/updatedAt in the same transaction), and an
+        // unsorted LIMIT/OFFSET scan can revisit already-decayed rows (compounding
+        // the decay) or skip others once Postgres relocates the updated tuples.
+        // The sort key (lastPracticedAt, id) is itself left untouched by applyDecay,
+        // so the ordering is stable across pages.
+        Pageable page = PageRequest.of(0, 500,
+                Sort.by(Sort.Direction.ASC, "lastPracticedAt", "id"));
         var candidates = skillStates.findByLastPracticedAtBefore(idleSince, page);
         while (!candidates.isEmpty()) {
             for (SkillState state : candidates) {
