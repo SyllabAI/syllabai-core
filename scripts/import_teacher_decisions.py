@@ -43,6 +43,9 @@ Hardening (audit findings F-1/F-2/F-3, 2026-09-14):
     with it can only redirect a REVERSE to another currently eligible
     prior decision, still fail-closed and fully audited. Legacy logs keep
     the prose fallback (first integer in the note).
+  * F-4 — hygiene: dead replay helper removed, apply_ops() takes only the
+    parameters it uses, and a valueless --log-file exits with usage instead
+    of a raw traceback.
 
 Usage:
   import_teacher_decisions.py check  [--log-file PATH]
@@ -175,22 +178,6 @@ def verify_chain(entries):
     return True, "chain valid"
 
 
-def replay_effective(entries):
-    """Same semantics as the workbench StageState replay."""
-    effective = {}
-    rev_targets = set()
-    for e in entries:
-        a = e["action"]
-        if a in ("VALIDATE", "REJECT"):
-            effective[e["targetId"]] = "VALIDATED" if a == "VALIDATE" else "REJECTED"
-        elif a == "FLAG":
-            effective.setdefault(e["targetId"], "FLAGGED")
-        elif a == "REVERSE":
-            rev_targets.add(e["targetId"])
-            effective.pop(e["targetId"], None)
-    return effective, rev_targets
-
-
 def canonical_state(table, tid):
     v = q(f"SELECT validation_state FROM {table} WHERE id = '{tid}'")
     return v or None
@@ -303,7 +290,7 @@ def sql_lit(s):
     return "'" + str(s).replace("'", "''") + "'"
 
 
-def apply_ops(ops, entries, log_sha, mode):
+def apply_ops(ops, entries):
     run_id = str(uuid.uuid4())
     # snapshot pre-state for the manifest
     pre_states = {t: q(f"SELECT count(*) FROM {t}") for t in TARGET_TABLE.values()}
@@ -396,7 +383,12 @@ def main():
         sys.exit(1)
     log_path = LOG_FILE
     if "--log-file" in sys.argv:
-        log_path = Path(sys.argv[sys.argv.index("--log-file") + 1])
+        idx = sys.argv.index("--log-file")
+        if idx + 1 >= len(sys.argv):
+            print("error: --log-file requires a PATH argument")
+            print("usage: import_teacher_decisions.py check|apply [--log-file PATH]")
+            sys.exit(1)
+        log_path = Path(sys.argv[idx + 1])
 
     gate = preflight(expected_db="syllabai", expected_label="T-C04-CAMPAIGN")
     entries = read_log(log_path)
@@ -432,7 +424,7 @@ def main():
             print("nothing to apply (all entries already applied) — idempotent no-op")
         else:
             try:
-                result = apply_ops(ops, entries, log_sha, mode)
+                result = apply_ops(ops, entries)
             except RuntimeError as ex:
                 # apply-time failure (incl. the F-2 TOCTOU guard): the
                 # transaction is already rolled back server-side; record a
