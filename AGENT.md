@@ -87,3 +87,23 @@ Successful batches never stop the campaign. Automated gates run per batch and
 the pipeline continues on green; only a genuine invariant, identity,
 provenance, migration, data-loss, serving-boundary, or security failure halts
 the workflow.
+
+## 8. Canonical multi-agent coordination
+
+The project-wide coordination contract lives in `SyllabAI/syllabai` under
+`.syllabai/` and its root `AGENT.md`. When working in this repository, use that
+coordination state in addition to these core-specific rules.
+
+Required behaviors:
+
+- Record the task ID, owner/surface and base commit before substantial work.
+- Treat shared resources (especially Flyway versions and database schema) as
+  serialized; never independently allocate a migration number.
+- If `main` advances and touched files/contracts overlap, reconcile before
+  completion and rerun affected tests.
+- Preserve the distinction between T0/T1 authoritative truth and T3 agent
+  suggestions.
+- Material milestone claims require durable evidence; agent transcripts alone
+  are not canonical evidence.
+- Completion reports must distinguish VERIFIED / INFERRED / REPORTED /
+  UNVERIFIED claims and state the next safe action.
