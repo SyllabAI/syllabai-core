@@ -18,7 +18,8 @@ public final class LlmProviderHealth {
     private final AtomicReference<Instant> lastErrorAt = new AtomicReference<>();
     private final AtomicReference<String> lastErrorMessage = new AtomicReference<>();
     private final AtomicReference<Instant> cooldownUntil = new AtomicReference<>();
-    private final java.time.LocalDate day = java.time.LocalDate.now();   // process-lifetime day bucket
+    private final AtomicReference<java.time.LocalDate> day =
+            new AtomicReference<>(java.time.LocalDate.now());
 
     /** Defaults kept for existing callers; equal to the §26.1 documented baseline. */
     public LlmProviderHealth(boolean configured) {
@@ -37,12 +38,23 @@ public final class LlmProviderHealth {
         return configured;
     }
 
+    /** Rolls the per-day request counter over when the UTC day changes. */
+    private void rollDay() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate current = day.get();
+        if (!today.equals(current) && day.compareAndSet(current, today)) {
+            requestsToday.set(0);
+        }
+    }
+
     public void recordSuccess() {
+        rollDay();
         consecutiveFailures.set(0);
         requestsToday.incrementAndGet();
     }
 
     public void recordFailure(String message) {
+        rollDay();
         consecutiveFailures.incrementAndGet();
         requestsToday.incrementAndGet();
         lastErrorAt.set(Instant.now());
@@ -58,6 +70,7 @@ public final class LlmProviderHealth {
     }
 
     public Snapshot snapshot() {
+        rollDay();
         return new Snapshot(
                 configured,
                 consecutiveFailures.get(),
