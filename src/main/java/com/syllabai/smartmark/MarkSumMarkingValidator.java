@@ -6,13 +6,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Component;
 
 /**
  * Total awarded marks must respect the scheme's own ceiling: sum of awarded points
  * (points are atomic) can never exceed the sum of in-scope point marks, and if the
  * part carries an extracted mark total, that bounds it too. Guards against a
  * hallucinating model awarding more than the paper allows.
+ *
+ * <p>Registered as a bean so the production pipeline's injected validator chain
+ * is non-empty (§23 factory wiring).</p>
  */
+@Component
 public class MarkSumMarkingValidator implements MarkingValidator {
 
     @Override

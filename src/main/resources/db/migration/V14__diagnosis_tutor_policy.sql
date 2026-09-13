@@ -1,4 +1,4 @@
--- V13: explainable diagnosis and diagnosis-aware tutor policy (T-026/T-027).
+-- V14: explainable diagnosis and diagnosis-aware tutor policy (T-026/T-027).
 -- superseded_at: set when a newer inference of the same (learner, topic, type)
 -- replaces an active one; rows are kept (append-only research history) but
 -- excluded from active reads.

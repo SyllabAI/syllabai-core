@@ -42,7 +42,7 @@ Each module owns its application services, domain objects, ports, and persistenc
 | Task | Status | What |
 |------|--------|------|
 | T-001 | ✅ | Spring Boot 4.1.1 / Java 25 / Spring AI 2.0.1 skeleton, 13-module package map |
-| T-002 | ✅ | Flyway V1–V7 (identity, KG, assessment, learner, research + Edexcel IAL Chemistry seed), docker-compose Postgres 17 + pgvector |
+| T-002 | ✅ | Flyway V1–V14 (identity, KG, assessment, learner, research + Edexcel IAL Chemistry seed, multipart assessment, telemetry/marking, content documents, pgvector, KA-RAG, GLM-OCR bridge, diagnosis/tutor policy), docker-compose Postgres 17 + pgvector |
 | T-003 | ✅ | Spring Security JWT (register/login/me), RBAC roles, CORS |
 | T-004 | ✅ | `/api/v1` DTO boundaries, springdoc OpenAPI, global error handling |
 | T-006 | ✅ | GitHub Actions CI (build + test, JDK 25) |
@@ -165,7 +165,7 @@ moles/grams misconception — watch `misconceptionStates.probability` jump from 
 ## Tests
 
 ```bash
-mvn test    # 196 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
+mvn test    # 311 unit tests: BKT math, BDT Bayes incl. correct-answer weakening,
             # evidence assembly, telemetry coverage, decay formula/bands/floor,
             # decay-job events, chain failover, experiment pinning, storage,
             # Smart Mark pipeline + κ gate, multi-part ingestion bridge,

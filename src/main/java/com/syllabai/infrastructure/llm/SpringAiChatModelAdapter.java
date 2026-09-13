@@ -23,10 +23,16 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final LlmProviderHealth health;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
+        this(providerName, chatModel, configured, 3, 60);
+    }
+
+    /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
+                                    int failureThreshold, int cooldownSeconds) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
-        this.health = new LlmProviderHealth(configured);
+        this.health = new LlmProviderHealth(configured, failureThreshold, cooldownSeconds);
     }
 
     @Override

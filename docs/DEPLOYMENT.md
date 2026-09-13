@@ -64,12 +64,22 @@ Vercel project settings (web). Nothing here changes application code.
   java -jar target/syllabai-core-*.jar   # DemoUserSeeder is local-profile-only
   ```
 
+  > **Warning:** `@Profile("local")` activates `DemoUserSeeder` against
+  > **whatever database `SYLLABAI_DATABASE_URL` points at**. Pointing it at the
+  > Render database seeds the full demo set — admin/teacher/student with public
+  > demo passwords — into production. If this one-off path is used at all,
+  > rotate every seeded password and delete the accounts that are not the
+  > tutor's immediately after provisioning.
+
   For the pilot this is acceptable (documented, one account, password rotated
   after the pilot). A first-class teacher-invite flow is teacher-LMS scope
   (ADR-015, Cycle 2+).
 
-- Demo accounts (`student@syllabai.dev` etc.) exist **only** under the
-  `local` profile — they never exist in a Render deployment.
+- Demo accounts (`student@syllabai.dev` etc.) are seeded **only** by the
+  `local` profile — a Render deployment does not seed them on its own. The one
+  exception is the §2 one-off provisioning recipe above, which runs the local
+  profile against the target database by design; that is exactly why it
+  carries the rotation warning.
 
 ## 3. Pre-pilot verification checklist (T-032 gate inputs)
 

@@ -5,11 +5,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Component;
 
 /**
  * Every allocation must reference exactly one in-scheme mark point — no invented
  * point ids, no duplicates, no allocations for points outside this answer's part.
+ *
+ * <p>Registered as a bean so the production pipeline's injected validator chain
+ * is non-empty (§23 factory wiring: validators are discovered, never listed by
+ * hand — an unregistered validator silently disables its check).</p>
  */
+@Component
 public class BoundsMarkingValidator implements MarkingValidator {
 
     @Override

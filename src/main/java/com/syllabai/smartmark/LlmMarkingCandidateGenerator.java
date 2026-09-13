@@ -122,8 +122,19 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
                         CandidateGenerationException.Reason.MALFORMED_ALLOCATION,
                         "allocation without markPointId", null);
             }
+            java.util.UUID markPointId;
+            try {
+                markPointId = java.util.UUID.fromString(id);
+            } catch (IllegalArgumentException e) {
+                // a malformed id is a bad CANDIDATE, not a server error — reject
+                // it through the normal candidate-exception path instead of
+                // letting IllegalArgumentException surface as an HTTP 400
+                throw new CandidateGenerationException(
+                        CandidateGenerationException.Reason.MALFORMED_ALLOCATION,
+                        "allocation markPointId is not a UUID: " + id, null);
+            }
             parsed.add(new MarkingCandidate.Allocation(
-                    java.util.UUID.fromString(id),
+                    markPointId,
                     textOf(node, "ref"),
                     node.path("awarded").asBoolean(false),
                     textOf(node, "evidence"),

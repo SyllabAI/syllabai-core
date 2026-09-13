@@ -5,11 +5,16 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Component;
 
 /**
  * The generator must decide every in-scope mark point exactly once — partial coverage
  * would silently drop marks the learner may have earned (or lost).
+ *
+ * <p>Registered as a bean so the production pipeline's injected validator chain
+ * is non-empty (§23 factory wiring).</p>
  */
+@Component
 public class CoverageMarkingValidator implements MarkingValidator {
 
     @Override

@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class LlmProviderHealth {
 
     private final boolean configured;
+    private final int failureThreshold;
+    private final int cooldownSeconds;
     private final AtomicInteger consecutiveFailures = new AtomicInteger();
     private final AtomicInteger requestsToday = new AtomicInteger();
     private final AtomicReference<Instant> lastErrorAt = new AtomicReference<>();
@@ -18,8 +20,17 @@ public final class LlmProviderHealth {
     private final AtomicReference<Instant> cooldownUntil = new AtomicReference<>();
     private final java.time.LocalDate day = java.time.LocalDate.now();   // process-lifetime day bucket
 
+    /** Defaults kept for existing callers; equal to the §26.1 documented baseline. */
     public LlmProviderHealth(boolean configured) {
+        this(configured, 3, 60);
+    }
+
+    /** Threshold/cooldown wired from {@code syllabai.llm.chain.*} (they were
+     * documented config; hard-coding them here made the properties dead). */
+    public LlmProviderHealth(boolean configured, int failureThreshold, int cooldownSeconds) {
         this.configured = configured;
+        this.failureThreshold = Math.max(1, failureThreshold);
+        this.cooldownSeconds = Math.max(1, cooldownSeconds);
     }
 
     public boolean configured() {
@@ -36,8 +47,8 @@ public final class LlmProviderHealth {
         requestsToday.incrementAndGet();
         lastErrorAt.set(Instant.now());
         lastErrorMessage.set(message);
-        if (consecutiveFailures.get() >= 3) {
-            cooldownUntil.set(Instant.now().plusSeconds(60));
+        if (consecutiveFailures.get() >= failureThreshold) {
+            cooldownUntil.set(Instant.now().plusSeconds(cooldownSeconds));
         }
     }
 
