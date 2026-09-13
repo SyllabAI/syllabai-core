@@ -12,5 +12,16 @@ public enum RelationType {
     RELATED_TO,
     MISCONCEPTION_OF,
     EXPLAINED_BY,
-    REMEDIATED_BY
+    REMEDIATED_BY,
+    /**
+     * T-C11 settled store (V15): the wrong-answer pattern a misconception
+     * manifests as, pointing at the concept whose questions expose it
+     * (misconception → concept).
+     */
+    WRONG_ANSWER_PATTERN,
+    /**
+     * T-C11 settled store (V15): two concepts students commonly conflate
+     * (concept → concept, symmetric in meaning, stored one-directionally).
+     */
+    COMMONLY_CONFUSED_WITH
 }

@@ -55,6 +55,43 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
     Optional<KnowledgeEdge> findBySourceIdAndRelationType(
             @Param("sourceId") UUID sourceId, @Param("relationType") RelationType relationType);
 
+    /** One specific edge identity — idempotent re-seeding of the (V15) concept graph. */
+    Optional<KnowledgeEdge> findBySourceIdAndTargetIdAndRelationType(
+            @Param("sourceId") UUID sourceId, @Param("targetId") UUID targetId,
+            @Param("relationType") RelationType relationType);
+
+    /**
+     * Misconception-family edges pointing at a node — the T-C11 concept-graph
+     * attach points (V15). A misconception joins the read tree through any of
+     * MISCONCEPTION_OF (about), REMEDIATED_BY (its corrective concept) or
+     * WRONG_ANSWER_PATTERN (where it shows up). No new edge kinds: this only
+     * widens which <em>existing</em> edges the tree fold considers.
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            where e.target.id = :nodeId
+              and e.relationType in (com.syllabai.knowledge.RelationType.MISCONCEPTION_OF,
+                                     com.syllabai.knowledge.RelationType.REMEDIATED_BY,
+                                     com.syllabai.knowledge.RelationType.WRONG_ANSWER_PATTERN)
+            """)
+    List<KnowledgeEdge> findMisconceptionFamilyEdgesTo(@Param("nodeId") UUID nodeId);
+
+    /**
+     * Every non-PART_OF edge with BOTH endpoints inside the given node set —
+     * the teacher-facing concept-graph read model (V15). PART_OF is excluded:
+     * curriculum structure is the tree's job, this carries semantic relations.
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            join fetch e.target
+            where e.relationType <> com.syllabai.knowledge.RelationType.PART_OF
+              and e.source.id in :nodeIds
+              and e.target.id in :nodeIds
+            """)
+    List<KnowledgeEdge> findSemanticEdgesWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
     /** All PART_OF edges inside a subtree — bulk validation (version gate). */
     @Query("""
             select e from KnowledgeEdge e

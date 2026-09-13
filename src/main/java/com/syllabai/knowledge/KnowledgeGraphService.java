@@ -43,7 +43,13 @@ public class KnowledgeGraphService {
     }
 
     /**
-     * Same tree with misconception nodes folded in as children of their topics.
+     * Same tree with misconception nodes folded in as children of the nodes they
+     * attach to. Since V15 the fold covers two attachment shapes: TOPIC/SUBTOPIC
+     * nodes (V6 contract: MISCONCEPTION_OF into the topic) and CONCEPT nodes of
+     * the T-C11 settled graph, whose misconceptions attach via REMEDIATED_BY /
+     * WRONG_ANSWER_PATTERN as well — 13 of the 15 settled misconceptions carry no
+     * MISCONCEPTION_OF edge at all. Read-model widening only: the underlying
+     * edges are exactly the seeded store edges, nothing is derived or invented.
      */
     public NodeView treeWithMisconceptions(UUID rootId) {
         return toView(node(rootId), true);
@@ -68,6 +74,16 @@ public class KnowledgeGraphService {
     public KnowledgeNode node(UUID id) {
         return nodes.findById(id)
                 .orElseThrow(() -> new NotFoundException("knowledge node", id));
+    }
+
+    /**
+     * The node ids of a root's whole PART_OF subtree (inclusive) — the bulk
+     * scope for read models that need "everything under this subject" (V15
+     * teacher concept-graph edges).
+     */
+    public List<UUID> subtreeIds(UUID rootId) {
+        node(rootId);   // same 404 contract as the other read methods
+        return nodes.findSubtreeIds(rootId);
     }
 
     /**
@@ -113,6 +129,10 @@ public class KnowledgeGraphService {
         if (withMisconceptions
                 && (n.nodeType() == NodeType.TOPIC || n.nodeType() == NodeType.SUBTOPIC)) {
             for (KnowledgeNode m : graph.findMisconceptions(n.id())) {
+                children.add(NodeView.flat(m));
+            }
+        } else if (withMisconceptions && n.nodeType() == NodeType.CONCEPT) {
+            for (KnowledgeNode m : graph.findAssociatedMisconceptions(n.id())) {
                 children.add(NodeView.flat(m));
             }
         }

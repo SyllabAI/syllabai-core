@@ -16,11 +16,15 @@ public interface KnowledgeNodeRepository extends JpaRepository<KnowledgeNode, UU
     /**
      * All UNIT/TOPIC/SUBTOPIC nodes — the curriculum structure the T-024
      * deterministic intent matcher token-matches queries against.
+     * Pinned to an explicit type list (not negation) so the V15 CONCEPT family
+     * can never leak into the KA-RAG intent surface: concepts are graph layer,
+     * not curriculum structure.
      */
     @Query("""
             select n from KnowledgeNode n
-            where n.nodeType <> com.syllabai.knowledge.NodeType.SUBJECT
-              and n.nodeType <> com.syllabai.knowledge.NodeType.MISCONCEPTION
+            where n.nodeType in (com.syllabai.knowledge.NodeType.UNIT,
+                                 com.syllabai.knowledge.NodeType.TOPIC,
+                                 com.syllabai.knowledge.NodeType.SUBTOPIC)
             order by n.code
             """)
     List<KnowledgeNode> findStructureNodes();

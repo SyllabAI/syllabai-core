@@ -68,6 +68,21 @@ public class JpaKnowledgeGraphRepository implements KnowledgeGraphRepository {
                 .toList();
     }
 
+    @Override
+    public List<KnowledgeNode> findAssociatedMisconceptions(UUID nodeId) {
+        requireNode(nodeId);
+        // V15 concept-graph fold: misconceptions attach not only via
+        // MISCONCEPTION_OF ("about") but also via REMEDIATED_BY / WRONG_ANSWER_
+        // PATTERN edges into this node — the settled T-C11 store connects 13 of
+        // its 15 misconceptions that way. Read-model widening only: the edges
+        // already exist; nothing new is invented here.
+        return edges.findMisconceptionFamilyEdgesTo(nodeId).stream()
+                .map(KnowledgeEdge::source)
+                .distinct()
+                .sorted(java.util.Comparator.comparing(KnowledgeNode::code))
+                .toList();
+    }
+
     private void requireNode(UUID nodeId) {
         if (!nodes.existsById(nodeId)) {
             throw new NotFoundException("knowledge node", nodeId);

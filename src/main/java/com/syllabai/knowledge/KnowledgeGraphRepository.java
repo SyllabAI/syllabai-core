@@ -25,6 +25,13 @@ public interface KnowledgeGraphRepository {
     /** Misconception nodes attached to a topic node. */
     List<KnowledgeNode> findMisconceptions(UUID topicNodeId);
 
+    /**
+     * Misconception nodes associated with a node through any misconception-family
+     * edge pointing at it (MISCONCEPTION_OF / REMEDIATED_BY / WRONG_ANSWER_PATTERN)
+     * — the V15 concept-graph tree fold. Distinct + code-ordered.
+     */
+    List<KnowledgeNode> findAssociatedMisconceptions(UUID nodeId);
+
     record PrerequisiteWithDepth(KnowledgeNode node, int depth) {
     }
 }
