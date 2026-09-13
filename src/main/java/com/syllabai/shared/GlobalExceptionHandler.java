@@ -24,6 +24,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, "not_found", ex.getMessage());
     }
 
+    @ExceptionHandler(BadRequestException.class)
+    ResponseEntity<ApiError> badRequest(BadRequestException ex) {
+        // honest, actionable body for malformed-but-parseable requests (C-9:
+        // an unknown filter value is a bad request, not a missing resource)
+        return build(HttpStatus.BAD_REQUEST, "bad_request", ex.getMessage());
+    }
+
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<ApiError> conflict(ConflictException ex) {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());

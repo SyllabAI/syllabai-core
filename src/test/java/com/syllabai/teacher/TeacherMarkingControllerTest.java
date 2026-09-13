@@ -20,6 +20,7 @@ import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.identity.Role;
 import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.smartmark.HumanMark;
 import com.syllabai.smartmark.HumanMarkRepository;
@@ -104,13 +105,15 @@ class TeacherMarkingControllerTest {
     }
 
     @Test
-    @DisplayName("queue is case-insensitive on the state filter; unknown states 404")
+    @DisplayName("queue is case-insensitive on the state filter; unknown states are a 400 bad request")
     void queueStateFilter() {
         when(answers.findByMarkingState(Answer.MarkingState.PENDING)).thenReturn(List.of());
         assertThat(controller.queue("pending")).isEmpty();
 
+        // C-9: an unknown filter value is malformed input, not a missing resource
         assertThatThrownBy(() -> controller.queue("NOT_A_STATE"))
-                .isInstanceOf(NotFoundException.class);
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("unknown marking state: NOT_A_STATE");
         verify(users, never()).findAllById(anySet());
     }
 

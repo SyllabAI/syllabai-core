@@ -5,6 +5,7 @@ import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.smartmark.HumanMark;
 import com.syllabai.smartmark.HumanMarkRepository;
@@ -73,7 +74,10 @@ public class TeacherMarkingController {
         try {
             filter = Answer.MarkingState.valueOf(state.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new NotFoundException("marking state", state);
+            // C-9: an unknown filter value is a malformed request (400), not a
+            // missing resource — 404 is reserved for real not-found lookups.
+            throw new BadRequestException("unknown marking state: " + state
+                    + " (expected PENDING, SMART_MARKED, HUMAN_MARKED or OVERRIDDEN)");
         }
         List<Answer> queue = answers.findByMarkingState(filter);
         // one batched identity lookup so the queue is self-contained (T-029:
