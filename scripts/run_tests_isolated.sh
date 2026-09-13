@@ -47,6 +47,10 @@ snapshot() {
     dump=$($PGDUMP -a --inserts -O -x \
         $(for t in $TABLES; do echo -n "-t $t "; done) \
         "${PSQL_ARGS[@]}" 2>/dev/null | grep -vE '^\\(un)?restrict ')
+    # chain of custody: RETAIN the hashed object, not just its hash — a hash
+    # of a discarded dump is self-attestation, not independent evidence.
+    printf '%s' "$dump" > "$out_prefix.dump"
+    gzip -f "$out_prefix.dump"
     printf '%s' "$dump" | sha256sum | awk '{print $1}' > "$out_prefix.sha256"
 }
 
