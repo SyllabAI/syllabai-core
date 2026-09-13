@@ -314,4 +314,49 @@ class PastPaperIngestionServiceTest {
         assertThat(saved.title()).doesNotContain("null");
         assertThat(saved.title()).contains("4CH0/1C").contains("January 2012");
     }
+
+    // ── fail-closed identity gate, pinned permanently (T-C04 r2, directive 2026-09-13) ──
+
+    @Test
+    @DisplayName("a blank session label is rejected — fail closed, nothing is written")
+    void blankSessionLabelRejectedWithoutWrites() {
+        PastPaperDraftDto blank = new PastPaperDraftDto("1.0",
+                new PastPaperDraftDto.PaperMeta("Edexcel", "IGCSE", "Chemistry", "Paper 1C",
+                        "   ", "4CH0/1C", "qp-doc-b", "ms-doc-b"),
+                draft().questions(),
+                new PastPaperDraftDto.MarkSchemeDraft("1", "ms-doc-b", List.of()),
+                "m", true);
+
+        assertThatThrownBy(() -> service.ingest(blank, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("no session label");
+        // fail-closed ordering: the gate fires BEFORE any entity is persisted —
+        // no paper, no questions, no anchor, no partial write to roll back
+        assertThat(savedAll).isEmpty();
+    }
+
+    @Test
+    @DisplayName("missing printed paper code stays an honest null with a session-derived anchor")
+    void missingPaperCodeStaysHonestNullWithSessionAnchor() {
+        PastPaperDraftDto noCode = new PastPaperDraftDto("1.0",
+                new PastPaperDraftDto.PaperMeta("Edexcel", "IGCSE", "Chemistry", "Paper 1C",
+                        "January 2012", null, "qp-doc-n", "ms-doc-n"),
+                draft().questions(),
+                new PastPaperDraftDto.MarkSchemeDraft("1", "ms-doc-n", List.of()),
+                "m", true);
+
+        service.ingest(noCode, null);
+
+        ExamPaper saved = (ExamPaper) savedAll.stream()
+                .filter(e -> e instanceof ExamPaper).findFirst().orElseThrow();
+        // the printed identity is what it is: session printed, code lost in OCR —
+        // the pipeline records the null, never a guessed or placeholder code
+        assertThat(saved.paperCode()).isNull();
+        assertThat(saved.sessionLabel()).isEqualTo("January 2012");
+        // the anchor falls back to the printed session (find-or-create sharing)
+        KnowledgeNode anchor = (KnowledgeNode) savedAll.stream()
+                .filter(e -> e instanceof KnowledgeNode).findFirst().orElseThrow();
+        assertThat(anchor.code()).isEqualTo("ING-JANUARY2012");
+        assertThat(anchor.title()).doesNotContain("null");
+    }
 }

@@ -19,6 +19,11 @@
 
   <properties>
     <java.version>25</java.version>
+    <!-- Disposable test database for surefire/failsafe (RequireTestDatabase guard).
+         Overridable per-run with -Dsyllabai.test.jdbcUrl=… — but the guard accepts
+         ONLY a database named syllabai_test, so overrides can never point at the
+         campaign DB. -->
+    <syllabai.test.jdbcUrl>jdbc:postgresql://127.0.0.1:5432/syllabai_test</syllabai.test.jdbcUrl>
     <!-- ADR-009: Spring AI 2.0.x is the AI application framework (requires Boot 4.x) -->
     <spring-ai.version>2.0.1</spring-ai.version>
     <springdoc.version>3.0.3</springdoc.version>
@@ -168,7 +173,28 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- T-C04 isolation hardening: tests target ONLY the disposable test
+                 database, and the RequireTestDatabase guard (autodetected below)
+                 fails a class closed when this is not the case. -->
+            <spring.datasource.url>${syllabai.test.jdbcUrl}</spring.datasource.url>
+            <junit.jupiter.extensions.autodetection.enabled>true</junit.jupiter.extensions.autodetection.enabled>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- Same isolation contract for ITs: the guard stays active; ITs
+                 running in Testcontainers override the URL via @ServiceConnection. -->
+            <spring.datasource.url>${syllabai.test.jdbcUrl}</spring.datasource.url>
+            <junit.jupiter.extensions.autodetection.enabled>true</junit.jupiter.extensions.autodetection.enabled>
+          </systemPropertyVariables>
+        </configuration>
         <executions>
           <execution>
             <goals>
