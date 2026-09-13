@@ -43,26 +43,27 @@ public class LlmChainConfig {
         LlmChainProperties.Chain chainCfg = properties.chain();
         int threshold = chainCfg == null ? 3 : Math.max(1, chainCfg.failureThreshold());
         int cooldown = chainCfg == null ? 60 : Math.max(1, chainCfg.cooldownSeconds());
+        int timeout = chainCfg == null ? 30 : Math.max(1, chainCfg.timeoutSeconds());
 
         if (properties.groq().enabled() && hasKey(properties.groq().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("groq", groqChatModel(), true, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("groq", groqChatModel(), true, threshold, cooldown, timeout));
             log.info("LLM provider registered: groq (model {})", properties.groq().model());
         } else {
-            providers.add(new SpringAiChatModelAdapter("groq", null, false, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("groq", null, false, threshold, cooldown, timeout));
         }
 
         if (properties.gemini().enabled() && hasKey(properties.gemini().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("gemini", geminiChatModel(), true, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("gemini", geminiChatModel(), true, threshold, cooldown, timeout));
             log.info("LLM provider registered: gemini (model {})", properties.gemini().model());
         } else {
-            providers.add(new SpringAiChatModelAdapter("gemini", null, false, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("gemini", null, false, threshold, cooldown, timeout));
         }
 
         if (properties.openRouter().enabled() && hasKey(properties.openRouter().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("openrouter", openRouterChatModel(), true, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("openrouter", openRouterChatModel(), true, threshold, cooldown, timeout));
             log.info("LLM provider registered: openrouter (model {})", properties.openRouter().model());
         } else {
-            providers.add(new SpringAiChatModelAdapter("openrouter", null, false, threshold, cooldown));
+            providers.add(new SpringAiChatModelAdapter("openrouter", null, false, threshold, cooldown, timeout));
         }
 
         // Pin resolution order (§26.1): deployment configuration first, then the

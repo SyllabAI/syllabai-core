@@ -9,6 +9,12 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Adapts a Spring AI {@link ChatModel} to the {@link LlmProvider} port (Master Spec
  * §23 Adapter pattern, §26 abstraction). Works for the OpenAI-compatible models
@@ -17,22 +23,46 @@ import org.springframework.ai.chat.prompt.Prompt;
  */
 public class SpringAiChatModelAdapter implements LlmProvider {
 
+    /**
+     * Daemon, cached worker pool so a hung provider HTTP call cannot pin a
+     * request thread forever: the caller gives up after {@code timeoutSeconds}
+     * (§26.1 {@code syllabai.llm.chain.timeout-seconds}) and the failover chain
+     * moves to the next provider. Stranded workers are daemons and die with
+     * the JVM; the health cooldown stops further calls to the dead provider.
+     */
+    private static final ExecutorService CALL_POOL = new ThreadPoolExecutor(
+            0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+            new SynchronousQueue<>(),
+            r -> {
+                Thread t = new Thread(r, "llm-provider-call");
+                t.setDaemon(true);
+                return t;
+            });
+
     private final String providerName;
     private final ChatModel chatModel;
     private final boolean configured;
     private final LlmProviderHealth health;
+    private final int timeoutSeconds;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
-        this(providerName, chatModel, configured, 3, 60);
+        this(providerName, chatModel, configured, 3, 60, 30);
     }
 
     /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds) {
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30);
+    }
+
+    /** Full wiring incl. the per-call timeout from {@code syllabai.llm.chain.timeout-seconds}. */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
+                                    int failureThreshold, int cooldownSeconds, int timeoutSeconds) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
         this.health = new LlmProviderHealth(configured, failureThreshold, cooldownSeconds);
+        this.timeoutSeconds = Math.max(1, timeoutSeconds);
     }
 
     @Override
@@ -56,7 +86,7 @@ public class SpringAiChatModelAdapter implements LlmProvider {
             Prompt prompt = runtimeOptions == null
                     ? new Prompt(messages(request))
                     : new Prompt(messages(request), runtimeOptions);
-            ChatResponse response = chatModel.call(prompt);
+            ChatResponse response = callWithTimeout(prompt);
             String text = extractText(response);
             Usage usage = response.getMetadata().getUsage();
             long latencyMs = (System.nanoTime() - started) / 1_000_000;
@@ -86,6 +116,33 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     @Override
     public LlmProviderHealth health() {
         return health;
+    }
+
+    /**
+     * Runs the blocking provider call on the shared daemon pool and gives up
+     * after {@code syllabai.llm.chain.timeout-seconds} (default 30s), so a hung
+     * Groq/Gemini/OpenRouter call degrades into a counted failure + cooldown
+     * instead of an indefinitely blocked request thread.
+     */
+    private ChatResponse callWithTimeout(Prompt prompt) {
+        Future<ChatResponse> pending = CALL_POOL.submit(() -> chatModel.call(prompt));
+        try {
+            return pending.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException te) {
+            pending.cancel(true);
+            health.recordFailure("TimeoutException: no response within " + timeoutSeconds + "s");
+            throw new LlmProviderException(providerName,
+                    "generation timed out after " + timeoutSeconds + "s", te);
+        } catch (java.util.concurrent.ExecutionException ee) {
+            Throwable cause = ee.getCause() == null ? ee : ee.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;   // existing generate() catch records the failure
+            }
+            throw new IllegalStateException(providerName + " generation failed", cause);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(providerName + " generation interrupted", ie);
+        }
     }
 
     private java.util.List<org.springframework.ai.chat.messages.Message> messages(LlmRequest request) {
