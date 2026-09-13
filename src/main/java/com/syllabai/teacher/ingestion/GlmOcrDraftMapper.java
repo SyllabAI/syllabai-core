@@ -58,13 +58,24 @@ public class GlmOcrDraftMapper {
         GlmOcrPaperDraftDto.PaperMeta qpMeta = qpDraft.paper();
         GlmOcrPaperDraftDto.PaperMeta msMeta = msDraft.paper();
 
+        // Session and paper reference come from the QUESTION PAPER side first: the
+        // exam paper is the authority on its own session. MS covers of newer series
+        // print the PUBLICATION month, not the session (the June-2020 MS cover says
+        // "November 2020"), so msMeta.session is only a fallback for papers whose
+        // QP cover the OCR lost entirely (e.g. 4CH1 November 2021 — its MS cover
+        // prints "November 2021", which is both session and publication month).
+        String session = qpMeta != null && qpMeta.session() != null
+                ? qpMeta.session() : msMeta == null ? null : msMeta.session();
+        String paperReference = qpMeta != null && qpMeta.paperReference() != null
+                ? qpMeta.paperReference() : msMeta == null ? null : msMeta.paperReference();
+
         PastPaperDraftDto.PaperMeta paper = new PastPaperDraftDto.PaperMeta(
                 msMeta == null ? null : msMeta.board(),
                 msMeta == null ? null : msMeta.qualification(),
                 null,                                    // subject: never inferred
                 null,                                    // unit: not extracted
-                msMeta == null ? null : msMeta.session(),
-                msMeta == null ? null : msMeta.paperReference(),
+                session,
+                paperReference,
                 qpMeta == null ? null : qpMeta.canonicalDocumentId(),
                 msMeta == null ? null : msMeta.canonicalDocumentId());
 

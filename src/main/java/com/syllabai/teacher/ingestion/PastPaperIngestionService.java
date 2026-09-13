@@ -25,6 +25,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -83,6 +85,16 @@ public class PastPaperIngestionService {
             throw new ConflictException("paper " + meta.paperCode() + " " + meta.sessionLabel()
                     + " already ingested");
         }
+        // Identity gate (fail-closed): a paper without a printed/derived session label
+        // has no reviewable identity — it would land as a nameless "null …" row that
+        // teacher review cannot attribute to any exam session. The parser now recovers
+        // identity from printed table-cell covers, and the pair CLI accepts
+        // operator-supplied --session-label/--paper-code for covers the OCR lost;
+        // if neither exists the draft is rejected instead of silently ingested.
+        if (meta.sessionLabel() == null || meta.sessionLabel().isBlank()) {
+            throw new ConflictException("paper identity incomplete: no session label "
+                    + "(refusing a nameless paper — supply --session-label at parse time)");
+        }
 
         Subject subject = resolveSubject(meta);
         UUID anchorTopic = createIngestionAnchor(meta, subject, ingestedBy);
@@ -93,10 +105,10 @@ public class PastPaperIngestionService {
 
         ExamPaper paper = examPapers.save(new ExamPaper(
                 subject.id(),
-                bound((meta.qualification() == null ? "" : meta.qualification()) + " "
-                        + (meta.subject() == null ? "" : meta.subject()) + " "
-                        + (paperCode == null ? meta.unit() : paperCode) + " "
-                        + (sessionLabel == null ? "" : sessionLabel), 200),
+                // title from printed identity only — null components are skipped, never
+                // string-concatenated as the literal "null" (the old behaviour produced
+                // titles like "null Summer 2013" whenever paperCode and unit were absent)
+                bound(paperTitle(meta, paperCode, sessionLabel), 200),
                 bound(nullSafe(meta.board(), "unknown-board"), 40),
                 bound(nullSafe(meta.qualification(), "unknown"), 20),
                 bound(meta.unit(), 60),
@@ -275,6 +287,21 @@ public class PastPaperIngestionService {
 
     private static String nullSafe(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * Human-readable paper title built ONLY from the printed identity components,
+     * skipping absent ones: e.g. "IGCSE Chemistry 4CH1/1C June 2020" or, when the
+     * parser could not recover a paper code, " Summer 2013".trim(). Never embeds
+     * the literal string "null" (the previous concatenation did exactly that).
+     */
+    private static String paperTitle(PastPaperDraftDto.PaperMeta meta, String paperCode,
+                                     String sessionLabel) {
+        String unit = paperCode != null ? paperCode : meta.unit();
+        String title = Stream.of(meta.qualification(), meta.subject(), unit, sessionLabel)
+                .filter(part -> part != null && !part.isBlank())
+                .collect(Collectors.joining(" ")).strip();
+        return title.isEmpty() ? "past paper" : title;
     }
 
     /** null-safe truncation for VARCHAR columns fed from untrusted draft input */
