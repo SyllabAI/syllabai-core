@@ -120,3 +120,34 @@ the two web items remain pending the `SYLLABAI_CORS_ORIGINS` setting — see
   research data matters before the tier's retention window.
 - **Scaling guard**: the pilot is ~50 students. Nothing here needs a paid
   tier; do not "fix" load with money before Cycle-1 evidence says so.
+
+## 5. Pilot monitoring (added 2026-09-13, session-58)
+
+Minimum operational monitoring, per the session-57/58 pilot-readiness
+conditions. No new observability system — it rides existing capability
+(GitHub Actions cron in the `syllabai-web` repo + the `DISCORD_WEBHOOK_URL`
+secret that already exists there):
+
+- **`.github/workflows/pilot-monitor.yml`** (web repo) — every 6 h, plus a
+  weekly ops run Sunday 09:33 UTC, executes `scripts/ops/pilot_probe.py`
+  against the deployed production URLs and posts a green/red report to the
+  existing Discord channel. Probed: backend health (cold-start tolerant),
+  CORS from the real web origin, auth-failure mode (401 not 5xx), anonymous
+  teacher-route guard, deployed **web-bundle freshness** (the four pilot UI
+  markers — subject-scoped practice, v1.1 cards, ConceptGraphView, 4CH1 UI),
+  the learner loop smoke (login → subjects → practice list → recommendations
+  with the pinned `nba-rules/v1.1` policy), subject-scoping + missing-param
+  regressions (f7adea7 / 5991187), and **4CH1/WCH11 contamination** (an
+  activated 4CH1 must serve zero questions). Teacher-surface checks
+  (concept-graph read + idempotent re-activation) activate automatically once
+  the `PILOT_TEACHER_*` secrets are set after the tutor account exists.
+- **`PILOT_MONITOR_EMAIL` / `PILOT_MONITOR_PASSWORD`** (web repo secrets) —
+  credentials of the `pilot.monitor@syllabai-test.dev` learner account
+  (TEST-classified, session-58), used read-only by the probe.
+- **`scripts/ops/export_evidence.sh`** (this repo) — the weekly evidence
+  export: run with `NEON_DSN` from the operator's credentials; writes CSVs +
+  a sha256 manifest for attempts, users, user_roles, skill_states,
+  misconception_states, review_schedules. The weekly Discord report carries
+  the reminder.
+- **κ / structured assessment**: reported as N/A by the probe until T-C04
+  ships validated structured content; the field becomes a real check then.
