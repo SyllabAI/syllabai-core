@@ -3,6 +3,7 @@ package com.syllabai.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.syllabai.assessment.ExamPaperRepository;
@@ -13,6 +14,7 @@ import com.syllabai.assessment.QuestionRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.dto.StudentQuestionView;
+import com.syllabai.content.CanonicalDocumentValidator;
 import com.syllabai.content.DocumentChunkRepository;
 import com.syllabai.content.DocumentRepository;
 import com.syllabai.content.EmbeddingProvider;
@@ -343,14 +345,23 @@ class GlmOcrBatchIT {
     }
 
     /** fresh canonical identity (documentId + source checksum) that the draft
-     *  claims — the bundle stays internally consistent, only its identity differs */
+     *  claims — the bundle stays internally consistent, only its identity differs.
+     *  P-6 (recovery 2026-09-13): the documentId must be RE-DERIVED from the
+     *  fresh checksum (same engine/engineVersion as the original canonical) —
+     *  a hand-crafted id now fails canonical validation at ingest, which would
+     *  arrive BEFORE the late duplicate-paper conflict this test exists to
+     *  exercise. */
     private static void reIdentify(Path canonicalFile, Path draftFile, String side)
             throws IOException {
         ObjectMapper mapper = new ObjectMapper();
-        String freshDocumentId = "00000000-0000-5000-8000-0000000000" + ("qp".equals(side) ? "1" : "2");
         String freshChecksum = "deadbeef0000400080000000000000" + ("qp".equals(side) ? "1" : "2");
 
         ObjectNode canonical = (ObjectNode) mapper.readTree(Files.readString(canonicalFile));
+        JsonNode provenance = canonical.path("provenance");
+        String freshDocumentId = CanonicalDocumentValidator.derivedDocumentId(
+                freshChecksum,
+                provenance.path("engine").asText(null),
+                provenance.path("engineVersion").asText(null));
         canonical.put("documentId", freshDocumentId);
         ((ObjectNode) canonical.get("source")).put("checksum", freshChecksum);
         Files.writeString(canonicalFile, mapper.writeValueAsString(canonical));

@@ -188,10 +188,13 @@ public class CanonicalDocumentValidator {
      * rejected): SHA-256 over
      * {@code "sha256:<checksum>|engine:<engine>|version:<engineVersion>"}
      * (components lowercased/stripped, null → ""), first 128 bits as a UUID
-     * with version nibble 5 and RFC-4122 variant bits. Package-private so test
-     * fixtures mint valid derived ids through the same code.
+     * with version nibble 5 and RFC-4122 variant bits. Public since the
+     * recovery-2026-09-13 session: cross-package integration tests (the IT
+     * packages live under com.syllabai.it) also mint valid derived ids, and a
+     * test-local copy would be a THIRD derivation implementation to keep in
+     * lockstep — the exact drift risk this mirror exists to prevent.
      */
-    static String derivedDocumentId(String checksumHex, String engine,
+    public static String derivedDocumentId(String checksumHex, String engine,
                                             String engineVersion) {
         String material = "sha256:" + component(checksumHex)
                 + "|engine:" + component(engine)
