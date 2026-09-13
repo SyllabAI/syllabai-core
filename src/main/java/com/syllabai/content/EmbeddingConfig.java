@@ -46,6 +46,7 @@ public class EmbeddingConfig {
             throw new IllegalStateException("syllabai.embedding.gemini.dimension must be 768 "
                     + "(pgvector column vector(768), migration V11) — was " + gemini.dimension());
         }
-        return new GeminiEmbeddingProvider(gemini.apiKey(), gemini.model(), gemini.dimension());
+        return new GeminiEmbeddingProvider(gemini.apiKey(), gemini.model(), gemini.dimension(),
+                gemini.timeoutSeconds());
     }
 }

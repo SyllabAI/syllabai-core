@@ -128,6 +128,7 @@ syllabai:
       api-key: ${SYLLABAI_EMBEDDING_GEMINI_API_KEY:}
       model: text-embedding-004
       dimension: 768
+      timeout-seconds: 30     # per-call bound (C-5): a hung Gemini call fails loud instead of pinning the caller
 
   learner:
     bkt:

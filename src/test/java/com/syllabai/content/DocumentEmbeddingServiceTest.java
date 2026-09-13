@@ -15,6 +15,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * T-013: embedding is idempotent (pending chunks only), dimension mismatches fail
@@ -31,7 +33,9 @@ class DocumentEmbeddingServiceTest {
     private final ObjectProvider<EmbeddingProvider> provider = mock(ObjectProvider.class);
 
     private final DocumentEmbeddingService service =
-            new DocumentEmbeddingService(provider, chunks, vectors, documents);
+            new DocumentEmbeddingService(provider, chunks, vectors, documents,
+                    // mock PTM: getTransaction/commit are no-ops, the store callback still runs
+                    new TransactionTemplate(mock(PlatformTransactionManager.class)));
 
     private final UUID docId = UUID.randomUUID();
     private final Document doc = new Document("canonical-1", "1.0", 1,
