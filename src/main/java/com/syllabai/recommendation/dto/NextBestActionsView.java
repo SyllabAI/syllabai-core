@@ -32,15 +32,21 @@ public record NextBestActionsView(
         /** ask the Tutor for a grounded explanation (misconception / self-doubt) */
         ASK_TUTOR,
         /** practise under timed conditions to close a measured fluency gap */
-        TIMED_EXERCISE
+        TIMED_EXERCISE,
+        /** study the corrective concept a validated REMEDIATED_BY edge names for an active misconception (v1.1) */
+        REMEDIATE_MISCONCEPTION
     }
 
     /** Which deterministic rule produced the action (auditable, evidence-backed). */
     public enum ReasonCode {
         DUE_REVIEW,
         PREREQUISITE_WEAK,
+        /** v1.1: a HUMAN_VALIDATED T-C11 prerequisite chain nominated the target (learner evidence gated it) */
+        VALIDATED_PREREQUISITE_CHAIN,
         PROBLEM_QUESTION,
         MISCONCEPTION_SUSPECTED,
+        /** v1.1: a HUMAN_VALIDATED T-C11 REMEDIATED_BY edge named the corrective target */
+        MISCONCEPTION_REMEDIATION,
         FLUENCY_GAP,
         LOW_MASTERY,
         UNCOVERED_TOPIC

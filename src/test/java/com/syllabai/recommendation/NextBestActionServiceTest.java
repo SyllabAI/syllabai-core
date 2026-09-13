@@ -23,6 +23,7 @@ import com.syllabai.learner.decay.EbbinghausDecayService;
 import com.syllabai.recommendation.dto.NextBestActionsView;
 import com.syllabai.recommendation.dto.NextBestActionsView.ActionType;
 import com.syllabai.recommendation.dto.NextBestActionsView.ReasonCode;
+import com.syllabai.recommendation.ConceptDependencyGraph;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,6 +39,12 @@ import org.mockito.Mockito;
  * subject-subtree hard constraint, keep one action per topic, cap the response,
  * and be fully deterministic. No reason string is invented — each carries the
  * measured values that produced it.
+ *
+ * <p>All pre-existing tests construct the service with
+ * {@link ConceptDependencyGraph#empty()}: the v1.1 graph-aware stages (T2b/T4b)
+ * must be inert without applicable validated relationships, so the v1 baseline
+ * below is also the Case-C no-graph-evidence regression proof. The graph-aware
+ * behaviour itself is covered by the T2b/T4b test group at the bottom.</p>
  */
 class NextBestActionServiceTest {
 
@@ -62,7 +69,7 @@ class NextBestActionServiceTest {
             graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
             new LearnerProperties(null, null, null, null),
             new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-            answers, servableQuestions);
+            answers, servableQuestions, ConceptDependencyGraph.empty());
 
     // ── fixtures ───────────────────────────────────────────────────
 
@@ -176,7 +183,7 @@ class NextBestActionServiceTest {
         assertThat(view.actions().get(1).targetNodeId()).isEqualTo(TOPIC_B);
         assertThat(view.actions().stream().map(a -> a.targetNodeId()))
                 .doesNotContain(OUTSIDE);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.1");
         assertThat(view.actions().get(0).rank()).isEqualTo(1);
         assertThat(view.actions().get(1).rank()).isEqualTo(2);
     }
@@ -446,5 +453,419 @@ class NextBestActionServiceTest {
         assertThat(view.learnerId()).isEqualTo(LEARNER);
         assertThat(view.rootId()).isEqualTo(ROOT);
         assertThat(view.asOf()).isNotNull();
+    }
+
+    // ── T2b/T4b — graph-aware stages (v1.1, settled T-C11 concept graph) ──
+    //
+    // Fixtures use REAL edges of the settled store (Batch-4 close, 2026-09-13):
+    //   Case A: 4CH1-CON-BOND-ENERGY-CALC -REQUIRES_PREREQUISITE-> 4CH1-CON-COVALENT-BOND (HUMAN_VALIDATED)
+    //   Case B: 4CH1-MIS-BOND-ENERGY-COUNT -REMEDIATED_BY-> 4CH1-CON-BOND-ENERGY-CALC     (HUMAN_VALIDATED)
+    //   Case D frozen edges (must stay excluded):
+    //     4CH1-CON-REACTING-MASS -REQUIRES_PREREQUISITE-> 4CH1-CON-EQ-SYMBOL              (SUGGESTED pilot HOLD)
+    //     4CH1-MIS-EQ-SUBSCRIPT -REMEDIATED_BY-> 4CH1-CON-CONSERVATION-MASS               (SUGGESTED pilot HOLD)
+    //     4CH1-CON-CRYSTALLISATION -REQUIRES_PREREQUISITE-> 4CH1-CON-SOLUTION             (REVIEW_REQUIRED)
+
+    private static final String CODE_BEC = "4CH1-CON-BOND-ENERGY-CALC";
+    private static final String CODE_COV = "4CH1-CON-COVALENT-BOND";
+    private static final String CODE_MIS_BEC = "4CH1-MIS-BOND-ENERGY-COUNT";
+    private static final String CODE_RM = "4CH1-CON-REACTING-MASS";
+    private static final String CODE_EQS = "4CH1-CON-EQ-SYMBOL";
+    private static final String CODE_MIS_EQS = "4CH1-MIS-EQ-SUBSCRIPT";
+    private static final String CODE_CONM = "4CH1-CON-CONSERVATION-MASS";
+    private static final String CODE_CRY = "4CH1-CON-CRYSTALLISATION";
+    private static final String CODE_SOL = "4CH1-CON-SOLUTION";
+
+    private static final UUID LEARNER2 = UUID.randomUUID();
+    private static final UUID G_ROOT = UUID.randomUUID();
+    private static final UUID G_UNIT = UUID.randomUUID();
+    private static final UUID G_BEC = UUID.randomUUID();
+    private static final UUID G_COV = UUID.randomUUID();
+    private static final UUID G_MIS_BEC = UUID.randomUUID();
+    private static final UUID G_RM = UUID.randomUUID();
+    private static final UUID G_EQS = UUID.randomUUID();
+    private static final UUID G_MIS_EQS = UUID.randomUUID();
+    private static final UUID G_CONM = UUID.randomUUID();
+    private static final UUID G_CRY = UUID.randomUUID();
+    private static final UUID G_SOL = UUID.randomUUID();
+
+    private static java.util.Set<String> codes(String... more) {
+        java.util.Set<String> all = new java.util.HashSet<>(java.util.List.of(
+                CODE_BEC, CODE_COV, CODE_MIS_BEC, CODE_RM, CODE_EQS,
+                CODE_MIS_EQS, CODE_CONM, CODE_CRY, CODE_SOL));
+        all.addAll(java.util.Arrays.asList(more));
+        return java.util.Set.copyOf(all);
+    }
+
+    private static ConceptDependencyGraph.RawEdge edge(String source, String relation,
+                                                       String target, String status) {
+        return new ConceptDependencyGraph.RawEdge(source, relation, target, status);
+    }
+
+    /** the two validated edges of the settled slice + their frozen non-validated counterparts (Case-D companions) */
+    private static ConceptDependencyGraph settledSliceGraph() {
+        return ConceptDependencyGraph.of(List.of(
+                edge(CODE_BEC, "REQUIRES_PREREQUISITE", CODE_COV, "HUMAN_VALIDATED"),
+                edge(CODE_MIS_BEC, "REMEDIATED_BY", CODE_BEC, "HUMAN_VALIDATED"),
+                // frozen non-validated counterparts of the same shapes — must never act
+                edge(CODE_RM, "REQUIRES_PREREQUISITE", CODE_EQS, "SUGGESTED"),        // pilot HOLD
+                edge(CODE_MIS_EQS, "REMEDIATED_BY", CODE_CONM, "SUGGESTED"),          // pilot HOLD
+                edge(CODE_CRY, "REQUIRES_PREREQUISITE", CODE_SOL, "REVIEW_REQUIRED")),
+                codes());
+    }
+
+    /** SUBJECT → UNIT → CON-BOND-ENERGY-CALC (with MIS-BOND-ENERGY-COUNT folded in) + CON-COVALENT-BOND */
+    private NodeView settledSliceTree() {
+        NodeView mis = node(G_MIS_BEC, CODE_MIS_BEC, "MISCONCEPTION",
+                "Counts every bond occurrence as one bond in bond-energy sums");
+        NodeView bec = node(G_BEC, CODE_BEC, "TOPIC",
+                "Bond energy calculations", List.of(mis));
+        NodeView cov = node(G_COV, CODE_COV, "TOPIC", "Covalent bond");
+        NodeView unit = node(G_UNIT, "4CH1-S3", "UNIT", "Section 3 Physical", List.of(bec, cov));
+        return node(G_ROOT, "4CH1", "SUBJECT", "Edexcel IGCSE Chemistry", List.of(unit));
+    }
+
+    private void givenSettledSliceNoEvidence() {
+        when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(settledSliceTree());
+        when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
+                LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
+        when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
+    }
+
+    @Test
+    @DisplayName("Case A: established-weak dependent + validated prerequisite chain → REVIEW_PREREQUISITE on the unmeasured prerequisite, honestly worded; dependent keeps its own action")
+    void validatedPrerequisiteChainNominatesRemediation() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).hasSize(2);
+        var action = view.actions().get(0);
+        assertThat(action.actionType()).isEqualTo(ActionType.REVIEW_PREREQUISITE);
+        assertThat(action.reasonCode()).isEqualTo(ReasonCode.VALIDATED_PREREQUISITE_CHAIN);
+        assertThat(action.targetNodeId()).isEqualTo(G_COV);
+        assertThat(action.targetCode()).isEqualTo(CODE_COV);
+        assertThat(action.reasonDetail()).contains(CODE_BEC);              // names the dependent
+        assertThat(action.reasonDetail()).contains("0.20");               // measured weakness
+        assertThat(action.reasonDetail()).contains("not yet measured");   // honest about the prerequisite
+        // remediation outranks downstream practice — it does not replace it
+        assertThat(view.actions().get(1).actionType()).isEqualTo(ActionType.PRACTISE_QUESTIONS);
+        assertThat(view.actions().get(1).reasonCode()).isEqualTo(ReasonCode.LOW_MASTERY);
+        assertThat(view.actions().get(1).targetNodeId()).isEqualTo(G_BEC);
+    }
+
+    @Test
+    @DisplayName("Case A evidence gate: a prerequisite measured strong overrides the graph's nomination — no remediation, dependent practices")
+    void measuredStrongPrerequisiteOverridesGraph() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
+                skill(G_BEC, 3, 0.20),
+                skill(G_COV, 4, 0.90)));
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).noneMatch(a -> a.actionType() == ActionType.REVIEW_PREREQUISITE);
+        assertThat(view.actions()).singleElement()
+                .satisfies(a -> {
+                    assertThat(a.reasonCode()).isEqualTo(ReasonCode.LOW_MASTERY);
+                    assertThat(a.targetNodeId()).isEqualTo(G_BEC);
+                });
+    }
+
+    @Test
+    @DisplayName("graph edges are not learner state: the full graph with zero learner evidence produces zero graph actions")
+    void graphWithoutLearnerEvidenceNeverActs() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+
+        assertThat(graphService.actionsFor(LEARNER, G_ROOT).actions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Case B: active misconception + validated REMEDIATED_BY → corrective action on the concept; the ASK_TUTOR action is preserved")
+    void validatedRemediationSurfacesCorrectiveAction() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
+                List.of(misconception(G_MIS_BEC, 0.75)));
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).hasSize(2);
+        assertThat(view.actions().get(0).actionType()).isEqualTo(ActionType.ASK_TUTOR);   // existing T4, unchanged
+        assertThat(view.actions().get(0).targetNodeId()).isEqualTo(G_MIS_BEC);
+        var corrective = view.actions().get(1);
+        assertThat(corrective.actionType()).isEqualTo(ActionType.REMEDIATE_MISCONCEPTION);
+        assertThat(corrective.reasonCode()).isEqualTo(ReasonCode.MISCONCEPTION_REMEDIATION);
+        assertThat(corrective.targetNodeId()).isEqualTo(G_BEC);                        // the corrective concept
+        assertThat(corrective.targetCode()).isEqualTo(CODE_BEC);
+        assertThat(corrective.reasonDetail()).contains(CODE_MIS_BEC);                  // traces the misconception
+        assertThat(corrective.reasonDetail()).contains("0.75");                        // measured probability
+        assertThat(corrective.reasonDetail()).contains("validated remediation");
+    }
+
+    @Test
+    @DisplayName("Case B threshold: a below-threshold misconception produces no remediation action at all")
+    void belowThresholdMisconceptionNoRemediation() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
+                List.of(misconception(G_MIS_BEC, 0.20)));
+
+        assertThat(graphService.actionsFor(LEARNER, G_ROOT).actions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Case D: frozen pilot HOLD (SUGGESTED) and REVIEW_REQUIRED edges never affect authoritative output — only the validated counterparts act")
+    void frozenEdgesExcludedFromAuthoritativeOutput() {
+        ConceptDependencyGraph mixed = ConceptDependencyGraph.of(List.of(
+                edge(CODE_BEC, "REQUIRES_PREREQUISITE", CODE_COV, "HUMAN_VALIDATED"),
+                edge(CODE_RM, "REQUIRES_PREREQUISITE", CODE_EQS, "SUGGESTED"),        // frozen pilot HOLD
+                edge(CODE_MIS_EQS, "REMEDIATED_BY", CODE_CONM, "SUGGESTED"),          // frozen pilot HOLD
+                edge(CODE_CRY, "REQUIRES_PREREQUISITE", CODE_SOL, "REVIEW_REQUIRED")),
+                codes());
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, mixed);
+        // the tree carries every code the frozen edges touch, so any leakage would surface
+        NodeView misEqs = node(G_MIS_EQS, CODE_MIS_EQS, "MISCONCEPTION", "Subscripts in equations");
+        NodeView eqs = node(G_EQS, CODE_EQS, "TOPIC", "State symbols", List.of(misEqs));
+        NodeView rm = node(G_RM, CODE_RM, "TOPIC", "Reacting mass calculations");
+        NodeView conm = node(G_CONM, CODE_CONM, "TOPIC", "Conservation of mass");
+        NodeView cry = node(G_CRY, CODE_CRY, "TOPIC", "Crystallisation");
+        NodeView sol = node(G_SOL, CODE_SOL, "TOPIC", "Solution preparation");
+        NodeView bec = node(G_BEC, CODE_BEC, "TOPIC", "Bond energy calculations");
+        NodeView cov = node(G_COV, CODE_COV, "TOPIC", "Covalent bond");
+        NodeView unit = node(G_UNIT, "4CH1", "UNIT", "Edexcel IGCSE Chemistry",
+                List.of(bec, cov, eqs, rm, conm, cry, sol));
+        when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(
+                node(G_ROOT, "4CH1-ROOT", "SUBJECT", "Chemistry", List.of(unit)));
+        when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
+                skill(G_BEC, 3, 0.20),     // would trigger the validated BEC→COV edge
+                skill(G_RM, 3, 0.15),      // would trigger the SUGGESTED RM→EQS edge if it leaked
+                skill(G_CRY, 3, 0.10)));   // would trigger the RR CRY→SOL edge if it leaked
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
+                List.of(misconception(G_MIS_EQS, 0.75)));   // would trigger the SUGGESTED RB edge if it leaked
+        when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
+                LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
+        when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(0);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        // exactly one graph-derived action: the validated chain
+        assertThat(view.actions().stream()
+                .filter(a -> a.reasonCode() == ReasonCode.VALIDATED_PREREQUISITE_CHAIN))
+                .singleElement()
+                .satisfies(a -> assertThat(a.targetNodeId()).isEqualTo(G_COV));
+        // none of the frozen edges' targets may receive any action
+        assertThat(view.actions().stream().map(NextBestActionsView.NextBestActionView::targetNodeId))
+                .doesNotContain(G_EQS, G_CONM, G_SOL);
+        assertThat(view.actions())
+                .noneMatch(a -> a.actionType() == ActionType.REMEDIATE_MISCONCEPTION);
+    }
+
+    @Test
+    @DisplayName("Case C: a populated graph whose codes match nothing in the KG subtree leaves the baseline output unchanged")
+    void graphWithNoMatchingCodesLeavesBaselineUnchanged() {
+        NextBestActionService withGraph = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenTree();   // the IAL-coded tree — no T-C11 code matches
+        givenNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
+                skill(TOPIC_A, 2, 0.30), skill(TOPIC_B, 3, 0.20)));
+
+        assertThat(withGraph.actionsFor(LEARNER, ROOT).actions())
+                .containsExactlyElementsOf(service.actionsFor(LEARNER, ROOT).actions());
+    }
+
+    @Test
+    @DisplayName("subject isolation: a graph candidate whose prerequisite sits outside the requested root's subtree is invisible")
+    void graphEndpointsOutsideSubtreeIgnored() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        // the tree carries BEC but NOT CON-COVALENT-BOND (it lives under another root)
+        NodeView bec = node(G_BEC, CODE_BEC, "TOPIC", "Bond energy calculations");
+        NodeView unit = node(G_UNIT, "4CH1-S3", "UNIT", "Section 3 Physical", List.of(bec));
+        when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(
+                node(G_ROOT, "4CH1", "SUBJECT", "Edexcel IGCSE Chemistry", List.of(unit)));
+        when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
+                LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
+        when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).noneMatch(a -> a.actionType() == ActionType.REVIEW_PREREQUISITE);
+        assertThat(view.actions()).singleElement()
+                .satisfies(a -> {
+                    assertThat(a.reasonCode()).isEqualTo(ReasonCode.LOW_MASTERY);
+                    assertThat(a.targetNodeId()).isEqualTo(G_BEC);
+                });
+    }
+
+    @Test
+    @DisplayName("learner isolation: same graph, different evidence — only the learner with weakness gets the graph-informed action")
+    void learnerIsolationSameGraphDifferentEvidence() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(settledSliceTree());
+        when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
+        when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
+                Mockito.any(UUID.class), Mockito.eq(ReviewSchedule.Status.PENDING)))
+                .thenReturn(List.of());
+        when(answers.findByLearnerIdOrderByCreatedAtDesc(Mockito.any(UUID.class)))
+                .thenReturn(List.of());
+        // countServableByTopic deliberately left unstubbed (returns 0): no validated
+        // questions ⇒ no T7 uncovered-topic noise — the isolation claim is about
+        // the graph stage alone
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
+        when(learnerModel.skillStates(LEARNER2)).thenReturn(List.of());
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionStates(LEARNER2)).thenReturn(List.of());
+
+        NextBestActionsView learner1 = graphService.actionsFor(LEARNER, G_ROOT);
+        NextBestActionsView learner2 = graphService.actionsFor(LEARNER2, G_ROOT);
+
+        assertThat(learner1.actions().stream()
+                .map(NextBestActionsView.NextBestActionView::reasonCode))
+                .contains(ReasonCode.VALIDATED_PREREQUISITE_CHAIN);
+        assertThat(learner2.actions()).isEmpty();   // same graph, zero evidence ⇒ zero actions
+    }
+
+    @Test
+    @DisplayName("deterministic with a populated graph: identical evidence ⇒ identical ranked actions")
+    void deterministicWithPopulatedGraph() {
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph());
+        givenSettledSliceNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
+                List.of(misconception(G_MIS_BEC, 0.75)));
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
+
+        NextBestActionsView first = graphService.actionsFor(LEARNER, G_ROOT);
+        NextBestActionsView second = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(first.actions()).containsExactlyElementsOf(second.actions());
+    }
+
+    @Test
+    @DisplayName("maxActions still caps graph candidates: ten validated chains surface at most 8 actions")
+    void maxActionsCapsGraphCandidates() {
+        List<ConceptDependencyGraph.RawEdge> raw = new ArrayList<>();
+        java.util.Set<String> allCodes = new java.util.HashSet<>();
+        List<NodeView> dependents = new ArrayList<>();
+        List<SkillState> weak = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            String depCode = "4CH1-CON-DEP-" + i;
+            String preCode = "4CH1-CON-PRE-" + i;
+            raw.add(edge(depCode, "REQUIRES_PREREQUISITE", preCode, "HUMAN_VALIDATED"));
+            allCodes.add(depCode);
+            allCodes.add(preCode);
+            UUID depId = UUID.randomUUID();
+            UUID preId = UUID.randomUUID();
+            dependents.add(node(depId, depCode, "TOPIC", "Dependent " + i));
+            dependents.add(node(preId, preCode, "TOPIC", "Prerequisite " + i));
+            weak.add(skill(depId, 3, 0.10 + i * 0.01));
+        }
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, ConceptDependencyGraph.of(raw, allCodes));
+        NodeView unit = node(G_UNIT, "4CH1", "UNIT", "Unit", dependents);
+        when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(
+                node(G_ROOT, "4CH1-ROOT", "SUBJECT", "Chemistry", List.of(unit)));
+        when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
+        when(learnerModel.skillStates(LEARNER)).thenReturn(weak);
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
+                LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
+        when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(1);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).hasSize(8);   // properties.maxActions default
+        assertThat(view.actions()).allMatch(a -> a.actionType() == ActionType.REVIEW_PREREQUISITE);
+        assertThat(view.actions().get(7).rank()).isEqualTo(8);
+    }
+
+    @Test
+    @DisplayName("the REAL settled store (packaged snapshot) drives both graph-aware stages from real learner evidence")
+    void realSettledStoreDrivesRecommendations() {
+        // 153 HUMAN_VALIDATED semantic edges of the closed Batch-4 store, loaded
+        // through the same SHA-256-pinned loader the Spring context uses
+        ConceptDependencyGraph settled = new ConceptDependencyGraphLoader().load();
+        assertThat(settled.validatedEdgeCount()).isEqualTo(153);
+        NextBestActionService graphService = new NextBestActionService(
+                graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
+                new LearnerProperties(null, null, null, null),
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settled);
+        givenSettledSliceNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
+        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
+                List.of(misconception(G_MIS_BEC, 0.75)));
+        when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
+
+        NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
+
+        assertThat(view.actions()).hasSize(3);
+        assertThat(view.actions().get(0).reasonCode()).isEqualTo(ReasonCode.VALIDATED_PREREQUISITE_CHAIN);
+        assertThat(view.actions().get(0).targetNodeId()).isEqualTo(G_COV);
+        assertThat(view.actions().get(1).actionType()).isEqualTo(ActionType.ASK_TUTOR);
+        assertThat(view.actions().get(2).actionType()).isEqualTo(ActionType.REMEDIATE_MISCONCEPTION);
+        assertThat(view.actions().get(2).targetNodeId()).isEqualTo(G_BEC);
+        // the wrong-answer-pattern edge of the same misconception is loaded but NOT
+        // consumed by the NBA (only REQUIRES_PREREQUISITE and REMEDIATED_BY are)
+        assertThat(view.actions()).noneMatch(a -> a.targetCode().equals(CODE_MIS_BEC)
+                && a.actionType() == ActionType.REMEDIATE_MISCONCEPTION);
     }
 }

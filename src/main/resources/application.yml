@@ -74,8 +74,11 @@ syllabai:
     max-tokens: 900
 
   recommendation:
-    # nba-rules/v1 deterministic baseline (T-033 / ADR-017) — product tuning
-    # parameters, not scientific claims; overridable per environment
+    # nba-rules/v1.1 deterministic baseline (T-033 / ADR-017) — product tuning
+    # parameters, not scientific claims; overridable per environment.
+    # 2026-09-13: v1.1 adds the settled T-C11 concept-graph candidate sources
+    # (T2b prerequisite chains / T4b misconception remediation); thresholds and
+    # tier order unchanged — the graph layer is code-side, needs no config here.
     weak-mastery-ceiling: 0.45       # below the decay LOW band ceiling ⇒ practice
     fluency-gap-threshold: 0.2       # |untimed − timed| accuracy gap ⇒ timed exercise
     problem-mark-ratio: 0.5          # awarded/max at or below ⇒ retry the question

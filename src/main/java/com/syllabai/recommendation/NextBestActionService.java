@@ -6,6 +6,8 @@ import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeGraphService.PrerequisiteRelation;
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.recommendation.ConceptDependencyGraph.Edge;
+import com.syllabai.recommendation.ConceptDependencyGraph.SemanticRelation;
 import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.MisconceptionState;
@@ -32,7 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Deterministic next-best-learning-action engine (F-092 minimal Cycle-1 slice,
- * ADR-017 learning-first baseline: {@code nba-rules/v1}).
+ * ADR-017 learning-first baseline: {@code nba-rules/v1.1}).
  *
  * <p>Hard constraints before any ranking (RECOMMENDATION_SYSTEM_ARCHITECTURE.md §4):
  * every candidate is drawn from the requested subject root's subtree
@@ -50,6 +52,20 @@ import org.springframework.transaction.annotation.Transactional;
  * epsilon-greedy). One action per target topic keeps the portfolio diverse (§16);
  * output is capped at {@code maxActions}.</p>
  *
+ * <p><strong>v1.1 (2026-09-13):</strong> the settled T-C11 concept graph joins the
+ * engine as a structured dependency layer ({@link ConceptDependencyGraph}),
+ * matched to the subject subtree by KG node <em>code</em>. Two graph-aware
+ * candidate stages extend the prerequisite and misconception tiers: T2b
+ * (validated {@code REQUIRES_PREREQUISITE} chains nominate remediation targets)
+ * and T4b (validated {@code REMEDIATED_BY} edges nominate corrective concepts).
+ * The graph never overrides deterministic learner evidence and never invents
+ * mastery: every graph candidate still requires measured weakness or an active
+ * BDT state on the learner's side, a prerequisite measured strong is skipped
+ * in favour of the evidence, and only HUMAN_VALIDATED relationships can enter
+ * (held/REVIEW_REQUIRED edges are excluded at the graph layer by construction).
+ * With no applicable validated relationship the tiers below are unchanged —
+ * existing behaviour is preserved by design.</p>
+ *
  * <p>Read-only by construction: consumes the same verified read services as the
  * learner-state and personalized-graph endpoints (the T-028/T-034 pattern —
  * server composes, no client-side joins, no new persistence, no parallel
@@ -59,7 +75,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NextBestActionService {
 
-    public static final String POLICY = "nba-rules/v1";
+    /** v1.1: graph-aware candidate sources (T-C11 settled dependency layer) added; tiers and thresholds unchanged. */
+    public static final String POLICY = "nba-rules/v1.1";
 
     private final KnowledgeGraphService graph;
     private final LearnerModelService learnerModel;
@@ -69,6 +86,7 @@ public class NextBestActionService {
     private final RecommendationProperties properties;
     private final AnswerRepository answers;
     private final ServableQuestionService servableQuestions;
+    private final ConceptDependencyGraph conceptGraph;
 
     public NextBestActionService(KnowledgeGraphService graph,
                                  LearnerModelService learnerModel,
@@ -77,7 +95,8 @@ public class NextBestActionService {
                                  LearnerProperties learnerProperties,
                                  RecommendationProperties properties,
                                  AnswerRepository answers,
-                                 ServableQuestionService servableQuestions) {
+                                 ServableQuestionService servableQuestions,
+                                 ConceptDependencyGraph conceptGraph) {
         this.graph = graph;
         this.learnerModel = learnerModel;
         this.reviewSchedules = reviewSchedules;
@@ -86,6 +105,7 @@ public class NextBestActionService {
         this.properties = properties;
         this.answers = answers;
         this.servableQuestions = servableQuestions;
+        this.conceptGraph = conceptGraph;
     }
 
     public NextBestActionsView actionsFor(UUID learnerId, UUID rootId) {
@@ -106,10 +126,13 @@ public class NextBestActionService {
         }
 
         // flatten the subtree once: node registry + parent-of (misconceptions attach
-        // as children of topics) + effective mastery for practised nodes
+        // as children of topics) + effective mastery for practised nodes + the
+        // code registry the T-C11 concept graph joins against (node code is the
+        // stable identity shared by both stores)
         Map<UUID, NodeView> byId = new HashMap<>();
         Map<UUID, UUID> parentOf = new HashMap<>();
-        collect(tree, null, byId, parentOf);
+        Map<String, NodeView> byCode = new HashMap<>();
+        collect(tree, null, byId, parentOf, byCode);
         Map<UUID, Double> effective = new HashMap<>();
         for (Map.Entry<UUID, SkillState> e : skills.entrySet()) {
             if (byId.containsKey(e.getKey())) {
@@ -179,6 +202,60 @@ public class NextBestActionService {
                             + fmt(c.dependentEff()) + " on the dependent topic"));
         }
 
+        // T2b — validated prerequisite chain (T-C11 concept graph): the dependent
+        // topic is established-weak from measured evidence AND a HUMAN_VALIDATED
+        // REQUIRES_PREREQUISITE edge names its prerequisite ⇒ remediate toward the
+        // prerequisite. The graph only NOMINATES the target; deterministic learner
+        // evidence gates it — a prerequisite measured strong is skipped in favour of
+        // the evidence, and an unmeasured prerequisite is reported honestly as
+        // unmeasured, never as weak. Both endpoints must resolve inside this
+        // subject's subtree (hard subject isolation for graph candidates too).
+        record ChainCandidate(String dependentCode, String dependentTitle, double dependentEff,
+                               int dependentAttempts, UUID prerequisiteId, String prerequisiteState) { }
+        Map<UUID, ChainCandidate> chainByPrerequisite = new HashMap<>();
+        for (Edge edge : conceptGraph.edges(SemanticRelation.REQUIRES_PREREQUISITE)) {
+            NodeView dependent = byCode.get(edge.source());
+            NodeView prerequisite = byCode.get(edge.target());
+            if (dependent == null || prerequisite == null) continue;   // not in this subtree
+            SkillState dep = skills.get(dependent.id());
+            if (dep == null) continue;   // no learner evidence on the dependent — the graph alone never acts
+            Double depEff = effective.get(dependent.id());
+            if (depEff == null || dep.attempts() < properties.minAttemptsForWeakness()
+                    || depEff >= properties.weakMasteryCeiling()) continue;   // dependent not established-weak
+            SkillState pre = skills.get(prerequisite.id());
+            String prerequisiteState;
+            if (pre == null) {
+                prerequisiteState = "not yet measured for this learner";
+            } else {
+                Double preEff = effective.get(prerequisite.id());
+                if (preEff != null && pre.attempts() >= 1
+                        && preEff >= properties.weakMasteryCeiling()) {
+                    continue;   // measured strength overrides the graph's nomination
+                }
+                prerequisiteState = "measured mastery " + fmt(preEff == null ? pre.mastery() : preEff)
+                        + " over " + pre.attempts() + " attempt(s)";
+            }
+            chainByPrerequisite.putIfAbsent(prerequisite.id(), new ChainCandidate(
+                    dependent.code(), dependent.title(), depEff, dep.attempts(),
+                    prerequisite.id(), prerequisiteState));
+        }
+        List<ChainCandidate> chainCandidates = new ArrayList<>(chainByPrerequisite.values());
+        chainCandidates.sort(Comparator.comparing(c -> byId.get(c.prerequisiteId()).code()));
+        for (ChainCandidate c : chainCandidates) {
+            if (ranked.size() >= properties.maxActions()) break;
+            NodeView node = byId.get(c.prerequisiteId());
+            if (!topicsWithActions.add(node.id())) continue;
+            ranked.add(new NextBestActionView(0, ActionType.REVIEW_PREREQUISITE,
+                    ReasonCode.VALIDATED_PREREQUISITE_CHAIN,
+                    node.id(), node.code(), node.title(), null,
+                    servableCount(node, servableCount),
+                    "Validated prerequisite chain: " + c.dependentCode() + " ("
+                            + c.dependentTitle() + ") measured " + fmt(c.dependentEff())
+                            + " over " + c.dependentAttempts() + " attempts requires "
+                            + node.code() + " — prerequisite " + c.prerequisiteState()
+                            + "; strengthen the foundation first"));
+        }
+
         // T3 — low-mark problem questions: most recent graded answers at/below the
         // ratio threshold, only where the question is still servable and its primary
         // topic is inside this subject (conservative isolation — secondary
@@ -238,6 +315,46 @@ public class NextBestActionService {
                     "Misconception probability " + fmt(m.probability()) + " from "
                             + m.evidenceCount() + " evidence item(s)" + parent
                             + " — ask the Tutor for a grounded explanation"));
+        }
+
+        // T4b — validated misconception remediation (T-C11 concept graph): the
+        // learner's BDT evidence is active on a misconception AND a
+        // HUMAN_VALIDATED REMEDIATED_BY edge names its corrective concept ⇒
+        // surface the corrective action on that concept. The misconception node
+        // itself keeps its ASK_TUTOR action above (existing behaviour); this adds
+        // the graph-directed leg — what to STUDY to correct it. Both endpoints
+        // must resolve inside this subject's subtree (subject isolation).
+        record CorrectiveCandidate(double probability, int evidenceCount,
+                                   NodeView misconception, NodeView corrective) { }
+        List<CorrectiveCandidate> correctiveCandidates = new ArrayList<>();
+        for (Edge edge : conceptGraph.edges(SemanticRelation.REMEDIATED_BY)) {
+            NodeView misNode = byCode.get(edge.source());
+            NodeView corrective = byCode.get(edge.target());
+            if (misNode == null || corrective == null) continue;   // not in this subtree
+            MisconceptionState m = misconceptions.get(misNode.id());
+            if (m == null || m.probability() < learnerProperties.bdt().activeThreshold()) {
+                continue;   // no active learner evidence — the graph alone never acts
+            }
+            correctiveCandidates.add(new CorrectiveCandidate(
+                    m.probability(), m.evidenceCount(), misNode, corrective));
+        }
+        correctiveCandidates.sort(Comparator
+                .comparingDouble(CorrectiveCandidate::probability).reversed()
+                .thenComparing(cc -> cc.misconception().code())
+                .thenComparing(cc -> cc.corrective().code()));
+        for (CorrectiveCandidate cc : correctiveCandidates) {
+            if (ranked.size() >= properties.maxActions()) break;
+            NodeView node = cc.corrective();
+            if (!topicsWithActions.add(node.id())) continue;
+            ranked.add(new NextBestActionView(0, ActionType.REMEDIATE_MISCONCEPTION,
+                    ReasonCode.MISCONCEPTION_REMEDIATION,
+                    node.id(), node.code(), node.title(), null,
+                    servableCount(node, servableCount),
+                    "Misconception " + cc.misconception().code() + " ("
+                            + cc.misconception().title() + ") probability " + fmt(cc.probability())
+                            + " from " + cc.evidenceCount() + " evidence item(s)"
+                            + " — validated remediation: study " + node.code() + " ("
+                            + node.title() + "), then ask the Tutor for the corrective explanation"));
         }
 
         // T5 — timed-vs-untimed fluency gaps (Paper B §16 / F-162)
@@ -324,13 +441,15 @@ public class NextBestActionService {
     // ── internals ──────────────────────────────────────────────────
 
     private void collect(NodeView node, UUID parentId,
-                         Map<UUID, NodeView> byId, Map<UUID, UUID> parentOf) {
+                         Map<UUID, NodeView> byId, Map<UUID, UUID> parentOf,
+                         Map<String, NodeView> byCode) {
         byId.put(node.id(), node);
+        byCode.putIfAbsent(node.code(), node);   // KG codes are unique (uq_knowledge_node_code)
         if (parentId != null) {
             parentOf.put(node.id(), parentId);
         }
         for (NodeView child : node.children()) {
-            collect(child, node.id(), byId, parentOf);
+            collect(child, node.id(), byId, parentOf, byCode);
         }
     }
 
