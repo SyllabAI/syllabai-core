@@ -287,7 +287,7 @@ class GlmOcrBatchIT {
         assertThat(imported).hasSize(59); // 20 + 20 + 19
 
         // the REAL serving projection: the learner selection excludes every import…
-        List<StudentQuestionView> served = learnerQuestions.list(null);
+        List<StudentQuestionView> served = learnerQuestions.list(null, null);
         assertThat(served).extracting(StudentQuestionView::id).noneMatch(imported::contains);
         // …while authoritative content remains servable (the gate blocks
         // unvalidated imports, not the endpoint — 8 seed MCQs still serve)
@@ -297,7 +297,7 @@ class GlmOcrBatchIT {
         // its questions are found by topic, then refused by the servable spec
         UUID anyImported = imported.iterator().next();
         UUID anchorTopic = questions.findById(anyImported).orElseThrow().primaryTopicNodeId();
-        assertThat(learnerQuestions.list(anchorTopic)).isEmpty();
+        assertThat(learnerQuestions.list(anchorTopic, null)).isEmpty();
 
         // direct fetch of an imported question refuses (unvalidated → 404)…
         assertThatThrownBy(() -> learnerQuestions.get(anyImported))

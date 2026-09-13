@@ -20,6 +20,7 @@ import com.syllabai.teacher.ConceptGraphSeedService;
 import com.syllabai.teacher.TeacherConceptGraphController;
 import com.syllabai.teacher.TeacherConceptGraphController.ConceptGraphEdgesView;
 import com.syllabai.teacher.TeacherConceptGraphController.ConceptGraphEdgeView;
+import com.syllabai.assessment.ServableQuestionService;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -73,6 +74,10 @@ class ConceptGraphSeedFlowIT {
     private AuthService authService;
     @Autowired
     private NextBestActionService nextBestActions;
+    @Autowired
+    private ServableQuestionService servableQuestions;
+    @Autowired
+    private KnowledgeGraphService graphService;
 
     @Test
     @DisplayName("Teacher → 4CH1 → spec point → concept graph: real rows, real edges, "
@@ -205,5 +210,26 @@ class ConceptGraphSeedFlowIT {
         return authService.register(new RegisterRequest(
                 "it-seed-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
                 "ItLearner123!", "It Learner")).user().id();
+    }
+
+    @Test
+    @DisplayName("Subject-scoped practice: the 4CH1 surface serves zero questions, "
+            + "the V6 IAL surface keeps its 8 MCQs (pilot-readiness session-56)")
+    void practiceIsSubjectScoped() {
+        // the 4CH1 seed and the V6 IAL seed coexist in one database — exactly
+        // the production shape after a teacher activates 4CH1
+        seed.activate(UUID.randomUUID());
+
+        KnowledgeNode root4ch1 = nodes.findByCode("4CH1").orElseThrow();
+        KnowledgeNode rootWch11 = nodes.findByCode("CHM").orElseThrow();
+
+        // the demo MCQs map under the IAL subtree only — the 4CH1-scoped list
+        // must be honestly empty (no cross-subject practice under 4CH1)
+        assertThat(servableQuestions.activeWithin(
+                graphService.subtreeIds(root4ch1.id()))).isEmpty();
+
+        // and the IAL subject keeps serving its 8 seeded MCQs
+        assertThat(servableQuestions.activeWithin(
+                graphService.subtreeIds(rootWch11.id()))).hasSize(8);
     }
 }

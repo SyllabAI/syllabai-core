@@ -25,6 +25,16 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     List<Question> findActiveByTopic(@Param("nodeId") UUID nodeId);
 
     @EntityGraph(attributePaths = "options")
+    @Query("""
+            select q from Question q
+            where q.active = true
+              and (q.primaryTopicNodeId in :nodeIds or exists (
+                    select 1 from QuestionTopic qt where qt.question = q and qt.nodeId in :nodeIds))
+            order by q.difficulty
+            """)
+    List<Question> findActiveWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
+    @EntityGraph(attributePaths = "options")
     @Query("select q from Question q where q.active = true order by q.difficulty")
     List<Question> findAllActive();
 

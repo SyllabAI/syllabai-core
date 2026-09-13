@@ -441,7 +441,7 @@ class GlmOcrBridgeIT {
         // the REAL serving projection: none of the imported questions serve
         Set<UUID> imported = versions.stream()
                 .map(QuestionVersion::questionId).collect(Collectors.toSet());
-        assertThat(learnerQuestions.list(null))
+        assertThat(learnerQuestions.list(null, null))
                 .extracting(StudentQuestionView::id)
                 .noneMatch(imported::contains);
 

@@ -21,16 +21,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class QuestionController {
 
     private final ServableQuestionService servableQuestions;
+    private final com.syllabai.knowledge.KnowledgeGraphService knowledgeGraph;
 
-    public QuestionController(ServableQuestionService servableQuestions) {
+    public QuestionController(ServableQuestionService servableQuestions,
+                              com.syllabai.knowledge.KnowledgeGraphService knowledgeGraph) {
         this.servableQuestions = servableQuestions;
+        this.knowledgeGraph = knowledgeGraph;
     }
 
     @GetMapping
-    public List<StudentQuestionView> list(@RequestParam(required = false) UUID topicNodeId) {
-        return topicNodeId == null
-                ? servableQuestions.allActive()
-                : servableQuestions.activeByTopic(topicNodeId);
+    public List<StudentQuestionView> list(@RequestParam(required = false) UUID topicNodeId,
+                                          @RequestParam(required = false) UUID rootId) {
+        if (topicNodeId != null) {
+            return servableQuestions.activeByTopic(topicNodeId);
+        }
+        if (rootId != null) {
+            // subject-scoped practice (pilot-readiness session-56): only the
+            // questions mapped inside the subject's PART_OF subtree serve
+            return servableQuestions.activeWithin(knowledgeGraph.subtreeIds(rootId));
+        }
+        return servableQuestions.allActive();
     }
 
     @GetMapping("/{id}")

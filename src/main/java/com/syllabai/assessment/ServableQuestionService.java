@@ -46,6 +46,21 @@ public class ServableQuestionService {
                 .toList();
     }
 
+    /**
+     * All servable questions whose topic mapping falls inside the given node
+     * set (a subject's PART_OF subtree) — the subject-scoped practice surface
+     * (pilot-readiness session-56: the unscoped list served another subject's
+     * questions under the 4CH1 surface, landing evidence the learner's
+     * subject-scoped panels could not see). Same servability boundary, same
+     * difficulty ordering, only the scope narrows.
+     */
+    public List<StudentQuestionView> activeWithin(java.util.Collection<UUID> nodeIds) {
+        return questions.findActiveWithin(nodeIds).stream()
+                .map(this::project)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
     /** a single servable question, or empty when missing/unservable (never throws) */
     public Optional<StudentQuestionView> findById(UUID id) {
         return questions.findWithOptions(id).map(this::project).filter(Objects::nonNull);
