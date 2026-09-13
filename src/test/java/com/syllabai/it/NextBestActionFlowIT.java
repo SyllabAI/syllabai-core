@@ -40,7 +40,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration test: the T-033 next-best-action loop against a real Postgres —
- * evidence in, ranked evidence-backed actions out (ADR-017 nba-rules/v1
+ * evidence in, ranked evidence-backed actions out (ADR-017 nba-rules/v1.1
  * baseline). Runs in CI where Docker exists; skipped locally otherwise.
  *
  * <p>Covers: low-mark human-marked evidence → RETRY_PROBLEM_QUESTION with the
@@ -171,7 +171,7 @@ class NextBestActionFlowIT {
         // 3. scoped to question A's anchor: the validated question becomes a retry
         UUID rootA = questionA.primaryTopicNodeId();
         NextBestActionsView view = nextBestActions.actionsFor(learner, rootA);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.1");
         assertThat(view.actions()).isNotEmpty();
         assertThat(view.actions().stream()
                 .filter(a -> a.actionType() == ActionType.RETRY_PROBLEM_QUESTION))
