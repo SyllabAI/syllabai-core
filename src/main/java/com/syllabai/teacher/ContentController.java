@@ -78,6 +78,16 @@ public class ContentController {
                 schemes.size());
     }
 
+    /**
+     * Full review view of one paper: every question version with its content,
+     * answer key and mark-scheme state — a reviewer must see WHAT they validate
+     * (§7). Read-only; the serving boundary is untouched.
+     */
+    @GetMapping("/exam-papers/{id}/review")
+    public ContentReviewService.PaperReviewView paperReview(@PathVariable UUID id) {
+        return review.paperReview(id);
+    }
+
     @PostMapping("/exam-papers/{id}/validate")
     public PaperSummary validatePaper(@PathVariable UUID id) {
         return PaperSummary.from(review.validatePaper(id));

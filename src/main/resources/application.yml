@@ -97,17 +97,30 @@ syllabai:
     groq:
       enabled: ${SYLLABAI_GROQ_ENABLED:true}
       api-key: ${SYLLABAI_GROQ_API_KEY:}
-      base-url: https://api.groq.com/openai
-      model: llama-3.3-70b-versatile
+      # must include /v1 — Spring AI's OpenAI SDK appends /chat/completions to the
+      # base URL verbatim, and api.groq.com/openai alone 404s ("Unknown request URL:
+      # POST /openai/chat/completions") on every Groq call (live finding 2026-09-14)
+      base-url: https://api.groq.com/openai/v1
+      # llama-3.3-70b-versatile is retired for this key's account (catalog probe
+      # 2026-09-14 listed 14 models; gpt-oss-120b is the strongest chat model
+      # remaining). Env-bridged so catalog churn no longer needs a code change.
+      model: ${SYLLABAI_GROQ_MODEL:openai/gpt-oss-120b}
     gemini:
       enabled: ${SYLLABAI_GEMINI_ENABLED:true}
       api-key: ${SYLLABAI_GEMINI_API_KEY:}
-      model: gemini-2.5-flash
+      # gemini-2.5-flash is no longer available to accounts created after its
+      # retirement window (API 404 "no longer available to new users"); 3.6-flash
+      # is the provider-recommended successor for this key generation.
+      model: gemini-3.6-flash
     openrouter:
       enabled: ${SYLLABAI_OPENROUTER_ENABLED:true}
       api-key: ${SYLLABAI_OPENROUTER_API_KEY:}
       base-url: https://openrouter.ai/api/v1
-      model: meta-llama/llama-3.3-70b-instruct:free
+      # The llama-3.3-70b-instruct:free slot was retired by OpenRouter (404 "This
+      # model is unavailable for free"); the free inventory has fully rotated.
+      # nemotron-3-super-120b-a12b:free probe-verified 200 against the production
+      # key 2026-09-14 (2.4s latency); gemma-4-31b-it:free is the known secondary.
+      model: nvidia/nemotron-3-super-120b-a12b:free
     chain:
       timeout-seconds: 30
       cooldown-seconds: 60
@@ -125,8 +138,14 @@ syllabai:
   # chunking work fully and embedding/search fail loudly on explicit use.
   embedding:
     gemini:
-      api-key: ${SYLLABAI_EMBEDDING_GEMINI_API_KEY:}
-      model: text-embedding-004
+      # Bridge BOTH documented env names: the Render service defines
+      # SYLLABAI_EMBEDDING_API_KEY while the original name was
+      # SYLLABAI_EMBEDDING_GEMINI_API_KEY — the name mismatch silently disabled
+      # vector retrieval in production (honest empty-evidence degradation).
+      api-key: ${SYLLABAI_EMBEDDING_GEMINI_API_KEY:${SYLLABAI_EMBEDDING_API_KEY:}}
+      # text-embedding-004 was retired (API 404); gemini-embedding-001 is the GA
+      # successor and honours outputDimensionality=768 (matches pgvector V11).
+      model: gemini-embedding-001
       dimension: 768
       timeout-seconds: 30     # per-call bound (C-5): a hung Gemini call fails loud instead of pinning the caller
 

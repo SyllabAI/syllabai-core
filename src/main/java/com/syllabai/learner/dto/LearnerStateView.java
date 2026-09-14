@@ -10,6 +10,6 @@ public record LearnerStateView(
         List<MisconceptionStateView> misconceptionStates,
         List<ReviewView> pendingReviews) {
 
-    public record ReviewView(UUID nodeId, Instant dueAt, String reason) {
+    public record ReviewView(UUID nodeId, Instant dueAt, String reason, String nodeName) {
     }
 }

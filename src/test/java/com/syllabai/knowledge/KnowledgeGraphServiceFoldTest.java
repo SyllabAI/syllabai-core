@@ -51,11 +51,12 @@ class KnowledgeGraphServiceFoldTest {
         lenient().when(nodes.findById(sectionId)).thenReturn(Optional.of(section));
         lenient().when(nodes.findById(conceptId)).thenReturn(Optional.of(concept));
         lenient().when(nodes.findById(misconceptionId)).thenReturn(Optional.of(misconception));
-        when(edges.findChildren(rootId)).thenReturn(List.of(edge(section, root)));
-        when(edges.findChildren(sectionId)).thenReturn(List.of(edge(concept, section)));
-        when(edges.findChildren(conceptId)).thenReturn(List.of());
-        when(graph.findAssociatedMisconceptions(conceptId))
-                .thenReturn(List.of(misconception));   // via REMEDIATED_BY in production
+        // bulk-query surface of the batched tree builder (same contract, 3 queries)
+        when(graph.findSubtree(rootId)).thenReturn(List.of(root, section, concept));
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(edge(section, root), edge(concept, section)));
+        when(edges.findMisconceptionFamilyEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(familyEdge(misconception, concept, RelationType.REMEDIATED_BY)));
 
         NodeView tree = service.treeWithMisconceptions(rootId);
 
@@ -81,9 +82,11 @@ class KnowledgeGraphServiceFoldTest {
         when(nodes.findById(rootId)).thenReturn(Optional.of(root));
         lenient().when(nodes.findById(topicId)).thenReturn(Optional.of(topic));
         lenient().when(nodes.findById(misId)).thenReturn(Optional.of(mis));
-        when(edges.findChildren(rootId)).thenReturn(List.of(edge(topic, root)));
-        when(edges.findChildren(topicId)).thenReturn(List.of());
-        when(graph.findMisconceptions(topicId)).thenReturn(List.of(mis));
+        when(graph.findSubtree(rootId)).thenReturn(List.of(root, topic));
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(edge(topic, root)));
+        when(edges.findMisconceptionFamilyEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(familyEdge(mis, topic, RelationType.MISCONCEPTION_OF)));
 
         NodeView tree = service.treeWithMisconceptions(rootId);
 
@@ -101,8 +104,11 @@ class KnowledgeGraphServiceFoldTest {
 
         when(nodes.findById(rootId)).thenReturn(Optional.of(root));
         lenient().when(nodes.findById(conceptId)).thenReturn(Optional.of(concept));
-        when(edges.findChildren(rootId)).thenReturn(List.of(edge(concept, root)));
-        when(edges.findChildren(conceptId)).thenReturn(List.of());
+        when(graph.findSubtree(rootId)).thenReturn(List.of(root, concept));
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(edge(concept, root)));
+        when(edges.findMisconceptionFamilyEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of());
 
         NodeView tree = service.tree(rootId);
 
@@ -119,6 +125,13 @@ class KnowledgeGraphServiceFoldTest {
 
     private static KnowledgeEdge edge(KnowledgeNode child, KnowledgeNode parent) {
         return new KnowledgeEdge(child, parent, RelationType.PART_OF, null, null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "test", "test");
+    }
+
+    /** a misconception-family edge (source = the misconception, target = attach point) */
+    private static KnowledgeEdge familyEdge(KnowledgeNode misconception, KnowledgeNode target,
+                                            RelationType relation) {
+        return new KnowledgeEdge(misconception, target, relation, null, null,
                 KnowledgeNode.ValidationStatus.VALIDATED, "test", "test");
     }
 }

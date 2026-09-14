@@ -46,7 +46,13 @@ class FailoverLlmChainTest {
             lastRequest = request;
             if (failure != null) {
                 health.recordFailure(failure.getMessage());
-                throw new LlmProviderException(name, "generation failed", failure);
+                // mirror SpringAiChatModelAdapter's message contract: the cause
+                // class+message travel inside the LlmProviderException message so
+                // the chain's aggregate error names the real per-provider cause
+                throw new LlmProviderException(name,
+                        "generation failed (" + failure.getClass().getSimpleName() + ": "
+                                + failure.getMessage() + ")",
+                        failure);
             }
             health.recordSuccess();
             return new LlmResponse("answer from " + name, name, "fake-model", 5, 10, 10);
@@ -99,6 +105,24 @@ class FailoverLlmChainTest {
         assertThatThrownBy(() -> chain.generate(REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("all providers failed");
+    }
+
+    @Test
+    @DisplayName("chain exhaustion names every failed provider and its cause (2026-09-14 outage lesson)")
+    void exhaustedChainNamesEveryProviderCause() {
+        FailoverLlmChain chain = new FailoverLlmChain(List.of(
+                new FakeProvider("groq", true, new IllegalStateException("403 Forbidden")),
+                new FakeProvider("gemini", true, new IllegalStateException("model retired")),
+                new FakeProvider("openrouter", true, new IllegalStateException("429 quota"))), UNPINNED);
+        assertThatThrownBy(() -> chain.generate(REQUEST))
+                .isInstanceOf(LlmProviderException.class)
+                .hasMessageContaining("all providers failed")
+                .hasMessageContaining("groq: ")
+                .hasMessageContaining("403 Forbidden")
+                .hasMessageContaining("gemini: ")
+                .hasMessageContaining("model retired")
+                .hasMessageContaining("openrouter: ")
+                .hasMessageContaining("429 quota");
     }
 
     @Test

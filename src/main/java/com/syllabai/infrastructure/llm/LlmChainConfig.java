@@ -4,9 +4,11 @@ import com.google.genai.Client;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
@@ -46,21 +48,24 @@ public class LlmChainConfig {
         int timeout = chainCfg == null ? 30 : Math.max(1, chainCfg.timeoutSeconds());
 
         if (properties.groq().enabled() && hasKey(properties.groq().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("groq", groqChatModel(), true, threshold, cooldown, timeout));
+            providers.add(new SpringAiChatModelAdapter("groq", groqChatModel(), true, threshold, cooldown, timeout,
+                    request -> openAiRuntimeOptions(request, properties.groq().model())));
             log.info("LLM provider registered: groq (model {})", properties.groq().model());
         } else {
             providers.add(new SpringAiChatModelAdapter("groq", null, false, threshold, cooldown, timeout));
         }
 
         if (properties.gemini().enabled() && hasKey(properties.gemini().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("gemini", geminiChatModel(), true, threshold, cooldown, timeout));
+            providers.add(new SpringAiChatModelAdapter("gemini", geminiChatModel(), true, threshold, cooldown, timeout,
+                    request -> genAiRuntimeOptions(request, properties.gemini().model())));
             log.info("LLM provider registered: gemini (model {})", properties.gemini().model());
         } else {
             providers.add(new SpringAiChatModelAdapter("gemini", null, false, threshold, cooldown, timeout));
         }
 
         if (properties.openRouter().enabled() && hasKey(properties.openRouter().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("openrouter", openRouterChatModel(), true, threshold, cooldown, timeout));
+            providers.add(new SpringAiChatModelAdapter("openrouter", openRouterChatModel(), true, threshold, cooldown, timeout,
+                    request -> openAiRuntimeOptions(request, properties.openRouter().model())));
             log.info("LLM provider registered: openrouter (model {})", properties.openRouter().model());
         } else {
             providers.add(new SpringAiChatModelAdapter("openrouter", null, false, threshold, cooldown, timeout));
@@ -125,7 +130,44 @@ public class LlmChainConfig {
                 .build();
     }
 
-    private GoogleGenAiChatModel.ChatModel toGeminiModel(String configured) {
+    // ── runtime options factories ───────────────────────────────────────────
+    // Spring AI 2.0.x asserts the PROMPT-level options are the CONCRETE provider
+    // class: OpenAiChatModel.createRequest does Assert.isInstanceOf(OpenAiChatOptions)
+    // ("Prompt options must be OpenAiChatOptions type") and GoogleGenAiChatModel
+    // checkcasts to GoogleGenAiChatOptions directly. A generic ChatOptions built via
+    // ChatOptions.builder() therefore threw ClassCastException on EVERY provider call
+    // — the hidden root cause of the 2026-09-14 tutor outage. The adapter now
+    // receives a per-provider factory that always produces the concrete type.
+
+    /** OpenAI-compatible runtime options (Groq, OpenRouter); package-private for tests. */
+    static ChatOptions openAiRuntimeOptions(LlmRequest request, String defaultModel) {
+        String model = (request.model() != null && !request.model().isBlank())
+                ? request.model() : defaultModel;
+        OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder().model(model);
+        if (request.temperature() != null) {
+            builder.temperature(request.temperature());
+        }
+        if (request.maxTokens() != null) {
+            builder.maxTokens(request.maxTokens());
+        }
+        return builder.build();
+    }
+
+    /** Google GenAI runtime options; package-private for tests. */
+    static ChatOptions genAiRuntimeOptions(LlmRequest request, String defaultModel) {
+        String model = (request.model() != null && !request.model().isBlank())
+                ? request.model() : defaultModel;
+        GoogleGenAiChatOptions.Builder builder = GoogleGenAiChatOptions.builder().model(toGeminiModel(model));
+        if (request.temperature() != null) {
+            builder.temperature(request.temperature());
+        }
+        if (request.maxTokens() != null) {
+            builder.maxOutputTokens(request.maxTokens());   // GenAI names the cap differently
+        }
+        return builder.build();
+    }
+
+    private static GoogleGenAiChatModel.ChatModel toGeminiModel(String configured) {
         // "gemini-2.5-flash" → enum GEMINI_2_5_FLASH
         String enumName = configured.replace('-', '_').replace('.', '_').toUpperCase();
         return GoogleGenAiChatModel.ChatModel.valueOf(enumName);

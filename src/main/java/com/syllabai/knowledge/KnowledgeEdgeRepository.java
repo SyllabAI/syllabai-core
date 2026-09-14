@@ -120,4 +120,21 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
               and e.source.id in :nodeIds
             """)
     List<KnowledgeEdge> findPartOfEdgesFrom(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
+    /**
+     * PART_OF edges with BOTH endpoints inside the given node set, both ends
+     * fetched — the bulk form of per-node {@link #findChildren(UUID)} used by
+     * the batched tree builder (one query per TREE, not per node: the 4CH1
+     * subject tree was ~800 sequential round-trips and pushed the personalized
+     * read model past Render's proxy timeout).
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            join fetch e.target
+            where e.relationType = com.syllabai.knowledge.RelationType.PART_OF
+              and e.source.id in :nodeIds
+              and e.target.id in :nodeIds
+            """)
+    List<KnowledgeEdge> findPartOfEdgesWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
 }

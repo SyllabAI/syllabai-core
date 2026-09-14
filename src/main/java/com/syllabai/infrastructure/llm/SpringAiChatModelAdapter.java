@@ -14,6 +14,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Adapts a Spring AI {@link ChatModel} to the {@link LlmProvider} port (Master Spec
@@ -22,6 +25,8 @@ import java.util.concurrent.TimeUnit;
  * stay inside the bean construction in {@code LlmChainConfig}.
  */
 public class SpringAiChatModelAdapter implements LlmProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(SpringAiChatModelAdapter.class);
 
     /**
      * Daemon, cached worker pool so a hung provider HTTP call cannot pin a
@@ -44,25 +49,41 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final boolean configured;
     private final LlmProviderHealth health;
     private final int timeoutSeconds;
+    /**
+     * Builds the PROMPT-level runtime options for a request. Must produce the
+     * CONCRETE options type the underlying Spring AI ChatModel asserts on
+     * (OpenAiChatOptions / GoogleGenAiChatOptions) — Spring AI 2.0.x rejects a
+     * generic ChatOptions with ClassCastException/Assert.isInstanceOf at call
+     * time (2026-09-14 outage root cause). Null = legacy generic fallback.
+     */
+    private final Function<LlmRequest, ChatOptions> runtimeOptionsFactory;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
-        this(providerName, chatModel, configured, 3, 60, 30);
+        this(providerName, chatModel, configured, 3, 60, 30, null);
     }
 
     /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds) {
-        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30);
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30, null);
     }
 
-    /** Full wiring incl. the per-call timeout from {@code syllabai.llm.chain.timeout-seconds}. */
+    /** Legacy wiring without a runtime-options factory (generic ChatOptions fallback). */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds, int timeoutSeconds) {
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, timeoutSeconds, null);
+    }
+
+    /** Full wiring incl. per-call timeout and the concrete runtime-options factory. */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
+                                    int failureThreshold, int cooldownSeconds, int timeoutSeconds,
+                                    Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
         this.health = new LlmProviderHealth(configured, failureThreshold, cooldownSeconds);
         this.timeoutSeconds = Math.max(1, timeoutSeconds);
+        this.runtimeOptionsFactory = runtimeOptionsFactory;
     }
 
     @Override
@@ -108,8 +129,19 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         } catch (LlmProviderException e) {
             throw e;
         } catch (RuntimeException e) {
-            health.recordFailure(e.getClass().getSimpleName() + ": " + e.getMessage());
-            throw new LlmProviderException(providerName, "generation failed", e);
+            long latencyMs = (System.nanoTime() - started) / 1_000_000;
+            String causeSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
+            // Real cause must reach BOTH the health snapshot and the log — the
+            // provider-SDK exception text is what tells a 403 dead key apart from a
+            // 404 retired model or a 429 quota outage (2026-09-14 outage lesson).
+            // SDK error text contains no credential material.
+            log.warn("LLM provider {} failed after {} ms: {}", providerName, latencyMs,
+                    causeSummary.length() > 300 ? causeSummary.substring(0, 300) : causeSummary);
+            health.recordFailure(causeSummary);
+            throw new LlmProviderException(providerName,
+                    "generation failed (" + (causeSummary.length() > 200
+                            ? causeSummary.substring(0, 200) : causeSummary) + ")",
+                    e);
         }
     }
 
@@ -155,6 +187,9 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     }
 
     private ChatOptions options(LlmRequest request) {
+        if (runtimeOptionsFactory != null) {
+            return runtimeOptionsFactory.apply(request);
+        }
         if (request.temperature() == null && request.maxTokens() == null
                 && (request.model() == null || request.model().isBlank())) {
             return null;    // fall back to model defaults

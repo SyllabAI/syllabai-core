@@ -5,5 +5,5 @@ import java.util.UUID;
 
 public record MisconceptionStateView(
         UUID misconceptionNodeId, double probability, boolean active,
-        int evidenceCount, Instant lastEvidenceAt) {
+        int evidenceCount, Instant lastEvidenceAt, String misconceptionName) {
 }
