@@ -101,7 +101,10 @@ syllabai:
       # base URL verbatim, and api.groq.com/openai alone 404s ("Unknown request URL:
       # POST /openai/chat/completions") on every Groq call (live finding 2026-09-14)
       base-url: https://api.groq.com/openai/v1
-      model: llama-3.3-70b-versatile
+      # llama-3.3-70b-versatile is retired for this key's account (catalog probe
+      # 2026-09-14 listed 14 models; gpt-oss-120b is the strongest chat model
+      # remaining). Env-bridged so catalog churn no longer needs a code change.
+      model: ${SYLLABAI_GROQ_MODEL:openai/gpt-oss-120b}
     gemini:
       enabled: ${SYLLABAI_GEMINI_ENABLED:true}
       api-key: ${SYLLABAI_GEMINI_API_KEY:}
