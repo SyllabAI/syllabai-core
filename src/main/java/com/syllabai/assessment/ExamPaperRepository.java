@@ -11,6 +11,8 @@ public interface ExamPaperRepository extends JpaRepository<ExamPaper, UUID> {
 
     List<ExamPaper> findAllByOrderByCreatedAtDesc();
 
+    List<ExamPaper> findAllBySubjectIdOrderByCreatedAtDesc(UUID subjectId);
+
     Optional<ExamPaper> findByPaperCodeAndSessionLabel(String paperCode, String sessionLabel);
 
     @Query("""

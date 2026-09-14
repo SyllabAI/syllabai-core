@@ -39,6 +39,8 @@ public class AssessmentService {
     private final AttemptRepository attempts;
     private final EvidencePublisher evidencePublisher;
 
+    private final ServableQuestionSpec servable = new ServableQuestionSpec();
+
     public AssessmentService(QuestionRepository questions,
                              QuestionTopicRepository questionTopics,
                              QuestionVersionRepository questionVersions,
@@ -58,6 +60,19 @@ public class AssessmentService {
         Question question = questions.findWithOptions(request.questionId())
                 .filter(Question::active)
                 .orElseThrow(() -> new NotFoundException("question", request.questionId()));
+
+        // serving boundary at the write path too (§7: unvalidated content never
+        // serves — not even as an attempt target): a STRUCTURED question is only
+        // attemptable while its current version is VALIDATED. Fail-closed 404,
+        // no state echo.
+        if (question.type() == Question.Type.STRUCTURED) {
+            QuestionVersion current = questionVersions
+                    .findByQuestionIdOrderByVersionDesc(question.id()).stream()
+                    .findFirst().orElse(null);
+            if (!servable.isSatisfiedBy(question, current)) {
+                throw new NotFoundException("question", request.questionId());
+            }
+        }
 
         QuestionOption chosen = question.options().stream()
                 .filter(o -> o.id().equals(request.chosenOptionId()))
@@ -112,6 +127,15 @@ public class AssessmentService {
                 .findByQuestionIdOrderByVersionDesc(question.id()).stream()
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("question version", question.id()));
+
+        // serving boundary at the write path: only a VALIDATED current version is
+        // attemptable (paper detail exposes ids to any authenticated user, so the
+        // unvalidated gate must live HERE, not only on the read endpoints).
+        // Fail-closed 404 — no part labels, no marks, no state echo.
+        if (!servable.isSatisfiedBy(question, version)) {
+            throw new NotFoundException("structured question", request.questionId());
+        }
+
         List<QuestionPart> parts = version.parts();
         if (parts.isEmpty()) {
             throw new NotFoundException("parts for question version", version.id());

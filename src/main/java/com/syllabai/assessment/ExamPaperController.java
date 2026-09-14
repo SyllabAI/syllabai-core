@@ -32,8 +32,7 @@ public class ExamPaperController {
     public List<PaperView> list(@RequestParam(required = false) UUID subjectId) {
         return (subjectId == null
                 ? examPapers.findAllByOrderByCreatedAtDesc()
-                : examPapers.findAllByOrderByCreatedAtDesc().stream()
-                        .filter(p -> subjectId.equals(p.subjectId())).toList())
+                : examPapers.findAllBySubjectIdOrderByCreatedAtDesc(subjectId))
                 .stream().map(PaperView::from).toList();
     }
 
@@ -41,9 +40,8 @@ public class ExamPaperController {
     public PaperDetailView get(@PathVariable UUID id) {
         ExamPaper paper = examPapers.findById(id)
                 .orElseThrow(() -> new com.syllabai.shared.NotFoundException("exam paper", id));
-        List<Question> paperQuestions = questions.findAllByOrderByDifficultyAsc().stream()
-                .filter(q -> id.equals(q.examPaperId()))
-                .toList();
+        List<Question> paperQuestions =
+                questions.findAllByExamPaperIdOrderByDifficultyAsc(id);
         return new PaperDetailView(
                 PaperView.from(paper),
                 paperQuestions.stream().map(q -> {

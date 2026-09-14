@@ -2,6 +2,8 @@ package com.syllabai.assessment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.TestIds;
@@ -197,5 +199,46 @@ class AssessmentServiceTest {
                         () -> service.submitStructured(LEARNER, request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing answer for part");
+    }
+
+    @Test
+    @DisplayName("structured submit is refused for a SUGGESTED (unvalidated) version — fail-closed")
+    void structuredSubmitRefusesUnvalidated() {
+        Question question = structuredQuestion();
+        when(questions.findById(QUESTION_ID)).thenReturn(Optional.of(question));
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 4, 3, 240,
+                "Explain", QuestionVersion.ValidationState.SUGGESTED, "doc-1", 0.9, "test");
+        QuestionPart partA = TestIds.withId(
+                new QuestionPart(version, "a", "part a prompt", "State", 2, 0), UUID.randomUUID());
+        version.addPart(partA);
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID))
+                .thenReturn(List.of(version));
+
+        var request = new com.syllabai.assessment.dto.StructuredSubmitRequest(
+                QUESTION_ID,
+                List.of(new com.syllabai.assessment.dto.PartAnswerRequest(
+                        partA.id(), "attempt against unvalidated content")),
+                5000L, 4, false, false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.submitStructured(LEARNER, request))
+                .isInstanceOf(com.syllabai.shared.NotFoundException.class);
+        verify(attempts, never()).save(org.mockito.ArgumentMatchers.any(Attempt.class));
+        assertThat(published).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MCQ submit path also refuses a STRUCTURED question without a VALIDATED version")
+    void mcqSubmitRefusesUnvalidatedStructured() {
+        Question question = structuredQuestion();
+        when(questions.findWithOptions(QUESTION_ID)).thenReturn(Optional.of(question));
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID))
+                .thenReturn(List.of());   // no version at all — fail closed
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.submit(LEARNER, submit(OPTION_CORRECT)))
+                .isInstanceOf(com.syllabai.shared.NotFoundException.class);
+        verify(attempts, never()).save(org.mockito.ArgumentMatchers.any(Attempt.class));
+        assertThat(published).isEmpty();
     }
 }

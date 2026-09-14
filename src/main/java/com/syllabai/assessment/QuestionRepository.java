@@ -40,4 +40,8 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
 
     @EntityGraph(attributePaths = "options")
     List<Question> findAllByOrderByDifficultyAsc();
+
+    /** questions of one exam paper, difficulty-ordered (paper detail view) */
+    @EntityGraph(attributePaths = "options")
+    List<Question> findAllByExamPaperIdOrderByDifficultyAsc(UUID examPaperId);
 }
