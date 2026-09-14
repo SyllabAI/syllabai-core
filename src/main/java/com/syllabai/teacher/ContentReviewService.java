@@ -175,7 +175,8 @@ public class ContentReviewService {
                 .map(this::toVersionReviewView)
                 .toList();
         return new PaperReviewView(
-                new PaperReviewView.PaperHeader(paper.id(), paper.title(), paper.paperCode(),
+                new PaperReviewView.PaperHeader(paper.id(), paper.subjectId(), paper.title(),
+                        paper.paperCode(),
                         paper.sessionLabel(), paper.board(), paper.qualification(),
                         paper.validationState().name()),
                 reviewViews);
@@ -217,8 +218,9 @@ public class ContentReviewService {
      */
     public record PaperReviewView(PaperHeader paper, List<VersionReviewView> versions) {
 
-        public record PaperHeader(UUID id, String title, String paperCode, String sessionLabel,
-                                  String board, String qualification, String validationState) {
+        public record PaperHeader(UUID id, UUID subjectId, String title, String paperCode,
+                                  String sessionLabel, String board, String qualification,
+                                  String validationState) {
         }
     }
 
