@@ -60,6 +60,13 @@ public class ContentReviewService {
     private final QuestionRepository questions;
     private final QuestionTopicRepository questionTopics;
     private final KnowledgeNodeRepository knowledgeNodes;
+    private final ContentAuditRecorder audit;
+    private final ContentReviewAuditRepository auditRepository;
+
+    /** null-safe state name for audit rows (mocked entities in tests carry nulls) */
+    private static String stateName(Enum<?> state) {
+        return state == null ? null : state.name();
+    }
 
     public ContentReviewService(ExamPaperRepository examPapers,
                                 QuestionVersionRepository questionVersions,
@@ -69,7 +76,9 @@ public class ContentReviewService {
                                 GlmOcrBridgeRecordRepository bridgeRecords,
                                 QuestionRepository questions,
                                 QuestionTopicRepository questionTopics,
-                                KnowledgeNodeRepository knowledgeNodes) {
+                                KnowledgeNodeRepository knowledgeNodes,
+                                ContentAuditRecorder audit,
+                                ContentReviewAuditRepository auditRepository) {
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
@@ -79,6 +88,8 @@ public class ContentReviewService {
         this.questions = questions;
         this.questionTopics = questionTopics;
         this.knowledgeNodes = knowledgeNodes;
+        this.audit = audit;
+        this.auditRepository = auditRepository;
     }
 
     /**
@@ -98,6 +109,8 @@ public class ContentReviewService {
             return paper;
         }
         paper.assignSubject(subjectId);
+        audit.record("PLACE", "exam_paper", paperId, null, null,
+                "subject " + subjectId + " (" + subject.code() + ": " + subject.name() + ")");
         log.warn("AUDIT: exam paper {} ({} {}) placed into subject {} ({}: {}) "
                         + "during content review",
                 paperId, paper.paperCode(), paper.sessionLabel(), subjectId,
@@ -118,7 +131,11 @@ public class ContentReviewService {
                     + " unvalidated question version(s) — validate versions first");
         }
         assertMarkingContractComplete(paperId, versions, false);
+        String from = stateName(paper.validationState());
         paper.validate();
+        audit.record("VALIDATE", "exam_paper", paperId, from,
+                stateName(paper.validationState()),
+                paper.paperCode() + " " + paper.sessionLabel());
         log.info("exam paper {} validated by teacher", paperId);
         return paper;
     }
@@ -155,7 +172,11 @@ public class ContentReviewService {
     public ExamPaper rejectPaper(UUID paperId) {
         ExamPaper paper = examPapers.findById(paperId)
                 .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        String from = stateName(paper.validationState());
         paper.reject();
+        audit.record("REJECT", "exam_paper", paperId, from,
+                stateName(paper.validationState()),
+                paper.paperCode() + " " + paper.sessionLabel());
         return paper;
     }
 
@@ -163,7 +184,10 @@ public class ContentReviewService {
     public QuestionVersion validateQuestionVersion(UUID versionId) {
         QuestionVersion version = questionVersions.findById(versionId)
                 .orElseThrow(() -> new NotFoundException("question version", versionId));
+        String from = stateName(version.validationState());
         version.validate();
+        audit.record("VALIDATE", "question_version", versionId, from,
+                stateName(version.validationState()), "");
         return version;
     }
 
@@ -171,7 +195,10 @@ public class ContentReviewService {
     public QuestionVersion rejectQuestionVersion(UUID versionId) {
         QuestionVersion version = questionVersions.findById(versionId)
                 .orElseThrow(() -> new NotFoundException("question version", versionId));
+        String from = stateName(version.validationState());
         version.reject();
+        audit.record("REJECT", "question_version", versionId, from,
+                stateName(version.validationState()), "");
         return version;
     }
 
@@ -195,7 +222,11 @@ public class ContentReviewService {
                 point.setAcceptanceCriteria(update.acceptanceCriteria());
             }
         }
+        String from = stateName(scheme.validationState());
         scheme.validate();
+        audit.record("VALIDATE", "mark_scheme", schemeId, from,
+                stateName(scheme.validationState()),
+                (criteriaUpdates == null ? 0 : criteriaUpdates.size()) + " criteria updates");
         log.info("mark scheme {} validated ({} criteria updates)",
                 schemeId, criteriaUpdates == null ? 0 : criteriaUpdates.size());
         return scheme;
@@ -205,7 +236,10 @@ public class ContentReviewService {
     public MarkScheme rejectMarkScheme(UUID schemeId) {
         MarkScheme scheme = markSchemes.findById(schemeId)
                 .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
+        String from = stateName(scheme.validationState());
         scheme.reject();
+        audit.record("REJECT", "mark_scheme", schemeId, from,
+                stateName(scheme.validationState()), "");
         return scheme;
     }
 
@@ -215,7 +249,10 @@ public class ContentReviewService {
     public ExamPaper flagPaper(UUID paperId) {
         ExamPaper paper = examPapers.findById(paperId)
                 .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        String from = stateName(paper.validationState());
         paper.flag();
+        audit.record("FLAG", "exam_paper", paperId, from,
+                stateName(paper.validationState()), "serving blocked");
         log.warn("AUDIT: exam paper {} flagged — serving of everything under it is now blocked",
                 paperId);
         return paper;
@@ -225,7 +262,10 @@ public class ContentReviewService {
     public ExamPaper unflagPaper(UUID paperId) {
         ExamPaper paper = examPapers.findById(paperId)
                 .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        String from = stateName(paper.validationState());
         paper.unflag();
+        audit.record("UNFLAG", "exam_paper", paperId, from,
+                stateName(paper.validationState()), "re-validation required");
         log.info("AUDIT: exam paper {} unflagged — back to SUGGESTED, re-validation required",
                 paperId);
         return paper;
@@ -235,7 +275,10 @@ public class ContentReviewService {
     public QuestionVersion flagQuestionVersion(UUID versionId) {
         QuestionVersion version = questionVersions.findById(versionId)
                 .orElseThrow(() -> new NotFoundException("question version", versionId));
+        String from = stateName(version.validationState());
         version.flag();
+        audit.record("FLAG", "question_version", versionId, from,
+                stateName(version.validationState()), "serving blocked");
         return version;
     }
 
@@ -243,7 +286,10 @@ public class ContentReviewService {
     public QuestionVersion unflagQuestionVersion(UUID versionId) {
         QuestionVersion version = questionVersions.findById(versionId)
                 .orElseThrow(() -> new NotFoundException("question version", versionId));
+        String from = stateName(version.validationState());
         version.unflag();
+        audit.record("UNFLAG", "question_version", versionId, from,
+                stateName(version.validationState()), "re-validation required");
         return version;
     }
 
@@ -251,7 +297,10 @@ public class ContentReviewService {
     public MarkScheme flagMarkScheme(UUID schemeId) {
         MarkScheme scheme = markSchemes.findById(schemeId)
                 .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
+        String from = stateName(scheme.validationState());
         scheme.flag();
+        audit.record("FLAG", "mark_scheme", schemeId, from,
+                stateName(scheme.validationState()), "serving blocked");
         return scheme;
     }
 
@@ -259,7 +308,10 @@ public class ContentReviewService {
     public MarkScheme unflagMarkScheme(UUID schemeId) {
         MarkScheme scheme = markSchemes.findById(schemeId)
                 .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
+        String from = stateName(scheme.validationState());
         scheme.unflag();
+        audit.record("UNFLAG", "mark_scheme", schemeId, from,
+                stateName(scheme.validationState()), "re-validation required");
         return scheme;
     }
 
@@ -314,6 +366,8 @@ public class ContentReviewService {
             if (version.validationState() == QuestionVersion.ValidationState.SUGGESTED) {
                 version.validate();
                 versionsValidated++;
+                audit.record("VALIDATE", "question_version", version.id(), "SUGGESTED",
+                        "VALIDATED", "batch validate-all");
             }
             MarkScheme scheme = markSchemes
                     .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id())
@@ -322,6 +376,8 @@ public class ContentReviewService {
                     && scheme.validationState() == MarkScheme.ValidationState.SUGGESTED) {
                 scheme.validate();
                 schemesValidated++;
+                audit.record("VALIDATE", "mark_scheme", scheme.id(), "SUGGESTED",
+                        "VALIDATED", "batch validate-all");
             }
         }
 
@@ -333,7 +389,11 @@ public class ContentReviewService {
             throw new ConflictException("paper has " + unvalidated
                     + " unvalidated question version(s) — validate versions first");
         }
+        String paperFrom = stateName(paper.validationState());
         paper.validate();
+        audit.record("VALIDATE_ALL", "exam_paper", paperId, paperFrom,
+                stateName(paper.validationState()), versionsValidated + " versions + "
+                        + schemesValidated + " schemes, force=" + force);
         log.info("AUDIT: exam paper {} batch-validated ({} versions, {} schemes, force={})",
                 paperId, versionsValidated, schemesValidated, force);
         return new BatchResult(paper.id(), paper.validationState().name(),
@@ -481,6 +541,8 @@ public class ContentReviewService {
         for (UUID secondary : secondaries) {
             questionTopics.save(new QuestionTopic(question, secondary, false));
         }
+        audit.record("MAP_TOPICS", "question", questionId, null, null,
+                "primary " + primary.code() + " + " + secondaries.size() + " secondary");
         log.info("AUDIT: question {} mapped to primary topic {} ({}) + {} secondary topic(s)",
                 questionId, primary.code(), primaryNodeId, secondaries.size());
         return new TopicMappingResult(questionId, primaryNodeId, primary.code(),
@@ -528,6 +590,36 @@ public class ContentReviewService {
     }
 
     public record TopicRowView(UUID nodeId, boolean primary, String code, String title) {
+    }
+
+    /**
+     * V22: the paper's full audit history — its own rows plus every row of its
+     * question versions, mark schemes and questions. Read-only projection of
+     * content_review_audit; the reviewer sees WHO decided WHAT and WHEN.
+     */
+    @Transactional(readOnly = true)
+    public List<AuditRowView> paperAudit(UUID paperId) {
+        examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        List<UUID> versionIds = questionVersions.findByPaperId(paperId).stream()
+                .map(QuestionVersion::id).toList();
+        List<UUID> schemeIds = markSchemes.findByPaperId(paperId).stream()
+                .map(MarkScheme::id).toList();
+        List<UUID> questionIds = questions.findAllByExamPaperIdOrderByDifficultyAsc(paperId)
+                .stream().map(Question::id).toList();
+        return auditRepository.findPaperAudit(paperId, versionIds, schemeIds, questionIds)
+                .stream().map(AuditRowView::from).toList();
+    }
+
+    public record AuditRowView(String occurredAt, String actor, String action,
+                               String targetType, UUID targetId,
+                               String fromState, String toState, String detail) {
+        static AuditRowView from(ContentReviewAudit row) {
+            return new AuditRowView(
+                    row.occurredAt() == null ? null : row.occurredAt().toString(),
+                    row.actorLabel(), row.action(), row.targetType(), row.targetId(),
+                    row.fromState(), row.toState(), row.detail());
+        }
     }
 
     /** one SUGGESTED paper with the quality signals a reviewer triages by */

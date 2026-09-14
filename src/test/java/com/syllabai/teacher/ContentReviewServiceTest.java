@@ -36,6 +36,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * The teacher review read model must expose the full answer key (§7: a reviewer
@@ -55,9 +56,13 @@ class ContentReviewServiceTest {
     private final QuestionRepository questions = mock(QuestionRepository.class);
     private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
     private final KnowledgeNodeRepository knowledgeNodes = mock(KnowledgeNodeRepository.class);
+    private final ContentAuditRecorder auditRecorder = mock(ContentAuditRecorder.class);
+    private final ContentReviewAuditRepository auditRepository =
+            mock(ContentReviewAuditRepository.class);
     private final ContentReviewService service =
             new ContentReviewService(examPapers, questionVersions, markSchemes, markPoints,
-                    subjects, bridgeRecords, questions, questionTopics, knowledgeNodes);
+                    subjects, bridgeRecords, questions, questionTopics, knowledgeNodes,
+                    auditRecorder, auditRepository);
 
     @Test
     @DisplayName("paperReview carries content + answer key + scheme state per version")
@@ -462,5 +467,83 @@ class ContentReviewServiceTest {
         assertThat(rows.get(0).nodeId()).isEqualTo(topicId);
         assertThat(rows.get(0).code()).isEqualTo("4CH1-S1-c");
         verify(question, org.mockito.Mockito.never()).primaryTopicNodeId();
+    }
+
+    // ── V22: durable audit for API-driven mutations ──────────────────────────
+
+    @Test
+    @DisplayName("validateQuestionVersion writes an audit row with the true from/to states")
+    void validateVersionWritesAuditRow() {
+        QuestionVersion version = mock(QuestionVersion.class);
+        UUID versionId = UUID.randomUUID();
+        when(questionVersions.findById(versionId)).thenReturn(Optional.of(version));
+        when(version.validationState())
+                .thenReturn(QuestionVersion.ValidationState.SUGGESTED)
+                .thenReturn(QuestionVersion.ValidationState.VALIDATED);
+
+        service.validateQuestionVersion(versionId);
+
+        verify(auditRecorder).record("VALIDATE", "question_version", versionId,
+                "SUGGESTED", "VALIDATED", "");
+    }
+
+    @Test
+    @DisplayName("a guard rejection writes NO audit row (nothing happened)")
+    void guardRejectionWritesNoAuditRow() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.validationState()).thenReturn(ExamPaper.ValidationState.SUGGESTED);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        GlmOcrBridgeRecord bridge = mock(GlmOcrBridgeRecord.class);
+        when(bridge.reconciliationStatus()).thenReturn("REVIEW_REQUIRED");
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.of(bridge));
+
+        assertThatThrownBy(() -> service.validateAllForPaper(paperId, false))
+                .isInstanceOf(ConflictException.class);
+
+        verify(auditRecorder, never()).record(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("audit failure is fail-closed: the recorder exception propagates")
+    void auditFailureAbortsTheMutation() {
+        QuestionVersion version = mock(QuestionVersion.class);
+        UUID versionId = UUID.randomUUID();
+        when(questionVersions.findById(versionId)).thenReturn(Optional.of(version));
+        when(version.validationState()).thenReturn(QuestionVersion.ValidationState.SUGGESTED);
+        org.mockito.Mockito.doThrow(new IllegalStateException("audit store down"))
+                .when(auditRecorder).record(org.mockito.ArgumentMatchers.eq("VALIDATE"),
+                org.mockito.ArgumentMatchers.eq("question_version"),
+                org.mockito.ArgumentMatchers.eq(versionId),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+
+        assertThatThrownBy(() -> service.validateQuestionVersion(versionId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("audit store down");
+    }
+
+    @Test
+    @DisplayName("mapQuestionTopics audits the topic association")
+    void mapTopicsWritesAuditRow() {
+        UUID questionId = UUID.randomUUID();
+        Question question = mock(Question.class);
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+        UUID topicId = UUID.randomUUID();
+        KnowledgeNode topic = mock(KnowledgeNode.class);
+        when(topic.code()).thenReturn("4CH1-S2-b");
+        when(topic.title()).thenReturn("Group 7");
+        when(knowledgeNodes.findById(topicId)).thenReturn(Optional.of(topic));
+
+        service.mapQuestionTopics(questionId, topicId, null);
+
+        verify(auditRecorder).record("MAP_TOPICS", "question", questionId,
+                null, null, "primary 4CH1-S2-b + 0 secondary");
     }
 }

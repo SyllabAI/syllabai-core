@@ -100,6 +100,12 @@ public class ContentController {
         return review.paperReview(id);
     }
 
+    /** V22: durable audit history for the paper and everything under it */
+    @GetMapping("/exam-papers/{id}/audit")
+    public List<ContentReviewService.AuditRowView> paperAudit(@PathVariable UUID id) {
+        return review.paperAudit(id);
+    }
+
     /**
      * V20 batch action: validate every SUGGESTED version + scheme of the paper
      * and then the paper itself, in one transaction. Fail-closed against
