@@ -93,6 +93,17 @@ public class ContentController {
         return PaperSummary.from(review.validatePaper(id));
     }
 
+    /**
+     * §7 placement: ingested papers wait in the neutral placeholder subject;
+     * the reviewer places them into the real curriculum subject. Factual
+     * association only — validation states and the serving boundary untouched.
+     */
+    @PostMapping("/exam-papers/{id}/place")
+    public PaperSummary placePaper(@PathVariable UUID id,
+                                   @Valid @RequestBody PlaceRequest request) {
+        return PaperSummary.from(review.placePaper(id, request.subjectId()));
+    }
+
     @PostMapping("/exam-papers/{id}/reject")
     public PaperSummary rejectPaper(@PathVariable UUID id) {
         return PaperSummary.from(review.rejectPaper(id));
@@ -136,12 +147,14 @@ public class ContentController {
                                   int suggestedSchemes) {
     }
 
-    public record PaperSummary(UUID id, String title, String paperCode, String sessionLabel,
-                               String board, String qualification, String validationState) {
+    public record PaperSummary(UUID id, UUID subjectId, String title, String paperCode,
+                               String sessionLabel, String board, String qualification,
+                               String validationState) {
 
         public static PaperSummary from(ExamPaper p) {
-            return new PaperSummary(p.id(), p.title(), p.paperCode(), p.sessionLabel(),
-                    p.board(), p.qualification(), p.validationState().name());
+            return new PaperSummary(p.id(), p.subjectId(), p.title(), p.paperCode(),
+                    p.sessionLabel(), p.board(), p.qualification(),
+                    p.validationState().name());
         }
     }
 
@@ -171,5 +184,9 @@ public class ContentController {
 
     public record PointCriteriaUpdate(@NotNull UUID markPointId,
                                        @NotNull List<String> acceptanceCriteria) {
+    }
+
+    /** §7 placement request: the target curriculum subject. */
+    public record PlaceRequest(@NotNull UUID subjectId) {
     }
 }

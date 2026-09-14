@@ -104,6 +104,17 @@ public class ExamPaper {
 
     public UUID id() { return id; }
     public UUID subjectId() { return subjectId; }
+
+    /**
+     * §7 content-review placement: move the paper into a real curriculum subject.
+     * The ingestion pipeline never guesses curriculum placement — imported papers
+     * wait in a neutral placeholder subject until a reviewer places them. This is
+     * a factual association update ONLY: validation states and the serving
+     * boundary are untouched.
+     */
+    public void assignSubject(UUID newSubjectId) {
+        this.subjectId = newSubjectId;
+    }
     public String title() { return title; }
     public String board() { return board; }
     public String qualification() { return qualification; }

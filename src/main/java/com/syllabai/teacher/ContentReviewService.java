@@ -11,6 +11,8 @@ import com.syllabai.assessment.QuestionOption;
 import com.syllabai.assessment.QuestionPart;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
 import java.util.List;
@@ -35,15 +37,42 @@ public class ContentReviewService {
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
     private final MarkPointRepository markPoints;
+    private final SubjectRepository subjects;
 
     public ContentReviewService(ExamPaperRepository examPapers,
                                 QuestionVersionRepository questionVersions,
                                 MarkSchemeRepository markSchemes,
-                                MarkPointRepository markPoints) {
+                                MarkPointRepository markPoints,
+                                SubjectRepository subjects) {
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.markPoints = markPoints;
+        this.subjects = subjects;
+    }
+
+    /**
+     * §7 placement: the ingestion pipeline never guesses curriculum placement —
+     * imported papers wait in a neutral placeholder subject until a reviewer
+     * places them into the real one. Placement is a factual association update
+     * ONLY: validation states and the serving boundary are untouched, and it is
+     * idempotent. AUDIT-logged because it changes what learners will see.
+     */
+    @Transactional
+    public ExamPaper placePaper(UUID paperId, UUID subjectId) {
+        ExamPaper paper = examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        Subject subject = subjects.findById(subjectId)
+                .orElseThrow(() -> new NotFoundException("subject", subjectId));
+        if (subjectId.equals(paper.subjectId())) {
+            return paper;
+        }
+        paper.assignSubject(subjectId);
+        log.warn("AUDIT: exam paper {} ({} {}) placed into subject {} ({}: {}) "
+                        + "during content review",
+                paperId, paper.paperCode(), paper.sessionLabel(), subjectId,
+                subject.code(), subject.name());
+        return paper;
     }
 
     @Transactional

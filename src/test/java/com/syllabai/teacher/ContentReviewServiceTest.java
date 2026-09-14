@@ -3,6 +3,8 @@ package com.syllabai.teacher;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.assessment.ExamPaper;
@@ -16,6 +18,8 @@ import com.syllabai.assessment.QuestionOption;
 import com.syllabai.assessment.QuestionPart;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.shared.NotFoundException;
 import java.util.List;
 import java.util.Optional;
@@ -34,8 +38,10 @@ class ContentReviewServiceTest {
     private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final MarkPointRepository markPoints = mock(MarkPointRepository.class);
+    private final SubjectRepository subjects = mock(SubjectRepository.class);
     private final ContentReviewService service =
-            new ContentReviewService(examPapers, questionVersions, markSchemes, markPoints);
+            new ContentReviewService(examPapers, questionVersions, markSchemes, markPoints,
+                    subjects);
 
     @Test
     @DisplayName("paperReview carries content + answer key + scheme state per version")
@@ -117,6 +123,65 @@ class ContentReviewServiceTest {
         UUID missing = UUID.randomUUID();
         when(examPapers.findById(missing)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.paperReview(missing))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // ── §7 placement ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("placePaper moves a paper into the target subject (factual association only)")
+    void placePaperMovesSubject() {
+        UUID paperId = UUID.randomUUID();
+        UUID subjectId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.id()).thenReturn(paperId);
+        when(paper.paperCode()).thenReturn("4CH0/1C");
+        when(paper.sessionLabel()).thenReturn("June 2011");
+        when(paper.subjectId()).thenReturn(UUID.randomUUID()); // currently in the placeholder
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        Subject subject = mock(Subject.class);
+        when(subject.code()).thenReturn("4CH1");
+        when(subject.name()).thenReturn("Chemistry (4CH1)");
+        when(subjects.findById(subjectId)).thenReturn(Optional.of(subject));
+
+        ExamPaper placed = service.placePaper(paperId, subjectId);
+
+        assertThat(placed).isSameAs(paper);
+        verify(paper).assignSubject(subjectId);   // association updated...
+        verify(paper, never()).assignSubject(null);
+    }
+
+    @Test
+    @DisplayName("placePaper is idempotent for a paper already in the target subject")
+    void placePaperIdempotent() {
+        UUID paperId = UUID.randomUUID();
+        UUID subjectId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.id()).thenReturn(paperId);
+        when(paper.subjectId()).thenReturn(subjectId); // already there
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        Subject subject = mock(Subject.class);
+        when(subjects.findById(subjectId)).thenReturn(Optional.of(subject));
+
+        assertThat(service.placePaper(paperId, subjectId)).isSameAs(paper);
+        verify(paper, never()).assignSubject(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("placePaper 404s for an unknown paper or subject")
+    void placePaperNotFound() {
+        UUID missingPaper = UUID.randomUUID();
+        when(examPapers.findById(missingPaper)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.placePaper(missingPaper, UUID.randomUUID()))
+                .isInstanceOf(NotFoundException.class);
+
+        UUID paperId = UUID.randomUUID();
+        UUID missingSubject = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.subjectId()).thenReturn(UUID.randomUUID());
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(subjects.findById(missingSubject)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.placePaper(paperId, missingSubject))
                 .isInstanceOf(NotFoundException.class);
     }
 }
