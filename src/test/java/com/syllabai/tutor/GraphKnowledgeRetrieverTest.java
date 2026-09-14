@@ -77,6 +77,23 @@ class GraphKnowledgeRetrieverTest {
     }
 
     @Test
+    @DisplayName("two named tokens match even a long spec title (KaRag hybrid recall case)")
+    void twoTokenMatchAlwaysAccepted() {
+        // production shape (KaRagFlowIT): "chlorine iodine astatine halogens"
+        // onto the 7-token Group 7 subtopic = 2/7 — a genuine hybrid-recall
+        // ask that any specificity floor below 0.29 would have killed
+        when(graph.structureNodes()).thenReturn(java.util.List.of(
+                node(UUID.randomUUID(), "IALCHEM2018-U2-T8-C",
+                        "Inorganic chemistry of Group 7 (limited to chlorine, bromine and iodine)")));
+
+        KnowledgeContext context = retriever.retrieve("chlorine iodine astatine halogens", 5);
+
+        assertThat(context.topics()).hasSize(1);
+        assertThat(context.topics().get(0).code()).isEqualTo("IALCHEM2018-U2-T8-C");
+        assertThat(context.topics().get(0).matchScore()).isCloseTo(2.0 / 7.0, org.assertj.core.data.Offset.offset(1e-9));
+    }
+
+    @Test
     @DisplayName("plural normalization: 'bonding' queries match, stemmed both sides")
     void pluralNormalization() {
         KnowledgeContext context = retriever.retrieve("bonding", 5);

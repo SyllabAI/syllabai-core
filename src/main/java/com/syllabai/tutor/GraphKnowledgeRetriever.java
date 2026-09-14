@@ -45,17 +45,21 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
     private static final Logger log = LoggerFactory.getLogger(GraphKnowledgeRetriever.class);
 
     /**
-     * Precision floor (productization §7): a match must name at least ~1/3 of
-     * the node title before the question can be called "about" that topic.
-     * Calibrated on the live P6 battery: real chemistry asks land at 0.5–1.0
-     * ("moles" onto "Mole calculations" = 0.5; "dynamic equilibrium" = 1.0),
-     * while the observed false positive — a Hamlet question's "plot" leaking
-     * onto a 5-token solubility title — scored 0.2. Below the floor the topic
-     * simply does not match, which feeds the fail-closed refusal path (never
-     * a fabricated answer). Grounding stays strict; recall on genuine asks is
-     * untouched.
+     * Single-token precision floor (productization §7). A match is accepted
+     * when the query names at least TWO tokens of the node title, or when it
+     * names exactly one token that dominates a short title (>= half of it).
+     *
+     * <p>Calibrated on live batteries: real chemistry asks are multi-token
+     * ("chlorine iodine astatine halogens" onto the 7-token Group 7 subtopic
+     * = 2/7) or dominate short titles ("moles" onto "Mole calculations" =
+     * 1/2). The observed false positive class is the single GENERIC token
+     * landing in a long spec title — a Hamlet question's "plot" onto
+     * "understand how to plot and interpret solubility curves" (1/5 = 0.2) —
+     * which previously leaked an evidence item past the grounding gate.
+     * Below the rule the topic does not match, feeding the fail-closed
+     * refusal path (never a fabricated answer).</p>
      */
-    static final double MIN_SPECIFICITY = 0.30;
+    static final double SINGLE_TOKEN_MIN_SPECIFICITY = 0.50;
 
     private static final Set<String> STOP_TOKENS = Set.of(
             "the", "and", "for", "are", "what", "which", "how", "does", "why", "with",
@@ -93,8 +97,8 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
                 continue;
             }
             double specificity = (double) named / titleTokens.size();
-            if (specificity < MIN_SPECIFICITY) {
-                continue;   // too weak to call the question "about" this topic
+            if (named == 1 && specificity < SINGLE_TOKEN_MIN_SPECIFICITY) {
+                continue;   // one generic token in a long title is not "about"
             }
             matches.put(node.id(), new MatchAccumulator(node, named, specificity));
         }
