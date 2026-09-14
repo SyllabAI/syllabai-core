@@ -13,7 +13,7 @@ from pathlib import Path
 PG = "/home/z/toolchain/pgdebs/root/usr/lib/postgresql/17/bin/psql"
 CONN = ["-h", "/home/z/toolchain", "-U", "syllabai", "-d", "syllabai", "-tAc"]
 PAPERS = Path("/home/z/my-project/repos/Past-Papers")
-CAMP = Path("/home/z/my-project/download/ingestion-campaign-r2")
+CAMP = Path(os.environ.get("CAMPAIGN_ROOT", "/home/z/my-project/download/ingestion-campaign-r2"))
 QUARANTINED = {("paper 1", "2016-Jan")}
 FAILURES = []
 NOTES = []
