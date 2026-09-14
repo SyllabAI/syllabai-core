@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The §26.1 free-tier chain: Groq (primary) → Gemini 2.5 Flash (fallback) →
@@ -28,6 +30,8 @@ import java.util.Map;
  * non-experiment requests are unaffected (caller model &gt; provider default).</p>
  */
 public class FailoverLlmChain implements LlmProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(FailoverLlmChain.class);
 
     private final Map<String, LlmProvider> providersByOrder;
     private final ExperimentPinResolver pinResolver;
@@ -71,15 +75,26 @@ public class FailoverLlmChain implements LlmProvider {
             throw new LlmProviderException("chain", "no available LLM provider in chain", null);
         }
         LlmProviderException last = null;
+        List<String> failures = new ArrayList<>();
         for (LlmProvider provider : candidates) {
             try {
                 return provider.generate(effectiveRequest);
             } catch (LlmProviderException e) {
+                failures.add(provider.name() + ": " + e.getMessage());
                 last = e;
             }
         }
+        // Diagnosability: the aggregate 503 must say WHICH provider failed and WHY,
+        // otherwise an operator cannot distinguish a dead key (403) from a retired
+        // model (404) from a quota outage (429) — the 2026-09-14 tutor outage was
+        // invisible for exactly this reason (every cause swallowed to "generation
+        // failed"). Provider error text contains no credential material.
+        String detail = String.join(" | ", failures);
+        log.warn("LLM chain exhausted ({} of {} providers attempted): {}",
+                failures.size(), candidates.size(), detail);
         throw new LlmProviderException("chain",
-                "all providers failed, last error: " + (last == null ? "unknown" : last.getMessage()),
+                "all providers failed, last error: " + (last == null ? "unknown" : last.getMessage())
+                        + " [" + detail + "]",
                 last);
     }
 

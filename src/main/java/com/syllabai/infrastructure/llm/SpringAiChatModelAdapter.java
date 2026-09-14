@@ -14,6 +14,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Adapts a Spring AI {@link ChatModel} to the {@link LlmProvider} port (Master Spec
@@ -22,6 +24,8 @@ import java.util.concurrent.TimeUnit;
  * stay inside the bean construction in {@code LlmChainConfig}.
  */
 public class SpringAiChatModelAdapter implements LlmProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(SpringAiChatModelAdapter.class);
 
     /**
      * Daemon, cached worker pool so a hung provider HTTP call cannot pin a
@@ -108,8 +112,19 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         } catch (LlmProviderException e) {
             throw e;
         } catch (RuntimeException e) {
-            health.recordFailure(e.getClass().getSimpleName() + ": " + e.getMessage());
-            throw new LlmProviderException(providerName, "generation failed", e);
+            long latencyMs = (System.nanoTime() - started) / 1_000_000;
+            String causeSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
+            // Real cause must reach BOTH the health snapshot and the log — the
+            // provider-SDK exception text is what tells a 403 dead key apart from a
+            // 404 retired model or a 429 quota outage (2026-09-14 outage lesson).
+            // SDK error text contains no credential material.
+            log.warn("LLM provider {} failed after {} ms: {}", providerName, latencyMs,
+                    causeSummary.length() > 300 ? causeSummary.substring(0, 300) : causeSummary);
+            health.recordFailure(causeSummary);
+            throw new LlmProviderException(providerName,
+                    "generation failed (" + (causeSummary.length() > 200
+                            ? causeSummary.substring(0, 200) : causeSummary) + ")",
+                    e);
         }
     }
 
