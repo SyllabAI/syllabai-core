@@ -8,9 +8,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.teacher.ingestion.GlmOcrDraftMapper.ReviewFinding;
 import com.syllabai.teacher.ingestion.GlmOcrIngestionService;
@@ -22,6 +19,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * The controlled teacher surface: the five-document parser bundle (raw JSON
@@ -30,7 +29,10 @@ import org.mockito.ArgumentCaptor;
  */
 class GlmOcrIngestionControllerTest {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    // Jackson 3 — the SAME mapper family the web layer binds with (Spring
+    // Framework 7). Using it here is the point: a Jackson 2-typed DTO field
+    // cannot be constructed by the web binding at all.
+    private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final Path FIXTURES =
             Path.of("src/test/resources/fixtures/glm-ocr/october-2025-wph11-01");
 
@@ -47,6 +49,7 @@ class GlmOcrIngestionControllerTest {
         bundle.set("qpDraft", JSON.readTree(Files.readString(FIXTURES.resolve("qp-draft.json"))));
         bundle.set("msDraft", JSON.readTree(Files.readString(FIXTURES.resolve("ms-draft.json"))));
         bundle.set("reconciliation", JSON.readTree(Files.readString(FIXTURES.resolve("reconciliation.json"))));
+        String body = JSON.writeValueAsString(bundle);
 
         UUID operator = UUID.randomUUID();
         when(bridge.ingestPair(any(), any())).thenReturn(new GlmOcrIngestionService.PairResult(
@@ -82,6 +85,31 @@ class GlmOcrIngestionControllerTest {
         assertThat(view.embeddingSkipped()).isTrue();
         assertThat(view.reviewFindings()).hasSize(1);
         assertThat(view.reviewFindings().get(0).detail()).contains("Q18");
+    }
+
+    @Test
+    @DisplayName("REGRESSION: the raw POST body binds through the WEB mapper (Jackson 3) — the exact Spring path")
+    void rawBodyBindsThroughWebMapper() throws Exception {
+        // Reproduces the production failure mode: the full HTTP body (five parser
+        // outputs) deserialized by the web layer into PairRequestView, then mapped
+        // to the service contract. A Jackson 2-typed JsonNode field fails HERE
+        // with HttpMessageConversionException before ever reaching the service.
+        ObjectNode bundle = JSON.createObjectNode();
+        bundle.set("qpCanonical", JSON.readTree(Files.readString(FIXTURES.resolve("qp-canonical.json"))));
+        bundle.set("msCanonical", JSON.readTree(Files.readString(FIXTURES.resolve("ms-canonical.json"))));
+        bundle.set("qpDraft", JSON.readTree(Files.readString(FIXTURES.resolve("qp-draft.json"))));
+        bundle.set("msDraft", JSON.readTree(Files.readString(FIXTURES.resolve("ms-draft.json"))));
+        bundle.set("reconciliation", JSON.readTree(Files.readString(FIXTURES.resolve("reconciliation.json"))));
+        String body = JSON.writeValueAsString(bundle);
+
+        GlmOcrIngestionController.PairRequestView bound =
+                JSON.readValue(body, GlmOcrIngestionController.PairRequestView.class);
+        GlmOcrIngestionService.GlmOcrPairRequest request = bound.toServiceRequest();
+
+        assertThat(request.qpCanonical().documentId())
+                .isEqualTo("e8191629-9288-55d0-833a-19be26f274bd");
+        assertThat(request.qpDraft().questions()).hasSize(20);
+        assertThat(request.reconciliation().qpPaperTotal()).isEqualTo(80);
     }
 
     @Test

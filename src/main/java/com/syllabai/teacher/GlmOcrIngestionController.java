@@ -1,7 +1,5 @@
 package com.syllabai.teacher;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.syllabai.content.CanonicalDocumentDto;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.NotFoundException;
@@ -22,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Controlled content-ops surface for the T-C02 GLM-OCR bridge (T-C02 contract:
@@ -35,7 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/teacher/content/glm-ocr")
 public class GlmOcrIngestionController {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    // WEB-layer binding runs on Jackson 3 (Spring Framework 7): the request DTO's
+    // JsonNode fields MUST be tools.jackson types or every POST dies with
+    // HttpMessageConversionException before reaching the service. (Jackson 2
+    // com.fasterxml classes remain fine for IN-PROCESS mappers only.)
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final GlmOcrIngestionService bridge;
 
