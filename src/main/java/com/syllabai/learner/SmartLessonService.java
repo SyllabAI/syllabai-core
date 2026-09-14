@@ -7,6 +7,8 @@ import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.learner.dto.SmartLessonView;
 import com.syllabai.learner.dto.SmartLessonView.ActionType;
 import com.syllabai.learner.dto.SmartLessonView.EvidenceFactView;
+import com.syllabai.learner.dto.SmartLessonView.MisconceptionStatusView;
+import com.syllabai.learner.dto.SmartLessonView.PrerequisiteStatusView;
 import com.syllabai.learner.dto.SmartLessonView.LessonActionView;
 import com.syllabai.learner.dto.SmartLessonView.ReasonCode;
 import com.syllabai.learner.dto.SmartLessonView.TopicStatusView;
@@ -138,11 +140,101 @@ public class SmartLessonService {
             evidence.add(new EvidenceFactView("attempts", "0 (no attempt evidence on this topic)"));
         }
 
+        // KG learner-surface panels (§4): direct prerequisites with the
+        // learner's mastery as an overlay, and attached misconceptions with
+        // BDT probability + validated remediation targets. Measured facts and
+        // validated relations only — mastery never touches curriculum nodes.
+        List<PrerequisiteStatusView> prereqPanel = prerequisitePanel(topic, tree, byId, byCode,
+                skills, effective);
+        List<MisconceptionStatusView> misconceptionPanel = misconceptionPanel(topic, byCode,
+                misconceptions);
+
         LessonActionView action = decide(learnerId, tree, topic, byId, byCode, skills,
                 misconceptions, effective, evidence, now);
 
         return new SmartLessonView(learnerId, rootId, topicNodeId, topic.code(), topic.title(),
-                now, SmartLessonView.POLICY_ID, action, status, List.copyOf(evidence));
+                now, SmartLessonView.POLICY_ID, action, status, prereqPanel, misconceptionPanel,
+                List.copyOf(evidence));
+    }
+
+    /** prerequisite panel: one row per DIRECT prerequisite, mastery overlaid */
+    private List<PrerequisiteStatusView> prerequisitePanel(NodeView topic, NodeView tree,
+                                                           Map<UUID, NodeView> byId,
+                                                           Map<String, NodeView> byCode,
+                                                           Map<UUID, SkillState> skills,
+                                                           Map<UUID, Double> effective) {
+        Set<UUID> direct = directPrerequisites(topic, tree, byId, byCode);
+        List<PrerequisiteStatusView> rows = new ArrayList<>();
+        for (UUID prereqId : direct) {
+            NodeView node = byId.get(prereqId);
+            if (node == null) {
+                continue;
+            }
+            SkillState s = skills.get(prereqId);
+            Double eff = s == null ? null : effective.get(prereqId);
+            rows.add(new PrerequisiteStatusView(node.id(), node.code(), node.title(),
+                    eff, s == null ? null : s.attempts(),
+                    eff != null && s.attempts() >= 1 && eff < properties.weakMasteryCeiling()));
+        }
+        rows.sort(Comparator.comparing(PrerequisiteStatusView::code,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return rows;
+    }
+
+    /** misconception panel: rows for every attached misconception + remediation target */
+    private List<MisconceptionStatusView> misconceptionPanel(NodeView topic,
+                                                             Map<String, NodeView> byCode,
+                                                             Map<UUID, MisconceptionState> misconceptions) {
+        List<MisconceptionStatusView> rows = new ArrayList<>();
+        if (topic.children() == null) {
+            return rows;
+        }
+        for (NodeView child : topic.children()) {
+            if (!"MISCONCEPTION".equals(child.type())) {
+                continue;
+            }
+            MisconceptionState m = misconceptions.get(child.id());
+            String remediation = null;
+            for (ConceptDependencyGraph.Edge edge : conceptGraph.edges(
+                    SemanticRelation.REMEDIATED_BY)) {
+                if (child.code() != null && child.code().equals(edge.source())) {
+                    NodeView corrective = byCode.get(edge.target());
+                    if (corrective != null) {
+                        remediation = corrective.code();
+                        break;
+                    }
+                }
+            }
+            rows.add(new MisconceptionStatusView(child.id(), child.code(), child.title(),
+                    m == null ? null : m.probability(),
+                    m != null && m.probability() >= learnerProperties.bdt().activeThreshold(),
+                    remediation));
+        }
+        rows.sort(Comparator.comparing(MisconceptionStatusView::code,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return rows;
+    }
+
+    /** direct prerequisites of a topic: DB relations + validated chain edges, subtree-filtered */
+    private Set<UUID> directPrerequisites(NodeView topic, NodeView tree,
+                                          Map<UUID, NodeView> byId, Map<String, NodeView> byCode) {
+        Set<UUID> direct = new HashSet<>();
+        for (KnowledgeGraphService.PrerequisiteRelation rel : graph.prerequisiteRelations(
+                tree.id())) {
+            if (topic.id().equals(rel.dependentNodeId()) && byId.containsKey(rel.prerequisiteId())) {
+                direct.add(rel.prerequisiteId());
+            }
+        }
+        for (ConceptDependencyGraph.Edge edge : conceptGraph.edges(
+                SemanticRelation.REQUIRES_PREREQUISITE)) {
+            if (topic.code() != null && topic.code().equals(edge.source())) {
+                NodeView prereq = byCode.get(edge.target());
+                if (prereq != null) {
+                    direct.add(prereq.id());
+                }
+            }
+        }
+        return direct;
     }
 
     // ── the ladder ──────────────────────────────────────────────────────
@@ -155,21 +247,7 @@ public class SmartLessonService {
                                     List<EvidenceFactView> evidence, Instant now) {
 
         // (1) prerequisite gate — direct prerequisites of the selected topic
-        Set<UUID> directPrereqs = new HashSet<>();
-        for (KnowledgeGraphService.PrerequisiteRelation rel : graph.prerequisiteRelations(
-                tree.id())) {
-            if (topic.id().equals(rel.dependentNodeId())) {
-                directPrereqs.add(rel.prerequisiteId());
-            }
-        }
-        for (ConceptDependencyGraph.Edge edge : conceptGraph.edges(SemanticRelation.REQUIRES_PREREQUISITE)) {
-            if (topic.code() != null && topic.code().equals(edge.source())) {
-                NodeView prereq = byCode.get(edge.target());
-                if (prereq != null) {
-                    directPrereqs.add(prereq.id());
-                }
-            }
-        }
+        Set<UUID> directPrereqs = directPrerequisites(topic, tree, byId, byCode);
         record WeakPrereq(NodeView node, double eff, int attempts) { }
         List<WeakPrereq> weakPrereqs = new ArrayList<>();
         for (UUID prereqId : directPrereqs) {

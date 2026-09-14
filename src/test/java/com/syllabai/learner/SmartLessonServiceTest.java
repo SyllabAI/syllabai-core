@@ -158,6 +158,13 @@ class SmartLessonServiceTest {
         assertThat(lesson.action().reasonCode()).isEqualTo(ReasonCode.PREREQUISITE_WEAK);
         assertThat(lesson.action().targetNodeId()).isEqualTo(TOPIC_A);
         assertThat(lesson.action().reasonDetail()).contains("U1-T1").contains("foundation");
+
+        // KG learner surface (§4): the prerequisite panel carries the
+        // measured overlay for the same prerequisite
+        assertThat(lesson.prerequisites()).hasSize(1);
+        assertThat(lesson.prerequisites().get(0).code()).isEqualTo("U1-T1");
+        assertThat(lesson.prerequisites().get(0).measuredWeak()).isTrue();
+        assertThat(lesson.prerequisites().get(0).effectiveMastery()).isNotNull();
     }
 
     @Test
@@ -213,6 +220,14 @@ class SmartLessonServiceTest {
         assertThat(lesson.action().actionType()).isEqualTo(ActionType.ASK_TUTOR);
         assertThat(lesson.action().targetNodeId()).isEqualTo(MIS_M1);
         assertThat(lesson.topicStatus().strongestMisconceptionProbability()).isEqualTo(0.8);
+
+        // misconception panel: the attached misconception with its probability
+        // overlay and no remediation edge (empty graph here)
+        assertThat(lesson.misconceptions()).hasSize(1);
+        assertThat(lesson.misconceptions().get(0).title()).isEqualTo("Confuses moles with mass");
+        assertThat(lesson.misconceptions().get(0).probability()).isEqualTo(0.8);
+        assertThat(lesson.misconceptions().get(0).active()).isTrue();
+        assertThat(lesson.misconceptions().get(0).remediationNodeCode()).isNull();
     }
 
     @Test

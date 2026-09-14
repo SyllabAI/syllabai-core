@@ -28,6 +28,8 @@ public record SmartLessonView(
         String policy,
         LessonActionView action,
         TopicStatusView topicStatus,
+        List<PrerequisiteStatusView> prerequisites,
+        List<MisconceptionStatusView> misconceptions,
         List<EvidenceFactView> evidence) {
 
     public static final String POLICY_ID = "smart-lesson/v1";
@@ -96,5 +98,25 @@ public record SmartLessonView(
 
     /** One traceability fact the decision used (deterministic, no inference). */
     public record EvidenceFactView(String key, String value) {
+    }
+
+    /**
+     * One direct prerequisite of the selected topic with the learner's
+     * measured status as an overlay (null mastery = not yet measured — an
+     * honest gap, never an invented value).
+     */
+    public record PrerequisiteStatusView(
+            UUID nodeId, String code, String title,
+            Double effectiveMastery, Integer attempts, boolean measuredWeak) {
+    }
+
+    /**
+     * One misconception attached to the topic: the KG node plus the learner's
+     * BDT probability overlay and, when a validated REMEDIATED_BY edge names
+     * one, the corrective concept to study.
+     */
+    public record MisconceptionStatusView(
+            UUID nodeId, String code, String title,
+            Double probability, boolean active, String remediationNodeCode) {
     }
 }
