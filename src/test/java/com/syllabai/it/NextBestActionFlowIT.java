@@ -1,6 +1,7 @@
 package com.syllabai.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
@@ -20,6 +21,7 @@ import com.syllabai.recommendation.NextBestActionService;
 import com.syllabai.recommendation.dto.NextBestActionsView;
 import com.syllabai.recommendation.dto.NextBestActionsView.ActionType;
 import com.syllabai.recommendation.dto.NextBestActionsView.ReasonCode;
+import com.syllabai.shared.NotFoundException;
 import com.syllabai.teacher.ContentReviewService;
 import com.syllabai.teacher.TeacherMarkingService;
 import com.syllabai.teacher.ingestion.PastPaperDraftDto;
@@ -44,8 +46,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * baseline). Runs in CI where Docker exists; skipped locally otherwise.
  *
  * <p>Covers: low-mark human-marked evidence → RETRY_PROBLEM_QUESTION with the
- * measured marks in the reason; the learner-serving boundary (a low-mark answer
- * on an UNVALIDATED question never becomes a retry action); subject-subtree
+ * measured marks in the reason; the learner-serving boundary (an UNVALIDATED
+ * question is not even attemptable — fe98ea9 write-path fail-closed 404 — and
+ * never surfaces as a recommendation); subject-subtree
  * scoping (evidence under another anchor is invisible); determinism (two calls
  * produce identical ranked actions); honest cold start (a new learner gets an
  * UNCOVERED_TOPIC action when validated questions exist, never a crash); and
@@ -159,14 +162,26 @@ class NextBestActionFlowIT {
         Question questionB = questionOf(summaryB.paperId());
         validateCurrentVersion(questionA);
 
-        // 2. wrong zero-mark attempts on both (the anchor TOPIC under each paper
-        //    is the practice scope; distinct paper codes keep anchors distinct)
+        // 2. wrong zero-mark attempt on the validated question (the anchor TOPIC
+        //    under each paper is the practice scope; distinct paper codes keep
+        //    anchors distinct)
         UUID answerA = wrongAttempt(learner, questionA);
-        UUID answerB = wrongAttempt(learner, questionB);
         assertThat(answers.findWithPartAndAttempt(answerA).orElseThrow().markingState())
                 .isEqualTo(Answer.MarkingState.HUMAN_MARKED);
-        assertThat(answers.findWithPartAndAttempt(answerB).orElseThrow().marksAwarded())
-                .isZero();
+
+        // 2b. the write-path serving boundary (fe98ea9): the UNVALIDATED question
+        //     is not even attemptable — fail-closed NotFound, no part labels, no
+        //     marks, no state echo. The old contract (attemptable but never
+        //     recommended) is superseded; the read-path boundary stays asserted
+        //     by the noneMatch checks below.
+        QuestionVersion versionB = questionVersions
+                .findByQuestionIdOrderByVersionDesc(questionB.id()).get(0);
+        UUID partB = versionB.parts().get(0).id();
+        assertThatThrownBy(() -> assessment.submitStructured(learner,
+                new StructuredSubmitRequest(questionB.id(),
+                        List.of(new PartAnswerRequest(partB, "a wrong answer")),
+                        30000L, 4, false, true)))
+                .isInstanceOf(NotFoundException.class);
 
         // 3. scoped to question A's anchor: the validated question becomes a retry
         UUID rootA = questionA.primaryTopicNodeId();
@@ -185,8 +200,9 @@ class NextBestActionFlowIT {
         // LOW_MASTERY action may appear from a single attempt
         assertThat(view.actions()).noneMatch(a -> a.reasonCode() == ReasonCode.LOW_MASTERY);
 
-        // 4. the boundary proof: scoped to question B's anchor, the equally
-        //    low-marked but UNVALIDATED question must never be recommended
+        // 4. the boundary proof on the read path: scoped to question B's anchor,
+        //    the UNVALIDATED question must never be recommended (its evidence
+        //    cannot even exist — see 2b)
         UUID rootB = questionB.primaryTopicNodeId();
         NextBestActionsView viewB = nextBestActions.actionsFor(learner, rootB);
         assertThat(viewB.actions()).noneMatch(a -> questionB.id().equals(a.questionId()));
