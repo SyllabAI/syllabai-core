@@ -36,19 +36,22 @@ public class LearnerStateController {
     private final EbbinghausDecayService decayService;
     private final LearnerProperties properties;
     private final KnowledgeNodeRepository knowledgeNodes;
+    private final TutorEngagementReader tutorEngagements;
 
     public LearnerStateController(LearnerModelService learnerModel,
                                   LearnerKnowledgeGraphService graphs,
                                   ReviewScheduleRepository reviewSchedules,
                                   EbbinghausDecayService decayService,
                                   LearnerProperties properties,
-                                  KnowledgeNodeRepository knowledgeNodes) {
+                                  KnowledgeNodeRepository knowledgeNodes,
+                                  TutorEngagementReader tutorEngagements) {
         this.learnerModel = learnerModel;
         this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
         this.decayService = decayService;
         this.properties = properties;
         this.knowledgeNodes = knowledgeNodes;
+        this.tutorEngagements = tutorEngagements;
     }
 
     @GetMapping("/state")
@@ -99,7 +102,15 @@ public class LearnerStateController {
                         r.nodeId(), r.dueAt(), r.reason().name(), titles.get(r.nodeId())))
                 .toList();
 
-        return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews);
+        // V21 (P7): what the learner has been asking the Tutor about (last 30
+        // days, top 10 topics) — structured engagement signal, chat text stays
+        // in the research log
+        List<LearnerStateView.TutorEngagementView> engagementViews = tutorEngagements
+                .recentEngagementSummary(learnerId, now.minus(java.time.Duration.ofDays(30)), 10,
+                        titles::get);
+
+        return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews,
+                engagementViews);
     }
 
     /**

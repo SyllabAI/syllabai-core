@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,12 +65,14 @@ class NextBestActionServiceTest {
     private final ReviewScheduleRepository reviewSchedules = mock(ReviewScheduleRepository.class);
     private final AnswerRepository answers = mock(AnswerRepository.class);
     private final ServableQuestionService servableQuestions = mock(ServableQuestionService.class);
+    private final NextBestActionService.TutorEngagementViewReader engagementReader =
+            mock(NextBestActionService.TutorEngagementViewReader.class);
 
     private final NextBestActionService service = new NextBestActionService(
             graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
             new LearnerProperties(null, null, null, null),
-            new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-            answers, servableQuestions, ConceptDependencyGraph.empty());
+            new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+            answers, servableQuestions, ConceptDependencyGraph.empty(), engagementReader);
 
     // ── fixtures ───────────────────────────────────────────────────
 
@@ -104,6 +107,8 @@ class NextBestActionServiceTest {
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of());
     }
 
     private SkillState skill(UUID nodeId, int attempts, double mastery) {
@@ -183,7 +188,7 @@ class NextBestActionServiceTest {
         assertThat(view.actions().get(1).targetNodeId()).isEqualTo(TOPIC_B);
         assertThat(view.actions().stream().map(a -> a.targetNodeId()))
                 .doesNotContain(OUTSIDE);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1.1");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
         assertThat(view.actions().get(0).rank()).isEqualTo(1);
         assertThat(view.actions().get(1).rank()).isEqualTo(2);
     }
@@ -357,7 +362,7 @@ class NextBestActionServiceTest {
         assertThat(view.actions().get(1).targetNodeId()).isEqualTo(TOPIC_B);
     }
 
-    // ── T7 uncovered topics (constrained exploration) ──────────────
+    // ── T7 uncovered topics (constrained exploration) ──────────
 
     @Test
     @DisplayName("uncovered topics surface only with servable questions, capped at 2, curriculum order")
@@ -540,8 +545,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
         when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
@@ -569,8 +574,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
                 skill(G_BEC, 3, 0.20),
@@ -593,8 +598,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
 
         assertThat(graphService.actionsFor(LEARNER, G_ROOT).actions()).isEmpty();
@@ -606,8 +611,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
                 List.of(misconception(G_MIS_BEC, 0.75)));
@@ -633,8 +638,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
                 List.of(misconception(G_MIS_BEC, 0.20)));
@@ -654,8 +659,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, mixed);
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, mixed, engagementReader);
         // the tree carries every code the frozen edges touch, so any leakage would surface
         NodeView misEqs = node(G_MIS_EQS, CODE_MIS_EQS, "MISCONCEPTION", "Subscripts in equations");
         NodeView eqs = node(G_EQS, CODE_EQS, "TOPIC", "State symbols", List.of(misEqs));
@@ -701,8 +706,8 @@ class NextBestActionServiceTest {
         NextBestActionService withGraph = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenTree();   // the IAL-coded tree — no T-C11 code matches
         givenNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
@@ -718,8 +723,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         // the tree carries BEC but NOT CON-COVALENT-BOND (it lives under another root)
         NodeView bec = node(G_BEC, CODE_BEC, "TOPIC", "Bond energy calculations");
         NodeView unit = node(G_UNIT, "4CH1-S3", "UNIT", "Section 3 Physical", List.of(bec));
@@ -749,8 +754,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(settledSliceTree());
         when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
@@ -781,8 +786,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settledSliceGraph());
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
         when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
@@ -817,8 +822,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, ConceptDependencyGraph.of(raw, allCodes));
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, ConceptDependencyGraph.of(raw, allCodes), engagementReader);
         NodeView unit = node(G_UNIT, "4CH1", "UNIT", "Unit", dependents);
         when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(
                 node(G_ROOT, "4CH1-ROOT", "SUBJECT", "Chemistry", List.of(unit)));
@@ -847,8 +852,8 @@ class NextBestActionServiceTest {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),
-                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0),
-                answers, servableQuestions, settled);
+                new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+                answers, servableQuestions, settled, engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
         when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
@@ -867,5 +872,77 @@ class NextBestActionServiceTest {
         // consumed by the NBA (only REQUIRES_PREREQUISITE and REMEDIATED_BY are)
         assertThat(view.actions()).noneMatch(a -> a.targetCode().equals(CODE_MIS_BEC)
                 && a.actionType() == ActionType.REMEDIATE_MISCONCEPTION);
+    }
+
+    // ── T7a tutor engagement (V21, P7) ──────────────────────────
+
+    @Test
+    @DisplayName("a recently-asked unpractised topic becomes TUTOR_ENGAGED ahead of uncovered topics")
+    void tutorEngagedTopicOutranksUncovered() {
+        givenTree();
+        givenNoEvidence();
+        when(servableQuestions.countServableByTopic(TOPIC_A)).thenReturn(2);
+        when(servableQuestions.countServableByTopic(TOPIC_B)).thenReturn(3);
+        when(servableQuestions.countServableByTopic(TOPIC_C)).thenReturn(4);
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, 3L));   // learner asked about C thrice
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        // C leads with TUTOR_ENGAGED; A/B follow as plain uncovered (curriculum order)
+        assertThat(view.actions()).hasSize(3);
+        assertThat(view.actions().get(0).targetNodeId()).isEqualTo(TOPIC_C);
+        assertThat(view.actions().get(0).reasonCode()).isEqualTo(ReasonCode.TUTOR_ENGAGED);
+        assertThat(view.actions().get(0).actionType()).isEqualTo(ActionType.PRACTISE_QUESTIONS);
+        assertThat(view.actions().get(0).servableQuestionCount()).isEqualTo(4);
+        assertThat(view.actions().get(0).reasonDetail()).contains("3 time(s)");
+        assertThat(view.actions().get(1).reasonCode()).isEqualTo(ReasonCode.UNCOVERED_TOPIC);
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
+    }
+
+    @Test
+    @DisplayName("topics with attempt evidence never produce TUTOR_ENGAGED (no double-counting)")
+    void tutorEngagementSkipsPractisedTopics() {
+        givenTree();
+        givenNoEvidence();
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(TOPIC_C, 3, 0.5)));
+        when(servableQuestions.countServableByTopic(TOPIC_C)).thenReturn(4);
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, 3L));   // asked AND practised
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        // C is practised (mastery 0.5 above weak ceiling) — its asks must NOT
+        // resurrect it as TUTOR_ENGAGED; evidence tiers own practised topics
+        assertThat(view.actions()).noneMatch(a -> a.reasonCode() == ReasonCode.TUTOR_ENGAGED);
+    }
+
+    @Test
+    @DisplayName("asks about nodes outside the subject subtree are ignored (subject isolation)")
+    void tutorEngagementIsSubjectScoped() {
+        givenTree();
+        givenNoEvidence();
+        when(servableQuestions.countServableByTopic(TOPIC_A)).thenReturn(2);
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(OUTSIDE, 5L));   // another subject's topic
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        assertThat(view.actions()).noneMatch(a -> a.reasonCode() == ReasonCode.TUTOR_ENGAGED);
+        assertThat(view.actions()).allMatch(a -> !a.targetNodeId().equals(OUTSIDE));
+    }
+
+    @Test
+    @DisplayName("asked topics with no servable questions produce no action (boundary holds)")
+    void tutorEngagementRequiresServableContent() {
+        givenTree();
+        givenNoEvidence();
+        when(servableQuestions.countServableByTopic(TOPIC_C)).thenReturn(0);  // nothing validated
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, 2L));
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        assertThat(view.actions()).noneMatch(a -> a.targetNodeId().equals(TOPIC_C));
     }
 }

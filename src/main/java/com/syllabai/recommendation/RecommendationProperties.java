@@ -16,7 +16,8 @@ public record RecommendationProperties(
         int minAttemptsForWeakness,
         int maxActions,
         int uncoveredTopicCap,
-        int problemQuestionCap) {
+        int problemQuestionCap,
+        int tutorEngagementWindowDays) {
 
     public RecommendationProperties {
         if (weakMasteryCeiling <= 0) weakMasteryCeiling = 0.45;   // matches decay LOW band ceiling
@@ -26,5 +27,6 @@ public record RecommendationProperties(
         if (maxActions <= 0) maxActions = 8;
         if (uncoveredTopicCap <= 0) uncoveredTopicCap = 2;
         if (problemQuestionCap <= 0) problemQuestionCap = 2;
+        if (tutorEngagementWindowDays <= 0) tutorEngagementWindowDays = 14; // P7: recency of a tutor ask
     }
 }

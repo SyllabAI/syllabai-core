@@ -75,8 +75,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NextBestActionService {
 
-    /** v1.1: graph-aware candidate sources (T-C11 settled dependency layer) added; tiers and thresholds unchanged. */
-    public static final String POLICY = "nba-rules/v1.1";
+    /** v1.2 (P7): T7a tutor-engagement candidates (asked-but-unpractised) added ahead of T7; tiers and thresholds unchanged. */
+    public static final String POLICY = "nba-rules/v1.2";
 
     private final KnowledgeGraphService graph;
     private final LearnerModelService learnerModel;
@@ -87,6 +87,7 @@ public class NextBestActionService {
     private final AnswerRepository answers;
     private final ServableQuestionService servableQuestions;
     private final ConceptDependencyGraph conceptGraph;
+    private final TutorEngagementViewReader tutorEngagements;
 
     public NextBestActionService(KnowledgeGraphService graph,
                                  LearnerModelService learnerModel,
@@ -96,7 +97,8 @@ public class NextBestActionService {
                                  RecommendationProperties properties,
                                  AnswerRepository answers,
                                  ServableQuestionService servableQuestions,
-                                 ConceptDependencyGraph conceptGraph) {
+                                 ConceptDependencyGraph conceptGraph,
+                                 TutorEngagementViewReader tutorEngagements) {
         this.graph = graph;
         this.learnerModel = learnerModel;
         this.reviewSchedules = reviewSchedules;
@@ -106,6 +108,13 @@ public class NextBestActionService {
         this.answers = answers;
         this.servableQuestions = servableQuestions;
         this.conceptGraph = conceptGraph;
+        this.tutorEngagements = tutorEngagements;
+    }
+
+    /** read access to the V21 engagement signal, isolating the NBA from the entity */
+    public interface TutorEngagementViewReader {
+        /** per-node ask counts inside the window, for one learner */
+        java.util.Map<UUID, Long> askCountsSince(UUID learnerId, Instant since);
     }
 
     public NextBestActionsView actionsFor(UUID learnerId, UUID rootId) {
@@ -412,6 +421,33 @@ public class NextBestActionService {
                     "Measured mastery " + fmt(wc.eff()) + " (band " + band + ") over "
                             + wc.skill().attempts() + " attempts, last practiced "
                             + wc.skill().lastPracticedAt()));
+        }
+
+        // T7a — tutor engagement (V21, P7): topics the learner recently asked the
+        // Tutor about (deterministic matcher output, windowed) with no attempt
+        // evidence yet — the learner's own interest is the strongest exploration
+        // prior we have, so it outranks generic curriculum-order uncovered topics.
+        // No mastery is invented: an ask is engagement, not competence.
+        Map<UUID, Long> askCounts = tutorEngagements.askCountsSince(
+                learnerId, now.minus(java.time.Duration.ofDays(properties.tutorEngagementWindowDays())));
+        List<Map.Entry<UUID, Long>> askedUnpractised = askCounts.entrySet().stream()
+                .filter(e -> byId.containsKey(e.getKey()))   // subject isolation: ignore out-of-subtree asks
+                .filter(e -> !skills.containsKey(e.getKey()))
+                .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
+                .toList();
+        for (Map.Entry<UUID, Long> asked : askedUnpractised) {
+            if (ranked.size() >= properties.maxActions()) break;
+            NodeView node = byId.get(asked.getKey());
+            if (!node.type().equals("TOPIC") && !node.type().equals("SUBTOPIC")) continue;
+            int count = servableCount(node, servableCount);
+            if (count <= 0) continue;                        // nothing validated to practise — no action
+            if (!topicsWithActions.add(node.id())) continue;
+            ranked.add(new NextBestActionView(0, ActionType.PRACTISE_QUESTIONS,
+                    ReasonCode.TUTOR_ENGAGED,
+                    node.id(), node.code(), node.title(), null, count,
+                    "Asked the Tutor " + asked.getValue() + " time(s) in the last "
+                            + properties.tutorEngagementWindowDays() + " days, no attempt evidence yet; "
+                            + count + " validated question(s) available"));
         }
 
         // T7 — uncovered topics (constrained exploration): curriculum-order topics with

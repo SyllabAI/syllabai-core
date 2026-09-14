@@ -49,6 +49,8 @@ public record NextBestActionsView(
         MISCONCEPTION_REMEDIATION,
         FLUENCY_GAP,
         LOW_MASTERY,
+        /** v1.2 (P7): the learner asked the Tutor about this topic recently but has no attempt evidence yet */
+        TUTOR_ENGAGED,
         UNCOVERED_TOPIC
     }
 
