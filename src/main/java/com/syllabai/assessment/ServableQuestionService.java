@@ -1,12 +1,16 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.StudentQuestionView;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,18 +47,12 @@ public class ServableQuestionService {
 
     /** servable questions mapped to a topic (primary or question_topics), difficulty-ordered */
     public List<StudentQuestionView> activeByTopic(UUID topicNodeId) {
-        return filterBlockedPapers(questions.findActiveByTopic(topicNodeId)).stream()
-                .map(this::project)
-                .filter(Objects::nonNull)
-                .toList();
+        return projectAll(filterBlockedPapers(questions.findActiveByTopic(topicNodeId)));
     }
 
     /** all servable questions, difficulty-ordered */
     public List<StudentQuestionView> allActive() {
-        return filterBlockedPapers(questions.findAllActive()).stream()
-                .map(this::project)
-                .filter(Objects::nonNull)
-                .toList();
+        return projectAll(filterBlockedPapers(questions.findAllActive()));
     }
 
     /**
@@ -66,17 +64,14 @@ public class ServableQuestionService {
      * difficulty ordering, only the scope narrows.
      */
     public List<StudentQuestionView> activeWithin(java.util.Collection<UUID> nodeIds) {
-        return filterBlockedPapers(questions.findActiveWithin(nodeIds)).stream()
-                .map(this::project)
-                .filter(Objects::nonNull)
-                .toList();
+        return projectAll(filterBlockedPapers(questions.findActiveWithin(nodeIds)));
     }
 
     /** a single servable question, or empty when missing/unservable (never throws) */
     public Optional<StudentQuestionView> findById(UUID id) {
         return questions.findWithOptions(id)
                 .filter(q -> !paperBlocksServing(Set.of(), q.examPaperId()))
-                .map(this::project)
+                .map(q -> project(q, currentVersion(q.id())))
                 .filter(Objects::nonNull);
     }
 
@@ -106,16 +101,48 @@ public class ServableQuestionService {
         return examPapers.findIdsBlockingServing().contains(examPaperId);
     }
 
+    /**
+     * Batched projection for list-shaped reads: fetch ALL structured versions
+     * (parts included) in one query, pick each question's current version, then
+     * apply the same spec as the single-question path. Replaces the per-question
+     * versions lookup that made the unscoped surface a ~1,800-query N+1.
+     */
+    private List<StudentQuestionView> projectAll(List<Question> candidates) {
+        List<UUID> structuredIds = candidates.stream()
+                .filter(q -> q.type() == Question.Type.STRUCTURED)
+                .map(Question::id)
+                .toList();
+        Map<UUID, QuestionVersion> currentByQuestion = new HashMap<>();
+        if (!structuredIds.isEmpty()) {
+            questionVersions.findWithPartsByQuestionIdsIn(structuredIds).stream()
+                    .collect(Collectors.groupingBy(QuestionVersion::questionId))
+                    .forEach((questionId, versions) -> versions.stream()
+                            .max(Comparator.comparingInt(QuestionVersion::version))
+                            .ifPresent(current -> currentByQuestion.put(questionId, current)));
+        }
+        return candidates.stream()
+                .map(q -> project(q, currentByQuestion.get(q.id())))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /** latest version of one question (single-question paths) */
+    private QuestionVersion currentVersion(UUID questionId) {
+        return questionVersions.findByQuestionIdOrderByVersionDesc(questionId).stream()
+                .findFirst()
+                .orElse(null);
+    }
+
     /** null when the spec rejects the question (unvalidated content never serves) */
-    private StudentQuestionView project(Question question) {
+    private StudentQuestionView project(Question question, QuestionVersion currentVersion) {
         if (question.type() != Question.Type.STRUCTURED) {
             return servable.isSatisfiedBy(question, null)
                     ? StudentQuestionView.from(question) : null;
         }
-        return questionVersions.findByQuestionIdOrderByVersionDesc(question.id()).stream()
-                .findFirst()
-                .filter(version -> servable.isSatisfiedBy(question, version))
-                .map(version -> StudentQuestionView.structured(question, version))
-                .orElse(null);
+        return currentVersion == null
+                ? null
+                : servable.isSatisfiedBy(question, currentVersion)
+                        ? StudentQuestionView.structured(question, currentVersion)
+                        : null;
     }
 }

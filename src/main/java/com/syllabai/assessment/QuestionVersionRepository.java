@@ -1,5 +1,6 @@
 package com.syllabai.assessment;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,18 @@ public interface QuestionVersionRepository extends JpaRepository<QuestionVersion
             order by v.version desc
             """)
     List<QuestionVersion> findByQuestionIdOrderByVersionDesc(@Param("questionId") UUID questionId);
+
+    /**
+     * All versions (parts fetched) of many questions in ONE query — the batched
+     * counterpart of {@link #findByQuestionIdOrderByVersionDesc}. List-shaped
+     * serving paths (allActive / activeWithin) previously issued one versions
+     * query per structured question: ~1,800 sequential round-trips on the
+     * unscoped surface (~90s on the pooled Neon connection). Serving boundaries
+     * are unchanged — the spec still decides; this only changes fetch strategy.
+     */
+    @EntityGraph(attributePaths = "parts")
+    @Query("select v from QuestionVersion v where v.question.id in :questionIds")
+    List<QuestionVersion> findWithPartsByQuestionIdsIn(@Param("questionIds") Collection<UUID> questionIds);
 
     @Query("""
             select v from QuestionVersion v
