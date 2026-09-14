@@ -66,44 +66,45 @@ they are made. Reviewers must not promote REPORTED to VERIFIED implicitly.
 
 ## 5. Identity ambiguity is quarantined, never auto-repaired
 
-Documents with unresolved printed identity (duplicate cover dates, QP/MS
-session disagreement, missing paper references) are quarantined with their
-evidence preserved. Ingestion machinery must fail closed on nameless or
-ambiguous identity. Resolution requires the original source or an operator
-decision — never an agent inference.
+Documents with unresolved printed identity (duplicate cover dates, QP/MS session disagreement, missing paper references) are quarantined with their evidence preserved. Ingestion machinery must fail closed on nameless or ambiguous identity. Resolution requires the original source or an operator decision — never an agent inference.
 
-Incident precedent: 1c-2016jan (QP duplicates January-2015; MS belongs to a
-different paper) stays quarantined pending operator/PDF resolution.
+Incident precedent: 1c-2016jan (QP duplicates January-2015; MS belongs to a different paper) stays quarantined pending operator/PDF resolution.
 
 ## 6. The serving boundary is not negotiable
 
-Imported assessment content starts SUGGESTED and becomes learner-servable only
-through explicit teacher validation. No ingestion or repair tooling may
-auto-validate, embed, or publish content. Zero implicit embeddings.
+Imported assessment content starts SUGGESTED and becomes learner-servable only through explicit teacher validation. No ingestion or repair tooling may auto-validate, embed, or publish content. Zero implicit embeddings.
 
 ## 7. Throughput rule
 
-Successful batches never stop the campaign. Automated gates run per batch and
-the pipeline continues on green; only a genuine invariant, identity,
-provenance, migration, data-loss, serving-boundary, or security failure halts
-the workflow.
+Successful batches never stop the campaign. Automated gates run per batch and the pipeline continues on green; only a genuine invariant, identity, provenance, migration, data-loss, serving-boundary, or security failure halts the workflow.
 
 ## 8. Canonical multi-agent coordination
 
-The project-wide coordination contract lives in `SyllabAI/syllabai` under
-`.syllabai/` and its root `AGENT.md`. When working in this repository, use that
-coordination state in addition to these core-specific rules.
+The project-wide coordination contract lives in `SyllabAI/syllabai` under `.syllabai/` and its root `AGENT.md`. When working in this repository, use that coordination state in addition to these core-specific rules.
 
 Required behaviors:
 
 - Record the task ID, owner/surface and base commit before substantial work.
-- Treat shared resources (especially Flyway versions and database schema) as
-  serialized; never independently allocate a migration number.
-- If `main` advances and touched files/contracts overlap, reconcile before
-  completion and rerun affected tests.
-- Preserve the distinction between T0/T1 authoritative truth and T3 agent
-  suggestions.
-- Material milestone claims require durable evidence; agent transcripts alone
-  are not canonical evidence.
-- Completion reports must distinguish VERIFIED / INFERRED / REPORTED /
-  UNVERIFIED claims and state the next safe action.
+- Treat shared resources (especially Flyway versions and database schema) as serialized; never independently allocate a migration number.
+- If `main` advances and touched files/contracts overlap, reconcile before completion and rerun affected tests.
+- Preserve the distinction between T0/T1 authoritative truth and T3 agent suggestions.
+- Material milestone claims require durable evidence; agent transcripts alone are not canonical evidence.
+- Completion reports must distinguish VERIFIED / INFERRED / REPORTED / UNVERIFIED claims and state the next safe action.
+
+## 9. Learner Interaction Memory
+
+For Tutor conversations, chat-derived learner evidence, recommendation integration, or learner-KG personalization, also follow the canonical `SyllabAI/syllabai/LEARNER_INTERACTION_MEMORY_ARCHITECTURE.md` and `AGENT_LEARNER_INTERACTION_MEMORY_ADDENDUM.md`.
+
+The non-negotiable rules are:
+
+- Raw chat is not learner truth.
+- LLM extraction creates candidate Interaction Evidence, never direct mastery updates.
+- Every derived evidence item must preserve source-turn provenance, subject/curriculum scope and extractor/model provenance where applicable.
+- Interaction evidence must be idempotent and student-scoped.
+- Derived learner patterns are recomputable from evidence; do not treat summaries as the source of truth.
+- Chat cannot mutate the authoritative curriculum or canonical knowledge graph.
+- Tutor may retrieve relevant learner interaction memory, but must not receive an unlimited transcript or complete learner profile by default.
+- Interaction evidence is combined with assessment, Smart Mark and other Learning Evidence through the existing learner-model policy.
+- Do not create a separate LLM dependency for Smart Mark merely because interaction memory exists. Shared generation models are acceptable; workload-specific prompts, schemas and validators are mandatory.
+- Agentic Tutor behavior must remain application-controlled: the model proposes, policy authorizes, bounded tools execute, and termination rules control the loop.
+- No agent tool may bypass student isolation, teacher validation, assessment-evidence immutability or learner-model update rules.
