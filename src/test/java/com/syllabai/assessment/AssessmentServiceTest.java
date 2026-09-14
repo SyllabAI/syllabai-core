@@ -37,11 +37,12 @@ class AssessmentServiceTest {
     private final QuestionRepository questions = mock(QuestionRepository.class);
     private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
     private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
+    private final ExamPaperRepository examPapers = mock(ExamPaperRepository.class);
     private final AnswerRepository answers = mock(AnswerRepository.class);
     private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final List<Object> published = new ArrayList<>();
     private final AssessmentService service = new AssessmentService(
-            questions, questionTopics, questionVersions, answers, attempts,
+            questions, questionTopics, questionVersions, examPapers, answers, attempts,
             new EvidencePublisher(published::add));
 
     private Question question() {

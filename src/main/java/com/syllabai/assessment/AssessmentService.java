@@ -35,6 +35,7 @@ public class AssessmentService {
     private final QuestionRepository questions;
     private final QuestionTopicRepository questionTopics;
     private final QuestionVersionRepository questionVersions;
+    private final ExamPaperRepository examPapers;
     private final AnswerRepository answers;
     private final AttemptRepository attempts;
     private final EvidencePublisher evidencePublisher;
@@ -44,15 +45,32 @@ public class AssessmentService {
     public AssessmentService(QuestionRepository questions,
                              QuestionTopicRepository questionTopics,
                              QuestionVersionRepository questionVersions,
+                             ExamPaperRepository examPapers,
                              AnswerRepository answers,
                              AttemptRepository attempts,
                              EvidencePublisher evidencePublisher) {
         this.questions = questions;
         this.questionTopics = questionTopics;
         this.questionVersions = questionVersions;
+        this.examPapers = examPapers;
         this.answers = answers;
         this.attempts = attempts;
         this.evidencePublisher = evidencePublisher;
+    }
+
+    /**
+     * V20 paper-level gate at the write path: an attempt against a question under
+     * a REJECTED or FLAGGED paper is refused exactly like unvalidated content
+     * (fail-closed 404, no state echo). Cheap by construction — the blocking-id
+     * list is tiny (content-review states, not learner data).
+     */
+    private void assertPaperAllowsServing(Question question) {
+        if (question.examPaperId() == null) {
+            return; // paper-less (SEED_DEMO orphans): per-question rule only
+        }
+        if (examPapers.findIdsBlockingServing().contains(question.examPaperId())) {
+            throw new NotFoundException("question", question.id());
+        }
     }
 
     @Transactional
@@ -73,6 +91,7 @@ public class AssessmentService {
                 throw new NotFoundException("question", request.questionId());
             }
         }
+        assertPaperAllowsServing(question);
 
         QuestionOption chosen = question.options().stream()
                 .filter(o -> o.id().equals(request.chosenOptionId()))
@@ -135,6 +154,7 @@ public class AssessmentService {
         if (!servable.isSatisfiedBy(question, version)) {
             throw new NotFoundException("structured question", request.questionId());
         }
+        assertPaperAllowsServing(question);
 
         List<QuestionPart> parts = version.parts();
         if (parts.isEmpty()) {
