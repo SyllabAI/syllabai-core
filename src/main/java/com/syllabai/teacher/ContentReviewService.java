@@ -9,10 +9,15 @@ import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionOption;
 import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionTopic;
+import com.syllabai.assessment.QuestionTopicRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
+import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
@@ -20,6 +25,7 @@ import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,19 +57,28 @@ public class ContentReviewService {
     private final MarkPointRepository markPoints;
     private final SubjectRepository subjects;
     private final GlmOcrBridgeRecordRepository bridgeRecords;
+    private final QuestionRepository questions;
+    private final QuestionTopicRepository questionTopics;
+    private final KnowledgeNodeRepository knowledgeNodes;
 
     public ContentReviewService(ExamPaperRepository examPapers,
                                 QuestionVersionRepository questionVersions,
                                 MarkSchemeRepository markSchemes,
                                 MarkPointRepository markPoints,
                                 SubjectRepository subjects,
-                                GlmOcrBridgeRecordRepository bridgeRecords) {
+                                GlmOcrBridgeRecordRepository bridgeRecords,
+                                QuestionRepository questions,
+                                QuestionTopicRepository questionTopics,
+                                KnowledgeNodeRepository knowledgeNodes) {
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.markPoints = markPoints;
         this.subjects = subjects;
         this.bridgeRecords = bridgeRecords;
+        this.questions = questions;
+        this.questionTopics = questionTopics;
+        this.knowledgeNodes = knowledgeNodes;
     }
 
     /**
@@ -375,6 +390,87 @@ public class ContentReviewService {
     /** result of a batch validation */
     public record BatchResult(UUID paperId, String paperState, int totalVersions,
                               int versionsValidated, int schemesValidated) {
+    }
+
+    // ── §10 topic mapping: ingestion anchors -> real curriculum topics ───────
+
+    /**
+     * Map a question to its real curriculum topic(s). Ingestion deliberately
+     * parks every imported question on a per-paper "ingestion anchor" node (a
+     * disconnected placeholder, NOT in any subject subtree) so the NOT NULL
+     * primary-topic constraint holds without the pipeline guessing curriculum
+     * placement — the same §7 principle as paper placement. Until a reviewer
+     * maps the question here, subject-scoped practice cannot see it (the anchor
+     * is outside every subject's PART_OF subtree, by design).
+     *
+     * <p>Replaces the question's topic rows atomically: primary becomes the
+     * question's primary_topic_node_id AND a primary question_topics row;
+     * secondaries (optional, deduplicated, max 5) become non-primary rows.
+     * AUDIT-logged because it changes what learners will practice.</p>
+     */
+    @Transactional
+    public TopicMappingResult mapQuestionTopics(UUID questionId, UUID primaryNodeId,
+                                                List<UUID> secondaryNodeIds) {
+        Question question = questions.findById(questionId)
+                .orElseThrow(() -> new NotFoundException("question", questionId));
+        KnowledgeNode primary = knowledgeNodes.findById(primaryNodeId)
+                .orElseThrow(() -> new NotFoundException("curriculum topic", primaryNodeId));
+        if (primary.code() != null && primary.code().startsWith("ING-")) {
+            throw new ConflictException("primary topic " + primary.code()
+                    + " is an ingestion anchor — pick a real curriculum topic");
+        }
+
+        LinkedHashSet<UUID> secondaries = new LinkedHashSet<>();
+        if (secondaryNodeIds != null) {
+            for (UUID id : secondaryNodeIds) {
+                if (id.equals(primaryNodeId)) {
+                    continue; // the primary row already covers it
+                }
+                KnowledgeNode node = knowledgeNodes.findById(id)
+                        .orElseThrow(() -> new NotFoundException("curriculum topic", id));
+                if (node.code() != null && node.code().startsWith("ING-")) {
+                    throw new ConflictException("secondary topic " + node.code()
+                            + " is an ingestion anchor — pick real curriculum topics");
+                }
+                secondaries.add(id);
+                if (secondaries.size() >= 5) {
+                    break; // multi-topic, not a keyword dump
+                }
+            }
+        }
+
+        question.assignPrimaryTopic(primaryNodeId);
+        questionTopics.deleteByQuestionId(questionId);
+        questionTopics.save(new QuestionTopic(question, primaryNodeId, true));
+        for (UUID secondary : secondaries) {
+            questionTopics.save(new QuestionTopic(question, secondary, false));
+        }
+        log.info("AUDIT: question {} mapped to primary topic {} ({}) + {} secondary topic(s)",
+                questionId, primary.code(), primaryNodeId, secondaries.size());
+        return new TopicMappingResult(questionId, primaryNodeId, primary.code(),
+                primary.title(), secondaries.size() + 1);
+    }
+
+    /** current mapping of a question (its topic rows, anchor state visible) */
+    @Transactional(readOnly = true)
+    public List<TopicRowView> questionTopicRows(UUID questionId) {
+        Question question = questions.findById(questionId)
+                .orElseThrow(() -> new NotFoundException("question", questionId));
+        return questionTopics.findByQuestionId(questionId).stream()
+                .map(row -> {
+                    KnowledgeNode node = knowledgeNodes.findById(row.nodeId()).orElse(null);
+                    return new TopicRowView(row.nodeId(), row.primary(),
+                            node == null ? null : node.code(),
+                            node == null ? null : node.title());
+                })
+                .toList();
+    }
+
+    public record TopicMappingResult(UUID questionId, UUID primaryNodeId, String primaryCode,
+                                     String primaryTitle, int topicCount) {
+    }
+
+    public record TopicRowView(UUID nodeId, boolean primary, String code, String title) {
     }
 
     /** one SUGGESTED paper with the quality signals a reviewer triages by */

@@ -167,6 +167,34 @@ public class ContentController {
         return PaperSummary.from(review.unflagPaper(id));
     }
 
+    // ── §10 topic mapping: ingestion anchors -> real curriculum topics ──
+
+    /**
+     * Map a question to its real curriculum topic(s). Ingestion parks questions
+     * on disconnected per-paper anchor nodes; until a reviewer maps them here,
+     * subject-scoped practice cannot see them. Factual association only —
+     * validation states and the serving boundary are untouched.
+     */
+    @PostMapping("/questions/{questionId}/topics")
+    public ContentReviewService.TopicMappingResult mapQuestionTopics(
+            @PathVariable UUID questionId,
+            @jakarta.validation.Valid @RequestBody TopicMappingRequest request) {
+        return review.mapQuestionTopics(questionId, request.primaryNodeId(),
+                request.secondaryNodeIds());
+    }
+
+    /** the question's current topic rows (shows the ingestion-anchor placeholder state) */
+    @GetMapping("/questions/{questionId}/topics")
+    public List<ContentReviewService.TopicRowView> questionTopicRows(
+            @PathVariable UUID questionId) {
+        return review.questionTopicRows(questionId);
+    }
+
+    public record TopicMappingRequest(
+            @jakarta.validation.constraints.NotNull UUID primaryNodeId,
+            List<UUID> secondaryNodeIds) {
+    }
+
     @PostMapping("/mark-schemes/{id}/validate")
     public SchemeSummary validateScheme(@PathVariable UUID id,
                                         @jakarta.validation.Valid

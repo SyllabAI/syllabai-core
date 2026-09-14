@@ -17,8 +17,13 @@ import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionOption;
 import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionTopic;
+import com.syllabai.assessment.QuestionTopicRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.shared.ConflictException;
@@ -47,9 +52,12 @@ class ContentReviewServiceTest {
     private final SubjectRepository subjects = mock(SubjectRepository.class);
     private final GlmOcrBridgeRecordRepository bridgeRecords =
             mock(GlmOcrBridgeRecordRepository.class);
+    private final QuestionRepository questions = mock(QuestionRepository.class);
+    private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
+    private final KnowledgeNodeRepository knowledgeNodes = mock(KnowledgeNodeRepository.class);
     private final ContentReviewService service =
             new ContentReviewService(examPapers, questionVersions, markSchemes, markPoints,
-                    subjects, bridgeRecords);
+                    subjects, bridgeRecords, questions, questionTopics, knowledgeNodes);
 
     @Test
     @DisplayName("paperReview carries content + answer key + scheme state per version")
@@ -301,5 +309,45 @@ class ContentReviewServiceTest {
 
         service.unflagPaper(paperId);
         verify(paper).unflag();
+    }
+
+    // ── §10 topic mapping ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("mapQuestionTopics replaces the anchor with the real topic (atomic)")
+    void mapQuestionTopicsReplacesAnchor() {
+        UUID questionId = UUID.randomUUID();
+        Question question = mock(Question.class);
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+        UUID topicId = UUID.randomUUID();
+        KnowledgeNode topic = mock(KnowledgeNode.class);
+        when(topic.code()).thenReturn("4CH1-S1-c");
+        when(topic.title()).thenReturn("Atomic structure");
+        when(knowledgeNodes.findById(topicId)).thenReturn(Optional.of(topic));
+
+        ContentReviewService.TopicMappingResult result =
+                service.mapQuestionTopics(questionId, topicId, List.of());
+
+        verify(question).assignPrimaryTopic(topicId);
+        verify(questionTopics).deleteByQuestionId(questionId);
+        verify(questionTopics).save(org.mockito.ArgumentMatchers.any(QuestionTopic.class));
+        assertThat(result.primaryCode()).isEqualTo("4CH1-S1-c");
+        assertThat(result.topicCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("mapQuestionTopics refuses an ingestion anchor as the primary topic")
+    void mapQuestionTopicsRefusesAnchor() {
+        UUID questionId = UUID.randomUUID();
+        Question question = mock(Question.class);
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+        UUID anchorId = UUID.randomUUID();
+        KnowledgeNode anchor = mock(KnowledgeNode.class);
+        when(anchor.code()).thenReturn("ING-4CH01CJUNE2011");
+        when(knowledgeNodes.findById(anchorId)).thenReturn(Optional.of(anchor));
+
+        assertThatThrownBy(() -> service.mapQuestionTopics(questionId, anchorId, List.of()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("ingestion anchor");
     }
 }

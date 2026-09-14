@@ -125,6 +125,20 @@ public class Question {
         }
         this.examPaperId = paperId;
     }
+
+    /**
+     * §10 topic re-mapping (teacher content review): move the question's primary
+     * topic from its ingestion anchor to a real curriculum topic. Factual
+     * association only — validation states and the serving boundary are untouched;
+     * the mapping decides which subject's practice can see the question.
+     */
+    public void assignPrimaryTopic(UUID topicNodeId) {
+        if (topicNodeId == null) {
+            throw new IllegalArgumentException("primary topic must not be null");
+        }
+        this.primaryTopicNodeId = topicNodeId;
+    }
+
     public Provenance provenance() { return provenance; }
     public boolean active() { return active; }
     public int version() { return version; }
