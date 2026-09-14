@@ -123,27 +123,6 @@ public class KnowledgeGraphService {
 
     // ── internals ──────────────────────────────────────────────────
 
-    private NodeView toView(KnowledgeNode n, boolean withMisconceptions) {
-        // Legacy per-node recursion: kept for single-shot callers on tiny
-        // subtrees. Tree endpoints use buildTree() below — the batched form.
-        List<NodeView> children = new ArrayList<>();
-        for (KnowledgeEdge edge : edges.findChildren(n.id())) {
-            children.add(toView(edge.source(), withMisconceptions));
-        }
-        if (withMisconceptions
-                && (n.nodeType() == NodeType.TOPIC || n.nodeType() == NodeType.SUBTOPIC)) {
-            for (KnowledgeNode m : graph.findMisconceptions(n.id())) {
-                children.add(NodeView.flat(m));
-            }
-        } else if (withMisconceptions && n.nodeType() == NodeType.CONCEPT) {
-            for (KnowledgeNode m : graph.findAssociatedMisconceptions(n.id())) {
-                children.add(NodeView.flat(m));
-            }
-        }
-        return new NodeView(n.id(), n.code(), n.nodeType().name(), n.title(), n.description(),
-                n.validationStatus().name(), n.provenance(), List.copyOf(children));
-    }
-
     // ── batched tree assembly (one query per tree, not per node) ──────────────
 
     /**
