@@ -43,6 +43,20 @@ import org.springframework.stereotype.Component;
 public class GraphKnowledgeRetriever implements KnowledgeRetriever {
 
     private static final Logger log = LoggerFactory.getLogger(GraphKnowledgeRetriever.class);
+
+    /**
+     * Precision floor (productization §7): a match must name at least ~1/3 of
+     * the node title before the question can be called "about" that topic.
+     * Calibrated on the live P6 battery: real chemistry asks land at 0.5–1.0
+     * ("moles" onto "Mole calculations" = 0.5; "dynamic equilibrium" = 1.0),
+     * while the observed false positive — a Hamlet question's "plot" leaking
+     * onto a 5-token solubility title — scored 0.2. Below the floor the topic
+     * simply does not match, which feeds the fail-closed refusal path (never
+     * a fabricated answer). Grounding stays strict; recall on genuine asks is
+     * untouched.
+     */
+    static final double MIN_SPECIFICITY = 0.30;
+
     private static final Set<String> STOP_TOKENS = Set.of(
             "the", "and", "for", "are", "what", "which", "how", "does", "why", "with",
             "from", "into", "this", "that", "explain", "describe", "state", "define",
@@ -79,6 +93,9 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
                 continue;
             }
             double specificity = (double) named / titleTokens.size();
+            if (specificity < MIN_SPECIFICITY) {
+                continue;   // too weak to call the question "about" this topic
+            }
             matches.put(node.id(), new MatchAccumulator(node, named, specificity));
         }
 

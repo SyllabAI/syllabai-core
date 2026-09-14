@@ -46,14 +46,34 @@ class GraphKnowledgeRetrieverTest {
     }
 
     @Test
-    @DisplayName("query tokens match topic titles; plural normalization bridges moles/mole")
+    @DisplayName("query tokens match topic titles; two named tokens clear the precision floor")
     void matchesByTokenOverlap() {
-        // "formulae" is the only title token of U1-T1 present → specificity 1/4
-        KnowledgeContext context = retriever.retrieve("how do I calculate moles and formulae?", 5);
+        // "formulae" + "equations" of U1-T1 → specificity 2/4 = 0.5 (>= floor)
+        KnowledgeContext context = retriever.retrieve(
+                "how do I calculate moles, formulae and equations?", 5);
 
         assertThat(context.topics()).hasSize(1);
         assertThat(context.topics().get(0).code()).isEqualTo("IALCHEM2018-U1-T1");
-        assertThat(context.topics().get(0).matchScore()).isEqualTo(0.25);
+        assertThat(context.topics().get(0).matchScore()).isEqualTo(0.5);
+    }
+
+    @Test
+    @DisplayName("precision floor: one generic token into a long spec title is NOT a match (Hamlet regression)")
+    void weakSingleTokenMatchIsRejected() {
+        // production shape: 4CH1-1.6C "understand how to plot and interpret
+        // solubility curves" — "plot" alone scores 1/5 = 0.2 and previously
+        // leaked an evidence item past the grounding gate (P6 battery). Below
+        // the floor the context is empty, which feeds the deterministic
+        // refusal path — never a fabricated answer.
+        when(graph.structureNodes()).thenReturn(java.util.List.of(
+                node(UUID.randomUUID(), "4CH1-1.6C",
+                        "understand how to plot and interpret solubility curves")));
+
+        KnowledgeContext context = retriever.retrieve("What is the plot of Shakespeare's Hamlet?", 5);
+
+        assertThat(context.topics()).isEmpty();
+        assertThat(context.prerequisites()).isEmpty();
+        assertThat(context.misconceptions()).isEmpty();
     }
 
     @Test
