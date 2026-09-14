@@ -113,7 +113,10 @@ public class KnowledgeGraphService {
             return List.of();
         }
         return edges.findPrerequisiteEdgesWithin(ids).stream()
-                .map(e -> new PrerequisiteRelation(e.sourceId(), e.targetId()))
+                // edge convention (V6 seed + T-C11 authored graph): source = the
+                // DEPENDENT node, target = the PREREQUISITE it requires — the
+                // record is (prerequisiteId, dependentNodeId), so target→prerequisite
+                .map(e -> new PrerequisiteRelation(e.targetId(), e.sourceId()))
                 .toList();
     }
 

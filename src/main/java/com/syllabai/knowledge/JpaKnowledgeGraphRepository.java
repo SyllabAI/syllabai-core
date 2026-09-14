@@ -26,7 +26,7 @@ public class JpaKnowledgeGraphRepository implements KnowledgeGraphRepository {
     public List<KnowledgeNode> findPrerequisites(UUID nodeId) {
         requireNode(nodeId);
         return edges.findDirectPrerequisites(nodeId).stream()
-                .map(KnowledgeEdge::source)
+                .map(KnowledgeEdge::target)
                 .toList();
     }
 

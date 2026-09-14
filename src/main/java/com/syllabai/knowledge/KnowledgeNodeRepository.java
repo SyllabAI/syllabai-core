@@ -60,13 +60,13 @@ public interface KnowledgeNodeRepository extends JpaRepository<KnowledgeNode, UU
      */
     @Query(value = """
             WITH RECURSIVE prereq AS (
-                SELECT e.source_node_id AS node_id, 1 AS depth
+                SELECT e.target_node_id AS node_id, 1 AS depth
                 FROM knowledge_edges e
-                WHERE e.target_node_id = :nodeId AND e.relation_type = 'REQUIRES_PREREQUISITE'
+                WHERE e.source_node_id = :nodeId AND e.relation_type = 'REQUIRES_PREREQUISITE'
                 UNION
-                SELECT e.source_node_id, p.depth + 1
+                SELECT e.target_node_id, p.depth + 1
                 FROM knowledge_edges e
-                JOIN prereq p ON e.target_node_id = p.node_id
+                JOIN prereq p ON e.source_node_id = p.node_id
                 WHERE e.relation_type = 'REQUIRES_PREREQUISITE' AND p.depth < 10
             )
             SELECT node_id, MAX(depth) AS depth

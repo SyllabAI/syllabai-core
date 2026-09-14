@@ -20,10 +20,16 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
             """)
     List<KnowledgeEdge> findChildren(@Param("parentId") UUID parentId);
 
+    /**
+     * Direct REQUIRES_PREREQUISITE edges leaving a node. Edge convention (V6
+     * seed + T-C11 authored graph, verified against derivation notes):
+     * source = the DEPENDENT concept, target = the PREREQUISITE it needs —
+     * so a node's prerequisites are the TARGETS of its outgoing edges.
+     */
     @Query("""
             select e from KnowledgeEdge e
-            join fetch e.source
-            where e.target.id = :nodeId
+            join fetch e.target
+            where e.source.id = :nodeId
               and e.relationType = com.syllabai.knowledge.RelationType.REQUIRES_PREREQUISITE
             """)
     List<KnowledgeEdge> findDirectPrerequisites(@Param("nodeId") UUID nodeId);
@@ -31,7 +37,8 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
     /**
      * REQUIRES_PREREQUISITE edges with BOTH endpoints inside the given node set —
      * the drawable prerequisite relations for the personalized mastery-map read
-     * model (F-034). Source = prerequisite, target = the node that requires it.
+     * model (F-034). Edge convention: source = the dependent node, target = the
+     * prerequisite it requires (see findDirectPrerequisites).
      */
     @Query("""
             select e from KnowledgeEdge e

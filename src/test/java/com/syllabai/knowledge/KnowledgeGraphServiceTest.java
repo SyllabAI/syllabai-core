@@ -104,4 +104,30 @@ class KnowledgeGraphServiceTest {
         when(e.targetId()).thenReturn(targetId);
         when(e.relationType()).thenReturn(type);
     }
+
+    @Test
+    @DisplayName("prerequisiteRelations honors the edge convention: source=dependent, target=prerequisite")
+    void prerequisiteRelationsMapEdgeDirection() {
+        // V6 seed + T-C11 authored graph both store REQUIRES_PREREQUISITE as
+        // (source = the DEPENDENT node, target = the PREREQUISITE it needs).
+        // The mastery map / NBA T2 consume (prerequisiteId, dependentNodeId) —
+        // a swap here inverts remediation advice silently (P8 live finding).
+        KnowledgeNode root = node("S1", NodeType.SUBJECT);
+        KnowledgeNode dependent = node("C-DEPENDENT", NodeType.CONCEPT);
+        KnowledgeNode prerequisite = node("C-PREREQ", NodeType.CONCEPT);
+        when(nodes.findById(root.id())).thenReturn(java.util.Optional.of(root));
+        when(graph.findSubtree(root.id())).thenReturn(List.of(root, dependent, prerequisite));
+
+        KnowledgeEdge requires = mock(KnowledgeEdge.class);
+        stubEdge(requires, dependent, prerequisite, RelationType.REQUIRES_PREREQUISITE);
+        when(edges.findPrerequisiteEdgesWithin(java.util.List.of(
+                root.id(), dependent.id(), prerequisite.id()))).thenReturn(List.of(requires));
+
+        List<KnowledgeGraphService.PrerequisiteRelation> relations =
+                service.prerequisiteRelations(root.id());
+
+        assertThat(relations).hasSize(1);
+        assertThat(relations.get(0).prerequisiteId()).isEqualTo(prerequisite.id());
+        assertThat(relations.get(0).dependentNodeId()).isEqualTo(dependent.id());
+    }
 }
