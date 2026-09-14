@@ -359,4 +359,52 @@ class PastPaperIngestionServiceTest {
         assertThat(anchor.code()).isEqualTo("ING-JANUARY2012");
         assertThat(anchor.title()).doesNotContain("null");
     }
+
+    @Test
+    @DisplayName("duplicate part labels are deterministically uniquified — content kept, no 500")
+    void duplicatePartLabelsAreUniquified() {
+        PastPaperDraftDto messy = new PastPaperDraftDto(
+                "1.0",
+                new PastPaperDraftDto.PaperMeta("Edexcel", "IGCSE", "Chemistry", "Paper 2C",
+                        "June 2019", "4CH0/2C", "qp-doc-d", "ms-doc-d"),
+                List.of(
+                        new PastPaperDraftDto.QuestionDraft("q1", "1",
+                                "Fragmented question", null, 5, "STRUCTURED",
+                                1, 0.5,
+                                List.of(
+                                        new PastPaperDraftDto.PartDraft("a", "", null, 5, 0.5),
+                                        new PastPaperDraftDto.PartDraft("a", "", null, 0, 0.5),
+                                        new PastPaperDraftDto.PartDraft("b", "", null, 0, 0.5)))),
+                new PastPaperDraftDto.MarkSchemeDraft("1", "ms-doc-d",
+                        List.of(new PastPaperDraftDto.MarkPointDraft("1-a", 1, "point", 1,
+                                List.of(), 0.5))),
+                "m", true);
+
+        PastPaperIngestionService.IngestionSummary summary = service.ingest(messy, UUID.randomUUID());
+
+        assertThat(summary.parts()).isEqualTo(3);   // both rows kept — never silently dropped
+        com.syllabai.assessment.QuestionVersion version = savedAll.stream()
+                .filter(e -> e instanceof com.syllabai.assessment.QuestionVersion)
+                .map(e -> (com.syllabai.assessment.QuestionVersion) e)
+                .findFirst().orElseThrow();
+        assertThat(version.parts()).extracting(
+                        com.syllabai.assessment.QuestionPart::label)
+                .containsExactly("a", "a.2", "b");
+        // the marks-bearing first row keeps the printed label, so mark refs resolve to it
+        MarkScheme scheme = (MarkScheme) savedAll.stream()
+                .filter(e -> e instanceof MarkScheme).findFirst().orElseThrow();
+        assertThat(scheme.points().get(0).questionPart().label()).isEqualTo("a");
+    }
+
+    @Test
+    @DisplayName("uniquePartLabel: deterministic suffixes, null passthrough")
+    void uniquePartLabelSemantics() {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        assertThat(PastPaperIngestionService.uniquePartLabel("b-ii", seen)).isEqualTo("b-ii");
+        assertThat(PastPaperIngestionService.uniquePartLabel("b-ii", seen)).isEqualTo("b-ii.2");
+        assertThat(PastPaperIngestionService.uniquePartLabel("b-ii", seen)).isEqualTo("b-ii.3");
+        assertThat(PastPaperIngestionService.uniquePartLabel("a", seen)).isEqualTo("a");
+        assertThat(PastPaperIngestionService.uniquePartLabel(null, seen)).isNull();
+        assertThat(PastPaperIngestionService.uniquePartLabel(null, seen)).isNull();
+    }
 }

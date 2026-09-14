@@ -146,8 +146,10 @@ public class PastPaperIngestionService {
             versionsByNumber.put(q.questionNumber(), version);
             questionCount++;
             int order = 0;
+            java.util.Set<String> seenLabels = new java.util.HashSet<>();
             for (PastPaperDraftDto.PartDraft p : q.parts()) {
-                version.addPart(new QuestionPart(version, p.label(),
+                version.addPart(new QuestionPart(version,
+                        uniquePartLabel(p.label(), seenLabels),
                         nullSafe(p.prompt(), ""), p.commandWord(),
                         Math.max(p.marks(), 0), order++));
                 partCount++;
@@ -181,6 +183,29 @@ public class PastPaperIngestionService {
         log.info("ingested paper {}: {} questions, {} parts, {} mark points (all SUGGESTED)",
                 paper.id(), questionCount, partCount, pointCount);
         return new IngestionSummary(paper.id(), questionCount, partCount, pointCount);
+    }
+
+    /**
+     * Part labels are unique per version (uq_question_part). Parser fragmentation
+     * can emit the same label twice within one question (typically a marks-bearing
+     * row plus an empty continuation row). Never guess which row is the real part:
+     * keep BOTH and make the label deterministic — the first occurrence keeps the
+     * printed label (so mark-point refs resolve to the marks-bearing row when it
+     * comes first), later occurrences get ".2", ".3", ... suffixes. The GLM-OCR
+     * bridge surfaces the fragmentation as review findings for the teacher.
+     */
+    static String uniquePartLabel(String label, java.util.Set<String> seen) {
+        if (label == null) {
+            return null;   // unlabelled rows stay unlabelled (distinct under PG unique)
+        }
+        if (seen.add(label)) {
+            return label;
+        }
+        int n = 2;
+        while (!seen.add(label + "." + n)) {
+            n++;
+        }
+        return label + "." + n;
     }
 
     /** points whose questionRef matches the question number exactly or "N-x" parts */

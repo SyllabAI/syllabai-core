@@ -176,7 +176,44 @@ public class GlmOcrDraftMapper {
             findings.add(new ReviewFinding(
                     "MS_WARNING", "warning", null, null, null, warning));
         }
+        findings.addAll(duplicatePartLabelFindings(qpDraft));
         return List.copyOf(findings);
+    }
+
+    /**
+     * Parser fragmentation: the same part label appearing twice within one
+     * question (a marks-bearing row plus an empty continuation). The persistence
+     * layer keeps both rows and suffixes later labels deterministically
+     * ({@code b-ii -> b-ii.2}); this finding tells the reviewer WHERE that
+     * happened so they can merge or reject during review — content is never
+     * silently dropped.
+     */
+    public List<ReviewFinding> duplicatePartLabelFindings(GlmOcrPaperDraftDto qpDraft) {
+        List<ReviewFinding> findings = new ArrayList<>();
+        if (qpDraft == null || qpDraft.questions() == null) {
+            return findings;
+        }
+        for (QuestionDraft q : qpDraft.questions()) {
+            if (q.parts() == null) {
+                continue;
+            }
+            java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            for (GlmOcrPaperDraftDto.PartDraft p : q.parts()) {
+                if (p.label() != null) {
+                    counts.merge(p.label(), 1, Integer::sum);
+                }
+            }
+            counts.entrySet().stream()
+                    .filter(e -> e.getValue() > 1)
+                    .forEach(e -> findings.add(new ReviewFinding(
+                            "QP_WARNING", "duplicate-part-label",
+                            Integer.toString(q.number()), null, null,
+                            "Q" + q.number() + ": part label '" + e.getKey()
+                                    + "' occurs " + e.getValue()
+                                    + "x (parser fragmentation) — later rows relabelled '"
+                                    + e.getKey() + ".2', '.3' … for review; merge or reject")));
+        }
+        return findings;
     }
 
     /**
