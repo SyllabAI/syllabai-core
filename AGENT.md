@@ -107,3 +107,16 @@ Required behaviors:
   are not canonical evidence.
 - Completion reports must distinguish VERIFIED / INFERRED / REPORTED /
   UNVERIFIED claims and state the next safe action.
+
+## 9. Knowledge durability
+
+The central project knowledge map and durability policy live in `SyllabAI/syllabai`:
+`PROJECT_KNOWLEDGE_MAP.md` and `KNOWLEDGE_DURABILITY_POLICY.md`.
+
+When core work discovers architecture, research, provenance, learner/KG,
+AI/RAG, provider, security, deployment, schema, or other project knowledge
+that can affect future work, persist it to the smallest correct canonical
+artifact. Do not leave durable knowledge only in a chat, agent transcript, or
+PR discussion. Update the central knowledge map when a new cross-project
+canonical artifact is introduced. This is a normal completion step, not a
+human approval gate.
