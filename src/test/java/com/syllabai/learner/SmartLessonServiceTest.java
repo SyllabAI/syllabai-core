@@ -326,4 +326,26 @@ class SmartLessonServiceTest {
         assertThat(lesson.action().reasonCode()).isEqualTo(ReasonCode.DUE_REVIEW);
         assertThat(lesson.topicStatus().reviewDue()).isTrue();
     }
+
+    @Test
+    @DisplayName("advance prefers an unstarted topic the learner reported confusion about (V23 wiring)")
+    void advancePrefersConfusionSignalledTopic() {
+        givenTree();
+        givenNoEvidence();
+        // TOPIC_A mastered; the learner reported confusion on TOPIC_C (later in
+        // curriculum order than the unstarted TOPIC_B)
+        when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(TOPIC_A, 5, 0.9)));
+        when(engagements.findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                any(UUID.class), any(Instant.class))).thenReturn(List.of(
+                new TutorTopicEngagement(LEARNER, TOPIC_C, NOW.minusSeconds(600),
+                        3, false, "openai/gpt-oss-120b", "DOUBT_SIGNAL")));
+        givenServable(TOPIC_B, 2);
+        givenServable(TOPIC_C, 2);
+
+        SmartLessonView lesson = service.lessonFor(LEARNER, ROOT, TOPIC_A);
+
+        assertThat(lesson.action().actionType()).isEqualTo(ActionType.ADVANCE_TOPIC);
+        assertThat(lesson.action().targetNodeId()).isEqualTo(TOPIC_C);   // doubt jumps the queue
+        assertThat(lesson.action().reasonDetail()).contains("confusion");
+    }
 }

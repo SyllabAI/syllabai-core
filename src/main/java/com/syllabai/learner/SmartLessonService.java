@@ -409,8 +409,19 @@ public class SmartLessonService {
                             + "first validated question to find your level (diagnostic practice)");
         }
 
-        // (8) mastered — advance in curriculum order
-        return advance(tree, topic, byId, skills, effective, evidence);
+        // (8) mastered — advance in curriculum order (doubt-signalled topics first)
+        Instant advanceWindow = now.minus(java.time.Duration.ofDays(
+                properties.tutorEngagementWindowDays()));
+        Set<UUID> confusedTopics = new HashSet<>();
+        for (TutorTopicEngagement e : engagements
+                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                        learnerId, advanceWindow)) {
+            if ("DOUBT_SIGNAL".equals(e.signalType())
+                    || "MISCONCEPTION_RELATED".equals(e.signalType())) {
+                confusedTopics.add(e.nodeId());
+            }
+        }
+        return advance(tree, topic, byId, skills, effective, evidence, confusedTopics);
     }
 
     /** next topic in curriculum order that still has work to do, or honest completion */
@@ -418,7 +429,8 @@ public class SmartLessonService {
                                      Map<UUID, NodeView> byId,
                                      Map<UUID, SkillState> skills,
                                      Map<UUID, Double> effective,
-                                     List<EvidenceFactView> evidence) {
+                                     List<EvidenceFactView> evidence,
+                                     Set<UUID> confusedTopics) {
         // practicable candidates follow the NBA T7 convention: TOPIC/SUBTOPIC
         // nodes (never SUBJECT/UNIT/MISCONCEPTION) with servable questions.
         // Counts come from ONE batched activeWithin query (per-node queries
@@ -432,27 +444,50 @@ public class SmartLessonService {
         List<NodeView> order = curriculumOrder(tree);
         NodeView best = null;
         String bestReason = null;
-        for (NodeView node : order) {
-            if (!"TOPIC".equals(node.type()) && !"SUBTOPIC".equals(node.type())) {
-                continue;
+        // pass 1 (§3 wiring): an unstarted topic the learner reported confusion
+        // about jumps the queue — their own doubt signal outranks curriculum order
+        if (!confusedTopics.isEmpty()) {
+            for (NodeView node : order) {
+                if (!"TOPIC".equals(node.type()) && !"SUBTOPIC".equals(node.type())) {
+                    continue;
+                }
+                if (node.id().equals(topic.id()) || !confusedTopics.contains(node.id())) {
+                    continue;
+                }
+                if (servableCounts.getOrDefault(node.id(), 0L) <= 0) {
+                    continue;
+                }
+                if (!skills.containsKey(node.id())) {
+                    best = node;
+                    bestReason = "you reported confusion here and it is not yet started";
+                    break;
+                }
             }
-            if (node.id().equals(topic.id())) {
-                continue;
-            }
-            if (servableCounts.getOrDefault(node.id(), 0L) <= 0) {
-                continue;   // nothing validated to practise — not an advance target
-            }
-            SkillState s = skills.get(node.id());
-            if (s == null) {
-                best = node;
-                bestReason = "not yet started";
-                break;   // first unstarted topic in curriculum order
-            }
-            Double eff = effective.get(node.id());
-            if (eff != null && eff < properties.weakMasteryCeiling()) {
-                best = node;
-                bestReason = "measured " + fmt(eff) + " (weak)";
-                break;   // first weak topic in curriculum order
+        }
+        // pass 2: the standing rule — first unstarted, then first weak, in order
+        if (best == null) {
+            for (NodeView node : order) {
+                if (!"TOPIC".equals(node.type()) && !"SUBTOPIC".equals(node.type())) {
+                    continue;
+                }
+                if (node.id().equals(topic.id())) {
+                    continue;
+                }
+                if (servableCounts.getOrDefault(node.id(), 0L) <= 0) {
+                    continue;   // nothing validated to practise — not an advance target
+                }
+                SkillState s = skills.get(node.id());
+                if (s == null) {
+                    best = node;
+                    bestReason = "not yet started";
+                    break;   // first unstarted topic in curriculum order
+                }
+                Double eff = effective.get(node.id());
+                if (eff != null && eff < properties.weakMasteryCeiling()) {
+                    best = node;
+                    bestReason = "measured " + fmt(eff) + " (weak)";
+                    break;   // first weak topic in curriculum order
+                }
             }
         }
         if (best != null) {
