@@ -37,6 +37,7 @@ public class LearnerStateController {
     private final LearnerProperties properties;
     private final KnowledgeNodeRepository knowledgeNodes;
     private final TutorEngagementReader tutorEngagements;
+    private final TutorTopicEngagementRepository engagements;
 
     public LearnerStateController(LearnerModelService learnerModel,
                                   LearnerKnowledgeGraphService graphs,
@@ -44,7 +45,8 @@ public class LearnerStateController {
                                   EbbinghausDecayService decayService,
                                   LearnerProperties properties,
                                   KnowledgeNodeRepository knowledgeNodes,
-                                  TutorEngagementReader tutorEngagements) {
+                                  TutorEngagementReader tutorEngagements,
+                                  TutorTopicEngagementRepository engagements) {
         this.learnerModel = learnerModel;
         this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
@@ -52,6 +54,7 @@ public class LearnerStateController {
         this.properties = properties;
         this.knowledgeNodes = knowledgeNodes;
         this.tutorEngagements = tutorEngagements;
+        this.engagements = engagements;
     }
 
     @GetMapping("/state")
@@ -72,6 +75,14 @@ public class LearnerStateController {
         skills.forEach(s -> nodeIds.add(s.nodeId()));
         misconceptions.forEach(m -> nodeIds.add(m.misconceptionNodeId()));
         reviews.forEach(r -> nodeIds.add(r.nodeId()));
+        // V21 (P7): what the learner has been asking the Tutor about (last 30
+        // days, top 10 topics) — structured engagement signal, chat text stays
+        // in the research log. Resolved BEFORE the titles map so engaged topics
+        // get human titles too (they are rarely in skills/misconceptions).
+        List<TutorTopicEngagement> recentAsks = engagements
+                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                        learnerId, now.minus(java.time.Duration.ofDays(30)));
+        recentAsks.forEach(e -> nodeIds.add(e.nodeId()));
         Map<UUID, String> titles = nodeIds.isEmpty() ? Map.of()
                 : knowledgeNodes.findAllById(nodeIds).stream()
                         .collect(Collectors.toMap(KnowledgeNode::id,
@@ -102,12 +113,9 @@ public class LearnerStateController {
                         r.nodeId(), r.dueAt(), r.reason().name(), titles.get(r.nodeId())))
                 .toList();
 
-        // V21 (P7): what the learner has been asking the Tutor about (last 30
-        // days, top 10 topics) — structured engagement signal, chat text stays
-        // in the research log
+        // V21 (P7): grouped engagement summary from the pre-fetched recent asks
         List<LearnerStateView.TutorEngagementView> engagementViews = tutorEngagements
-                .recentEngagementSummary(learnerId, now.minus(java.time.Duration.ofDays(30)), 10,
-                        titles::get);
+                .groupEngagementSummary(recentAsks, 10, titles::get);
 
         return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews,
                 engagementViews);

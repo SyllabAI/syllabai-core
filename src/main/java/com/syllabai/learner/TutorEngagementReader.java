@@ -34,12 +34,10 @@ public class TutorEngagementReader
         return counts;
     }
 
-    /** grouped recent engagements for the learner-state view (asks, last ask, any refusal) */
-    public List<com.syllabai.learner.dto.LearnerStateView.TutorEngagementView> recentEngagementSummary(
-            UUID learnerId, Instant since, int limit,
+    /** grouped engagement summary for the learner-state view (asks, last ask, any refusal) */
+    public List<com.syllabai.learner.dto.LearnerStateView.TutorEngagementView> groupEngagementSummary(
+            List<TutorTopicEngagement> recent, int limit,
             java.util.function.Function<UUID, String> titleResolver) {
-        List<TutorTopicEngagement> recent = engagements
-                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(learnerId, since);
         Map<UUID, long[]> grouped = new java.util.LinkedHashMap<>(); // [asks, refusedAny]
         Map<UUID, Instant> lastAsked = new HashMap<>();
         for (TutorTopicEngagement e : recent) {
