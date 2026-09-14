@@ -14,6 +14,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,25 +49,41 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final boolean configured;
     private final LlmProviderHealth health;
     private final int timeoutSeconds;
+    /**
+     * Builds the PROMPT-level runtime options for a request. Must produce the
+     * CONCRETE options type the underlying Spring AI ChatModel asserts on
+     * (OpenAiChatOptions / GoogleGenAiChatOptions) — Spring AI 2.0.x rejects a
+     * generic ChatOptions with ClassCastException/Assert.isInstanceOf at call
+     * time (2026-09-14 outage root cause). Null = legacy generic fallback.
+     */
+    private final Function<LlmRequest, ChatOptions> runtimeOptionsFactory;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
-        this(providerName, chatModel, configured, 3, 60, 30);
+        this(providerName, chatModel, configured, 3, 60, 30, null);
     }
 
     /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds) {
-        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30);
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30, null);
     }
 
-    /** Full wiring incl. the per-call timeout from {@code syllabai.llm.chain.timeout-seconds}. */
+    /** Legacy wiring without a runtime-options factory (generic ChatOptions fallback). */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds, int timeoutSeconds) {
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, timeoutSeconds, null);
+    }
+
+    /** Full wiring incl. per-call timeout and the concrete runtime-options factory. */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
+                                    int failureThreshold, int cooldownSeconds, int timeoutSeconds,
+                                    Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
         this.health = new LlmProviderHealth(configured, failureThreshold, cooldownSeconds);
         this.timeoutSeconds = Math.max(1, timeoutSeconds);
+        this.runtimeOptionsFactory = runtimeOptionsFactory;
     }
 
     @Override
@@ -170,6 +187,9 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     }
 
     private ChatOptions options(LlmRequest request) {
+        if (runtimeOptionsFactory != null) {
+            return runtimeOptionsFactory.apply(request);
+        }
         if (request.temperature() == null && request.maxTokens() == null
                 && (request.model() == null || request.model().isBlank())) {
             return null;    // fall back to model defaults
