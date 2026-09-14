@@ -47,6 +47,23 @@ CAMP = Path(_os.environ.get("CAMPAIGN_ROOT", "/home/z/my-project/download/ingest
 STATE_FILE = Path(_os.environ.get("CAMPAIGN_STATE", "/home/z/my-project/scripts/campaign-state-r2.json"))
 BATCH_SIZE = 5
 
+# prod ingestion (2026-09-14): remote-DB parametrization — all defaults preserve
+# the historical local behavior exactly. The campaign DB need not be the local
+# PostgreSQL anymore: the stage-2 boots read SYLLABAI_DATABASE_* from the
+# environment (the app's own contract), and the runner-side psql calls follow
+# CAMPAIGN_DB_CONN (space-split psql args) + CAMPAIGN_DB_NAME (pre-flight
+# expected database name). STAGE2_DEADLINE accommodates WAN latency (a remote
+# DB makes each un-batched insert a round trip), and STAGE2_JDBC_BATCHING=1
+# turns on Hibernate insert batching for the campaign boots only (no repo
+# config change; assigned-UUID ids batch safely).
+PSQL_CONN_ARGS = _os.environ.get("CAMPAIGN_DB_CONN", "-h 127.0.0.1 -U syllabai -d syllabai").split()
+CAMPAIGN_DB_NAME = _os.environ.get("CAMPAIGN_DB_NAME", "syllabai")
+STAGE2_DEADLINE = int(_os.environ.get("STAGE2_DEADLINE", "180"))
+STAGE2_BATCH_ARGS = (
+    ["--spring.jpa.properties.hibernate.jdbc.batch_size=64",
+     "--spring.jpa.properties.hibernate.order_inserts=true"]
+    if _os.environ.get("STAGE2_JDBC_BATCHING") == "1" else [])
+
 ROWCOUNT_RE = re.compile(
     r"row counts before: documents=(\d+), chunks=(\d+), papers=(\d+), "
     r"versions=(\d+), schemes=(\d+), points=(\d+), bridgeRecords=(\d+)")
@@ -217,10 +234,10 @@ def stage2(batch_root, log_path):
            # campaign DB identity: every stage-2 boot prints and records where
            # it is running (V15 row); the value is re-verified by preflight
            f"--syllabai.campaign.label={CAMPAIGN_LABEL}",
-           f"--syllabai.campaign.commit={CORE_COMMIT}"]
+           f"--syllabai.campaign.commit={CORE_COMMIT}"] + STAGE2_BATCH_ARGS
     with open(log_path, "w") as lf:
         proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
-        deadline = time.time() + 180
+        deadline = time.time() + STAGE2_DEADLINE
         marker = "batch audit report written"
         try:
             while time.time() < deadline:
@@ -253,8 +270,8 @@ def db_totals():
          "(SELECT count(*) FROM document_chunks WHERE embedded_at IS NOT NULL) embedded,"
          "(SELECT count(*) FROM documents) documents,"
          "(SELECT count(*) FROM glm_ocr_bridge_records) bridge")
-    r = subprocess.run([str(PSQL), "-h", "127.0.0.1", "-U", "syllabai", "-d",
-                        "syllabai", "-tAc", q], capture_output=True, text=True)
+    r = subprocess.run([str(PSQL)] + PSQL_CONN_ARGS + ["-tAc", q],
+                       capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"psql failed: {r.stderr}")
     keys = ["papers", "versions", "validated", "suggested", "schemes", "points",
@@ -407,7 +424,7 @@ def main():
     # unclaimed database aborts here, never mid-batch.
     sys.path.insert(0, "/home/z/my-project/scripts")
     from campaign_db_preflight import preflight
-    preflight(expected_db="syllabai", expected_label=CAMPAIGN_LABEL)
+    preflight(expected_db=CAMPAIGN_DB_NAME, expected_label=CAMPAIGN_LABEL)
 
     which = sys.argv[1] if len(sys.argv) > 1 else "next"
     howmany = int(sys.argv[2]) if len(sys.argv) > 2 else 3

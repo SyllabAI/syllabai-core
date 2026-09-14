@@ -11,7 +11,11 @@ import subprocess
 from pathlib import Path
 
 PG = "/home/z/toolchain/pgdebs/root/usr/lib/postgresql/17/bin/psql"
-CONN = ["-h", "/home/z/toolchain", "-U", "syllabai", "-d", "syllabai", "-tAc"]
+# prod ingestion (2026-09-14): remote-DB parametrization — default preserves the
+# historical local socket connection; CAMPAIGN_DB_CONN overrides (space-split
+# psql args; PGPASSWORD/PGSSLMODE flow through the environment to psql itself).
+CONN = os.environ.get(
+    "CAMPAIGN_DB_CONN", "-h /home/z/toolchain -U syllabai -d syllabai").split() + ["-tAc"]
 PAPERS = Path("/home/z/my-project/repos/Past-Papers")
 CAMP = Path(os.environ.get("CAMPAIGN_ROOT", "/home/z/my-project/download/ingestion-campaign-r2"))
 QUARANTINED = {("paper 1", "2016-Jan")}
