@@ -238,6 +238,70 @@ class ContentReviewServiceTest {
     }
 
     @Test
+    @DisplayName("validateAll refuses versions without any mark scheme unless forced (marking contract)"
+    + " — a scheme-less version can never be marked")
+    void validateAllGuardsSchemelessVersions() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.id()).thenReturn(paperId);
+        final var paperState =
+                new AtomicReference<>(ExamPaper.ValidationState.SUGGESTED);
+        when(paper.validationState()).thenAnswer(inv -> paperState.get());
+        doAnswer(inv -> {
+            paperState.set(ExamPaper.ValidationState.VALIDATED);
+            return null;
+        }).when(paper).validate();
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.empty());
+
+        QuestionVersion v1 = mock(QuestionVersion.class);
+        UUID v1Id = UUID.randomUUID();
+        when(v1.id()).thenReturn(v1Id);
+        final var v1State = new AtomicReference<>(QuestionVersion.ValidationState.SUGGESTED);
+        when(v1.validationState()).thenAnswer(inv -> v1State.get());
+        doAnswer(inv -> {
+            v1State.set(QuestionVersion.ValidationState.VALIDATED);
+            return null;
+        }).when(v1).validate();
+        when(questionVersions.findByPaperId(paperId)).thenReturn(List.of(v1));
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v1Id))
+                .thenReturn(Optional.empty()); // NO scheme at all
+
+        // guard holds without force
+        assertThatThrownBy(() -> service.validateAllForPaper(paperId, false))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("mark scheme");
+        verify(paper, never()).validate();
+
+        // explicit force is the reviewer's informed override
+        ContentReviewService.BatchResult result =
+                service.validateAllForPaper(paperId, true);
+        assertThat(result.paperState()).isEqualTo("VALIDATED");
+        verify(paper).validate();
+    }
+
+    @Test
+    @DisplayName("validatePaper (per-item flip) carries the same marking-contract guard")
+    void validatePaperGuardsSchemelessVersions() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+
+        QuestionVersion v1 = mock(QuestionVersion.class);
+        UUID v1Id = UUID.randomUUID();
+        when(v1.id()).thenReturn(v1Id);
+        when(v1.validationState()).thenReturn(QuestionVersion.ValidationState.VALIDATED);
+        when(questionVersions.findByPaperId(paperId)).thenReturn(List.of(v1));
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v1Id))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.validatePaper(paperId))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("mark scheme");
+        verify(paper, never()).validate();
+    }
+
+    @Test
     @DisplayName("validateAll validates every SUGGESTED version + scheme and flips the paper")
     void validateAllHappyPath() {
         UUID paperId = UUID.randomUUID();
@@ -267,8 +331,11 @@ class ContentReviewServiceTest {
         when(scheme.validationState()).thenReturn(MarkScheme.ValidationState.SUGGESTED);
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v1Id))
                 .thenReturn(Optional.of(scheme));
+        // v2 is pre-VALIDATED; its scheme is present but already VALIDATED
+        MarkScheme scheme2 = mock(MarkScheme.class);
+        when(scheme2.validationState()).thenReturn(MarkScheme.ValidationState.VALIDATED);
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v2Id))
-                .thenReturn(Optional.empty());
+                .thenReturn(Optional.of(scheme2));
 
         ContentReviewService.BatchResult result = service.validateAllForPaper(paperId, false);
 

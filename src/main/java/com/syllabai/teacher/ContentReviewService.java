@@ -117,9 +117,38 @@ public class ContentReviewService {
             throw new ConflictException("paper has " + unvalidated
                     + " unvalidated question version(s) — validate versions first");
         }
+        assertMarkingContractComplete(paperId, versions, false);
         paper.validate();
         log.info("exam paper {} validated by teacher", paperId);
         return paper;
+    }
+
+    /**
+     * §7 marking-contract completeness: a question version with NO mark scheme
+     * has no deterministic marking contract — attempts against it can be
+     * submitted but can never be marked (PENDING forever). A paper must not
+     * go VALIDATED while any version lacks its scheme, unless the reviewer
+     * explicitly forces it (same override shape as the REVIEW_REQUIRED
+     * bridge guard). Found live by the V20 battery: a June-2014 paper had six
+     * scheme-less versions and batch validation published it silently.
+     */
+    private void assertMarkingContractComplete(UUID paperId,
+                                               List<QuestionVersion> versions,
+                                               boolean force) {
+        if (force) {
+            return;
+        }
+        long schemeless = versions.stream()
+                .filter(v -> markSchemes
+                        .findFirstByQuestionVersionIdOrderByCreatedAtDesc(v.id())
+                        .isEmpty())
+                .count();
+        if (schemeless > 0) {
+            throw new ConflictException("paper has " + schemeless
+                    + " question version(s) without any mark scheme — the deterministic"
+                    + " marking contract is incomplete; author the schemes first or pass"
+                    + " force=true to validate anyway");
+        }
     }
 
     @Transactional
@@ -275,6 +304,9 @@ public class ContentReviewService {
             throw new ConflictException("paper has " + blocked
                     + " REJECTED/FLAGGED question version(s) — resolve them before batch validation");
         }
+
+        // fail fast on the marking contract BEFORE mutating anything
+        assertMarkingContractComplete(paperId, versions, force);
 
         int versionsValidated = 0;
         int schemesValidated = 0;
