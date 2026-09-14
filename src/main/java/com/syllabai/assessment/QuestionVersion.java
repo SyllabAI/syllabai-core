@@ -32,7 +32,7 @@ import java.util.UUID;
 @Table(name = "question_versions")
 public class QuestionVersion {
 
-    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED }
+    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED, FLAGGED }
 
     @Id
     @Column(name = "id")
@@ -140,4 +140,20 @@ public class QuestionVersion {
 
     public void validate() { this.validationState = ValidationState.VALIDATED; }
     public void reject() { this.validationState = ValidationState.REJECTED; }
+
+    /** V20: flag from SUGGESTED or VALIDATED — a flagged version never serves. */
+    public void flag() {
+        if (validationState != ValidationState.SUGGESTED && validationState != ValidationState.VALIDATED) {
+            throw new IllegalStateException("question version in state " + validationState + " cannot be flagged");
+        }
+        this.validationState = ValidationState.FLAGGED;
+    }
+
+    /** V20: unflag returns to SUGGESTED — re-validation required. */
+    public void unflag() {
+        if (validationState != ValidationState.FLAGGED) {
+            throw new IllegalStateException("question version in state " + validationState + " is not flagged");
+        }
+        this.validationState = ValidationState.SUGGESTED;
+    }
 }

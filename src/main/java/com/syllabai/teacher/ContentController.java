@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -79,6 +80,17 @@ public class ContentController {
     }
 
     /**
+     * V20 quality-enriched review queue (strongest candidates first): the same
+     * SUGGESTED papers plus per-paper progress, reconciliation status, parser
+     * findings and mean extraction confidence. Ordering is a triage aid — it
+     * never promotes anything.
+     */
+    @GetMapping("/review-queue-v2")
+    public ContentReviewService.EnrichedReviewQueueView reviewQueueV2() {
+        return review.enrichedReviewQueue();
+    }
+
+    /**
      * Full review view of one paper: every question version with its content,
      * answer key and mark-scheme state — a reviewer must see WHAT they validate
      * (§7). Read-only; the serving boundary is untouched.
@@ -86,6 +98,18 @@ public class ContentController {
     @GetMapping("/exam-papers/{id}/review")
     public ContentReviewService.PaperReviewView paperReview(@PathVariable UUID id) {
         return review.paperReview(id);
+    }
+
+    /**
+     * V20 batch action: validate every SUGGESTED version + scheme of the paper
+     * and then the paper itself, in one transaction. Fail-closed against
+     * REVIEW_REQUIRED imports and REJECTED/FLAGGED versions unless forced.
+     */
+    @PostMapping("/exam-papers/{id}/validate-all")
+    public ContentReviewService.BatchResult validateAll(@PathVariable UUID id,
+                                                        @RequestParam(required = false)
+                                                        Boolean force) {
+        return review.validateAllForPaper(id, Boolean.TRUE.equals(force));
     }
 
     @PostMapping("/exam-papers/{id}/validate")
@@ -119,6 +143,30 @@ public class ContentController {
         return VersionSummary.from(review.rejectQuestionVersion(id));
     }
 
+    /** V20: flag a question version (from SUGGESTED/VALIDATED — stops serving immediately) */
+    @PostMapping("/question-versions/{id}/flag")
+    public VersionSummary flagVersion(@PathVariable UUID id) {
+        return VersionSummary.from(review.flagQuestionVersion(id));
+    }
+
+    /** V20: unflag a question version (back to SUGGESTED — re-validation required) */
+    @PostMapping("/question-versions/{id}/unflag")
+    public VersionSummary unflagVersion(@PathVariable UUID id) {
+        return VersionSummary.from(review.unflagQuestionVersion(id));
+    }
+
+    /** V20: flag the paper itself — blocks serving of everything under it */
+    @PostMapping("/exam-papers/{id}/flag")
+    public PaperSummary flagPaper(@PathVariable UUID id) {
+        return PaperSummary.from(review.flagPaper(id));
+    }
+
+    /** V20: unflag the paper (back to SUGGESTED) */
+    @PostMapping("/exam-papers/{id}/unflag")
+    public PaperSummary unflagPaper(@PathVariable UUID id) {
+        return PaperSummary.from(review.unflagPaper(id));
+    }
+
     @PostMapping("/mark-schemes/{id}/validate")
     public SchemeSummary validateScheme(@PathVariable UUID id,
                                         @jakarta.validation.Valid
@@ -135,6 +183,18 @@ public class ContentController {
     @PostMapping("/mark-schemes/{id}/reject")
     public SchemeSummary rejectScheme(@PathVariable UUID id) {
         return SchemeSummary.from(review.rejectMarkScheme(id));
+    }
+
+    /** V20: flag a mark scheme (from SUGGESTED/VALIDATED) */
+    @PostMapping("/mark-schemes/{id}/flag")
+    public SchemeSummary flagScheme(@PathVariable UUID id) {
+        return SchemeSummary.from(review.flagMarkScheme(id));
+    }
+
+    /** V20: unflag a mark scheme (back to SUGGESTED) */
+    @PostMapping("/mark-schemes/{id}/unflag")
+    public SchemeSummary unflagScheme(@PathVariable UUID id) {
+        return SchemeSummary.from(review.unflagMarkScheme(id));
     }
 
     // ── views ───────────────────────────────────────────────────────────────

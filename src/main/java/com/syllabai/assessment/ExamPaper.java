@@ -23,7 +23,7 @@ import java.util.UUID;
 @Table(name = "exam_papers")
 public class ExamPaper {
 
-    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED }
+    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED, FLAGGED }
     public enum Provenance { PAST_PAPER, TEACHER_AUTHORED, SEED_DEMO }
 
     @Id
@@ -133,4 +133,20 @@ public class ExamPaper {
 
     public void validate() { setValidationState(ValidationState.VALIDATED); }
     public void reject() { setValidationState(ValidationState.REJECTED); }
+
+    /** V20: flag from SUGGESTED or VALIDATED — a flagged paper gates serving of everything under it. */
+    public void flag() {
+        if (validationState != ValidationState.SUGGESTED && validationState != ValidationState.VALIDATED) {
+            throw new IllegalStateException("paper in state " + validationState + " cannot be flagged");
+        }
+        setValidationState(ValidationState.FLAGGED);
+    }
+
+    /** V20: unflag returns to SUGGESTED — re-validation required, never straight back to VALIDATED. */
+    public void unflag() {
+        if (validationState != ValidationState.FLAGGED) {
+            throw new IllegalStateException("paper in state " + validationState + " is not flagged");
+        }
+        setValidationState(ValidationState.SUGGESTED);
+    }
 }

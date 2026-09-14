@@ -36,4 +36,21 @@ public interface QuestionVersionRepository extends JpaRepository<QuestionVersion
             order by v.question.externalRef nulls last, v.version desc
             """)
     List<QuestionVersion> findByPaperId(@Param("paperId") UUID paperId);
+
+    /** V20 review-queue enrichment: per-paper version-state census (one aggregate query) */
+    @Query("""
+            select q.examPaperId, v.validationState, count(v)
+            from QuestionVersion v join v.question q
+            group by q.examPaperId, v.validationState
+            """)
+    List<Object[]> countByPaperAndState();
+
+    /** V20 review-queue enrichment: per-paper mean extraction confidence */
+    @Query("""
+            select q.examPaperId, avg(v.extractionConfidence)
+            from QuestionVersion v join v.question q
+            where v.extractionConfidence is not null
+            group by q.examPaperId
+            """)
+    List<Object[]> avgExtractionConfidenceByPaper();
 }

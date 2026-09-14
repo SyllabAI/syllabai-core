@@ -1,9 +1,11 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.StudentQuestionView;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code QuestionController} so read models outside the assessment module
  * (T-033 next-best-action counting, retry targeting) reuse the exact same rule
  * instead of mirroring it and drifting.
+ *
+ * <p>V20 paper-level integrity gate: questions under a REJECTED or FLAGGED exam
+ * paper never serve, even when their own versions are VALIDATED — a rejected or
+ * flagged paper signals a systematic defect (wrong source, mis-placement, mass
+ * extraction failure) that per-version validation cannot express. Paper-less
+ * questions (SEED_DEMO orphans) are unaffected.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -22,17 +30,20 @@ public class ServableQuestionService {
 
     private final QuestionRepository questions;
     private final QuestionVersionRepository questionVersions;
+    private final ExamPaperRepository examPapers;
     private final ServableQuestionSpec servable = new ServableQuestionSpec();
 
     public ServableQuestionService(QuestionRepository questions,
-                                   QuestionVersionRepository questionVersions) {
+                                   QuestionVersionRepository questionVersions,
+                                   ExamPaperRepository examPapers) {
         this.questions = questions;
         this.questionVersions = questionVersions;
+        this.examPapers = examPapers;
     }
 
     /** servable questions mapped to a topic (primary or question_topics), difficulty-ordered */
     public List<StudentQuestionView> activeByTopic(UUID topicNodeId) {
-        return questions.findActiveByTopic(topicNodeId).stream()
+        return filterBlockedPapers(questions.findActiveByTopic(topicNodeId)).stream()
                 .map(this::project)
                 .filter(Objects::nonNull)
                 .toList();
@@ -40,7 +51,7 @@ public class ServableQuestionService {
 
     /** all servable questions, difficulty-ordered */
     public List<StudentQuestionView> allActive() {
-        return questions.findAllActive().stream()
+        return filterBlockedPapers(questions.findAllActive()).stream()
                 .map(this::project)
                 .filter(Objects::nonNull)
                 .toList();
@@ -55,7 +66,7 @@ public class ServableQuestionService {
      * difficulty ordering, only the scope narrows.
      */
     public List<StudentQuestionView> activeWithin(java.util.Collection<UUID> nodeIds) {
-        return questions.findActiveWithin(nodeIds).stream()
+        return filterBlockedPapers(questions.findActiveWithin(nodeIds)).stream()
                 .map(this::project)
                 .filter(Objects::nonNull)
                 .toList();
@@ -63,7 +74,10 @@ public class ServableQuestionService {
 
     /** a single servable question, or empty when missing/unservable (never throws) */
     public Optional<StudentQuestionView> findById(UUID id) {
-        return questions.findWithOptions(id).map(this::project).filter(Objects::nonNull);
+        return questions.findWithOptions(id)
+                .filter(q -> !paperBlocksServing(Set.of(), q.examPaperId()))
+                .map(this::project)
+                .filter(Objects::nonNull);
     }
 
     /** whether a question may still be served to learners (e.g. before recommending a retry) */
@@ -74,6 +88,22 @@ public class ServableQuestionService {
     /** how many servable questions exist on a topic (0 ⇒ honest empty state upstream) */
     public int countServableByTopic(UUID topicNodeId) {
         return activeByTopic(topicNodeId).size();
+    }
+
+    /** V20: drop questions whose paper is REJECTED/FLAGGED (paper-level integrity gate) */
+    private List<Question> filterBlockedPapers(List<Question> candidates) {
+        Set<UUID> blocked = new HashSet<>(examPapers.findIdsBlockingServing());
+        return candidates.stream()
+                .filter(q -> !blocked.contains(q.examPaperId()))
+                .toList();
+    }
+
+    /** V20: single-question fast path — consults the DB only when a paper exists */
+    private boolean paperBlocksServing(Set<UUID> ignoredCache, UUID examPaperId) {
+        if (examPaperId == null) {
+            return false; // paper-less (SEED_DEMO orphans): per-question rule only
+        }
+        return examPapers.findIdsBlockingServing().contains(examPaperId);
     }
 
     /** null when the spec rejects the question (unvalidated content never serves) */

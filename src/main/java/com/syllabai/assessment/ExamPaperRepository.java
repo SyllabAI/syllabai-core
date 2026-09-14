@@ -28,4 +28,17 @@ public interface ExamPaperRepository extends JpaRepository<ExamPaper, UUID> {
             order by p.createdAt desc
             """)
     List<ExamPaper> findValidated();
+
+    /**
+     * V20 paper-level serving gate: ids of papers whose state must block serving
+     * of EVERYTHING under them (a rejected or flagged paper signals a systematic
+     * defect — wrong source, mis-placement, mass extraction failure). Small
+     * result by construction (content-review states, not learner data).
+     */
+    @Query("""
+            select p.id from ExamPaper p
+            where p.validationState in (com.syllabai.assessment.ExamPaper$ValidationState.REJECTED,
+                                        com.syllabai.assessment.ExamPaper$ValidationState.FLAGGED)
+            """)
+    List<UUID> findIdsBlockingServing();
 }

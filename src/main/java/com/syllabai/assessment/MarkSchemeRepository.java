@@ -31,4 +31,12 @@ public interface MarkSchemeRepository extends JpaRepository<MarkScheme, UUID> {
             where s.questionVersion.question.examPaperId = :paperId
             """)
     List<MarkScheme> findByPaperId(@Param("paperId") UUID paperId);
+
+    /** V20 review-queue enrichment: per-paper scheme-state census (one aggregate query) */
+    @Query("""
+            select q.examPaperId, s.validationState, count(s)
+            from MarkScheme s join s.questionVersion v join v.question q
+            group by q.examPaperId, s.validationState
+            """)
+    List<Object[]> countByPaperAndState();
 }

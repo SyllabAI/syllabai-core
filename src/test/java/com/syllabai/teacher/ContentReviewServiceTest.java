@@ -2,6 +2,7 @@ package com.syllabai.teacher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,17 +21,22 @@ import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
+import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
  * The teacher review read model must expose the full answer key (§7: a reviewer
  * validates WHAT they see) while remaining a read-only projection — the serving
- * boundary itself is untouched.
+ * boundary itself is untouched. V20 adds the flag/unflag lifecycle, batch
+ * validate-all guards and the enriched queue.
  */
 class ContentReviewServiceTest {
 
@@ -39,9 +45,11 @@ class ContentReviewServiceTest {
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final MarkPointRepository markPoints = mock(MarkPointRepository.class);
     private final SubjectRepository subjects = mock(SubjectRepository.class);
+    private final GlmOcrBridgeRecordRepository bridgeRecords =
+            mock(GlmOcrBridgeRecordRepository.class);
     private final ContentReviewService service =
             new ContentReviewService(examPapers, questionVersions, markSchemes, markPoints,
-                    subjects);
+                    subjects, bridgeRecords);
 
     @Test
     @DisplayName("paperReview carries content + answer key + scheme state per version")
@@ -183,5 +191,115 @@ class ContentReviewServiceTest {
         when(subjects.findById(missingSubject)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.placePaper(paperId, missingSubject))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    // ── V20: batch validate-all guards ───────────────────────────────────────
+
+    @Test
+    @DisplayName("validateAll refuses a REVIEW_REQUIRED import unless forced")
+    void validateAllGuardsReviewRequired() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.validationState()).thenReturn(ExamPaper.ValidationState.SUGGESTED);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        GlmOcrBridgeRecord bridge = mock(GlmOcrBridgeRecord.class);
+        when(bridge.reconciliationStatus()).thenReturn("REVIEW_REQUIRED");
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.of(bridge));
+
+        assertThatThrownBy(() -> service.validateAllForPaper(paperId, false))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("REVIEW_REQUIRED");
+    }
+
+    @Test
+    @DisplayName("validateAll refuses a paper with a REJECTED version (reviewer decision is never overwritten)")
+    void validateAllGuardsRejectedVersion() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.validationState()).thenReturn(ExamPaper.ValidationState.SUGGESTED);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.empty());
+
+        QuestionVersion rejected = mock(QuestionVersion.class);
+        when(rejected.validationState()).thenReturn(QuestionVersion.ValidationState.REJECTED);
+        when(questionVersions.findByPaperId(paperId)).thenReturn(List.of(rejected));
+
+        assertThatThrownBy(() -> service.validateAllForPaper(paperId, true))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("REJECTED/FLAGGED");
+    }
+
+    @Test
+    @DisplayName("validateAll validates every SUGGESTED version + scheme and flips the paper")
+    void validateAllHappyPath() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(paper.id()).thenReturn(paperId);
+        when(paper.validationState()).thenReturn(ExamPaper.ValidationState.SUGGESTED);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(bridgeRecords.findByPaperId(paperId)).thenReturn(Optional.empty());
+
+        // stateful stub: SUGGESTED until validate() flips the holder to VALIDATED
+        QuestionVersion v1 = mock(QuestionVersion.class);
+        UUID v1Id = UUID.randomUUID();
+        when(v1.id()).thenReturn(v1Id);
+        final var v1State = new AtomicReference<>(QuestionVersion.ValidationState.SUGGESTED);
+        when(v1.validationState()).thenAnswer(inv -> v1State.get());
+        doAnswer(inv -> {
+            v1State.set(QuestionVersion.ValidationState.VALIDATED);
+            return null;
+        }).when(v1).validate();
+        QuestionVersion v2 = mock(QuestionVersion.class);
+        UUID v2Id = UUID.randomUUID();
+        when(v2.id()).thenReturn(v2Id);
+        when(v2.validationState()).thenReturn(QuestionVersion.ValidationState.VALIDATED);
+        when(questionVersions.findByPaperId(paperId)).thenReturn(List.of(v1, v2));
+
+        MarkScheme scheme = mock(MarkScheme.class);
+        when(scheme.validationState()).thenReturn(MarkScheme.ValidationState.SUGGESTED);
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v1Id))
+                .thenReturn(Optional.of(scheme));
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v2Id))
+                .thenReturn(Optional.empty());
+
+        ContentReviewService.BatchResult result = service.validateAllForPaper(paperId, false);
+
+        verify(v1).validate();                       // SUGGESTED -> VALIDATED
+        verify(v2, never()).validate();              // already validated — untouched
+        verify(scheme).validate();
+        verify(paper).validate();                    // the paper flip
+        assertThat(result.totalVersions()).isEqualTo(2);
+        assertThat(result.versionsValidated()).isEqualTo(1);
+        assertThat(result.schemesValidated()).isEqualTo(1);
+    }
+
+    // ── V20: flag / unflag lifecycle ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("flag + unflag round-trip a version (unflag lands on SUGGESTED, never VALIDATED)")
+    void flagUnflagVersionLifecycle() {
+        QuestionVersion version = mock(QuestionVersion.class);
+        UUID versionId = UUID.randomUUID();
+        when(questionVersions.findById(versionId)).thenReturn(Optional.of(version));
+
+        service.flagQuestionVersion(versionId);
+        verify(version).flag();
+
+        service.unflagQuestionVersion(versionId);
+        verify(version).unflag();
+    }
+
+    @Test
+    @DisplayName("flagPaper + unflagPaper delegate to the entity lifecycle (AUDIT-logged)")
+    void flagUnflagPaperLifecycle() {
+        UUID paperId = UUID.randomUUID();
+        ExamPaper paper = mock(ExamPaper.class);
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+
+        service.flagPaper(paperId);
+        verify(paper).flag();
+
+        service.unflagPaper(paperId);
+        verify(paper).unflag();
     }
 }

@@ -29,7 +29,7 @@ import java.util.UUID;
 @Table(name = "mark_schemes")
 public class MarkScheme {
 
-    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED }
+    public enum ValidationState { SUGGESTED, VALIDATED, REJECTED, FLAGGED }
 
     @Id
     @Column(name = "id")
@@ -105,4 +105,20 @@ public class MarkScheme {
 
     public void validate() { this.validationState = ValidationState.VALIDATED; }
     public void reject() { this.validationState = ValidationState.REJECTED; }
+
+    /** V20: flag from SUGGESTED or VALIDATED — a flagged scheme never backs marking. */
+    public void flag() {
+        if (validationState != ValidationState.SUGGESTED && validationState != ValidationState.VALIDATED) {
+            throw new IllegalStateException("mark scheme in state " + validationState + " cannot be flagged");
+        }
+        this.validationState = ValidationState.FLAGGED;
+    }
+
+    /** V20: unflag returns to SUGGESTED — re-validation required. */
+    public void unflag() {
+        if (validationState != ValidationState.FLAGGED) {
+            throw new IllegalStateException("mark scheme in state " + validationState + " is not flagged");
+        }
+        this.validationState = ValidationState.SUGGESTED;
+    }
 }

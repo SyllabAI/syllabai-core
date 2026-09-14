@@ -15,7 +15,13 @@ import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +30,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Teacher content-validation workflow (Master Spec §7): ingested content is
- * SUGGESTED and never serves until validated here. Reviewers approve/reject papers,
- * question versions and mark schemes, and author the deterministic acceptance
- * criteria the Smart Mark pipeline relies on — the pipeline never invents them.
+ * SUGGESTED and never serves until validated here. Reviewers approve/reject/flag
+ * papers, question versions and mark schemes, and author the deterministic
+ * acceptance criteria the Smart Mark pipeline relies on — the pipeline never
+ * invents them.
+ *
+ * <p>V20 adds the FLAGGED state (flag from SUGGESTED/VALIDATED, unflag back to
+ * SUGGESTED — re-validation required), the batch validate-all action for
+ * high-throughput review (fail-closed against unreconciled imports), and the
+ * quality-enriched review queue (strongest candidates first).</p>
  */
 @Service
 public class ContentReviewService {
@@ -38,17 +50,20 @@ public class ContentReviewService {
     private final MarkSchemeRepository markSchemes;
     private final MarkPointRepository markPoints;
     private final SubjectRepository subjects;
+    private final GlmOcrBridgeRecordRepository bridgeRecords;
 
     public ContentReviewService(ExamPaperRepository examPapers,
                                 QuestionVersionRepository questionVersions,
                                 MarkSchemeRepository markSchemes,
                                 MarkPointRepository markPoints,
-                                SubjectRepository subjects) {
+                                SubjectRepository subjects,
+                                GlmOcrBridgeRecordRepository bridgeRecords) {
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.markPoints = markPoints;
         this.subjects = subjects;
+        this.bridgeRecords = bridgeRecords;
     }
 
     /**
@@ -150,6 +165,233 @@ public class ContentReviewService {
         return scheme;
     }
 
+    // ── V20: flag / unflag (all three levels) ────────────────────────────────
+
+    @Transactional
+    public ExamPaper flagPaper(UUID paperId) {
+        ExamPaper paper = examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        paper.flag();
+        log.warn("AUDIT: exam paper {} flagged — serving of everything under it is now blocked",
+                paperId);
+        return paper;
+    }
+
+    @Transactional
+    public ExamPaper unflagPaper(UUID paperId) {
+        ExamPaper paper = examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        paper.unflag();
+        log.info("AUDIT: exam paper {} unflagged — back to SUGGESTED, re-validation required",
+                paperId);
+        return paper;
+    }
+
+    @Transactional
+    public QuestionVersion flagQuestionVersion(UUID versionId) {
+        QuestionVersion version = questionVersions.findById(versionId)
+                .orElseThrow(() -> new NotFoundException("question version", versionId));
+        version.flag();
+        return version;
+    }
+
+    @Transactional
+    public QuestionVersion unflagQuestionVersion(UUID versionId) {
+        QuestionVersion version = questionVersions.findById(versionId)
+                .orElseThrow(() -> new NotFoundException("question version", versionId));
+        version.unflag();
+        return version;
+    }
+
+    @Transactional
+    public MarkScheme flagMarkScheme(UUID schemeId) {
+        MarkScheme scheme = markSchemes.findById(schemeId)
+                .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
+        scheme.flag();
+        return scheme;
+    }
+
+    @Transactional
+    public MarkScheme unflagMarkScheme(UUID schemeId) {
+        MarkScheme scheme = markSchemes.findById(schemeId)
+                .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
+        scheme.unflag();
+        return scheme;
+    }
+
+    /**
+     * V20 batch action (high-throughput review): validate every SUGGESTED
+     * question version and mark scheme of the paper in ONE transaction, then the
+     * paper itself — the same §7 semantics as the per-item buttons, applied to
+     * the whole paper at once. Fail-closed guards:
+     * <ul>
+     *   <li>the paper's glm-ocr bridge reconciliation must be OK (a
+     *       REVIEW_REQUIRED import must be reviewed item-by-item) unless
+     *       {@code force} is explicitly set by the reviewer;</li>
+     *   <li>no version may be REJECTED or FLAGGED — those are reviewer decisions
+     *       the batch must never silently overwrite (409 naming the blocker).</li>
+     * </ul>
+     */
+    @Transactional
+    public BatchResult validateAllForPaper(UUID paperId, boolean force) {
+        ExamPaper paper = examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        if (paper.validationState() == ExamPaper.ValidationState.REJECTED) {
+            throw new ConflictException("paper is REJECTED — validation is not possible");
+        }
+        if (paper.validationState() == ExamPaper.ValidationState.FLAGGED) {
+            throw new ConflictException("paper is FLAGGED — unflag it before validating");
+        }
+
+        GlmOcrBridgeRecord bridge = bridgeRecords.findByPaperId(paperId).orElse(null);
+        boolean reviewRequired = bridge != null
+                && "REVIEW_REQUIRED".equals(bridge.reconciliationStatus());
+        if (reviewRequired && !force) {
+            throw new ConflictException("paper import has REVIEW_REQUIRED reconciliation"
+                    + " — review its findings item-by-item, or pass force=true to validate anyway");
+        }
+
+        List<QuestionVersion> versions = questionVersions.findByPaperId(paperId);
+        long blocked = versions.stream()
+                .filter(v -> v.validationState() == QuestionVersion.ValidationState.REJECTED
+                        || v.validationState() == QuestionVersion.ValidationState.FLAGGED)
+                .count();
+        if (blocked > 0) {
+            throw new ConflictException("paper has " + blocked
+                    + " REJECTED/FLAGGED question version(s) — resolve them before batch validation");
+        }
+
+        int versionsValidated = 0;
+        int schemesValidated = 0;
+        for (QuestionVersion version : versions) {
+            if (version.validationState() == QuestionVersion.ValidationState.SUGGESTED) {
+                version.validate();
+                versionsValidated++;
+            }
+            MarkScheme scheme = markSchemes
+                    .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id())
+                    .orElse(null);
+            if (scheme != null
+                    && scheme.validationState() == MarkScheme.ValidationState.SUGGESTED) {
+                scheme.validate();
+                schemesValidated++;
+            }
+        }
+
+        // the paper flip re-uses the exact per-item precondition (all versions VALIDATED)
+        long unvalidated = versions.stream()
+                .filter(v -> v.validationState() != QuestionVersion.ValidationState.VALIDATED)
+                .count();
+        if (unvalidated > 0) {
+            throw new ConflictException("paper has " + unvalidated
+                    + " unvalidated question version(s) — validate versions first");
+        }
+        paper.validate();
+        log.info("AUDIT: exam paper {} batch-validated ({} versions, {} schemes, force={})",
+                paperId, versionsValidated, schemesValidated, force);
+        return new BatchResult(paper.id(), paper.validationState().name(),
+                versions.size(), versionsValidated, schemesValidated);
+    }
+
+    /**
+     * V20 quality-enriched review queue: the SUGGESTED papers with per-paper
+     * progress, bridge reconciliation status, parser-finding count and mean
+     * extraction confidence — sorted strongest-candidates-first (reconciled OK,
+     * then confidence desc, then fewer findings, then newest) so a reviewer's
+     * limited attention lands on the most trustworthy imports first. Ambiguous
+     * material stays in the queue; nothing is promoted by ordering.
+     */
+    @Transactional(readOnly = true)
+    public EnrichedReviewQueueView enrichedReviewQueue() {
+        List<ExamPaper> papers = examPapers.findSuggested();
+
+        Map<UUID, Map<QuestionVersion.ValidationState, Long>> versionCounts =
+                new HashMap<>();
+        for (Object[] row : questionVersions.countByPaperAndState()) {
+            UUID paperId = (UUID) row[0];
+            @SuppressWarnings("unchecked")
+            QuestionVersion.ValidationState state =
+                    (QuestionVersion.ValidationState) row[1];
+            versionCounts.computeIfAbsent(paperId, k -> new HashMap<>())
+                    .put(state, (Long) row[2]);
+        }
+        Map<UUID, Map<MarkScheme.ValidationState, Long>> schemeCounts = new HashMap<>();
+        for (Object[] row : markSchemes.countByPaperAndState()) {
+            UUID paperId = (UUID) row[0];
+            @SuppressWarnings("unchecked")
+            MarkScheme.ValidationState state = (MarkScheme.ValidationState) row[1];
+            schemeCounts.computeIfAbsent(paperId, k -> new HashMap<>())
+                    .put(state, (Long) row[2]);
+        }
+        Map<UUID, Double> confidence = new HashMap<>();
+        for (Object[] row : questionVersions.avgExtractionConfidenceByPaper()) {
+            confidence.put((UUID) row[0], ((Number) row[1]).doubleValue());
+        }
+
+        List<EnrichedPaperSummary> enriched = new ArrayList<>();
+        for (ExamPaper paper : papers) {
+            Map<QuestionVersion.ValidationState, Long> vc =
+                    versionCounts.getOrDefault(paper.id(), Map.of());
+            Map<MarkScheme.ValidationState, Long> sc =
+                    schemeCounts.getOrDefault(paper.id(), Map.of());
+            GlmOcrBridgeRecord bridge = bridgeRecords.findByPaperId(paper.id()).orElse(null);
+            long findingCount = 0;
+            if (bridge != null && bridge.reviewFindings() != null) {
+                findingCount = bridge.reviewFindings().split("\"source\"").length - 1;
+            }
+            enriched.add(new EnrichedPaperSummary(
+                    paper.id(), paper.subjectId(), paper.title(), paper.paperCode(),
+                    paper.sessionLabel(), paper.board(), paper.qualification(),
+                    paper.validationState().name(),
+                    vc.values().stream().mapToLong(Long::longValue).sum(),
+                    vc.getOrDefault(QuestionVersion.ValidationState.VALIDATED, 0L),
+                    vc.getOrDefault(QuestionVersion.ValidationState.REJECTED, 0L),
+                    vc.getOrDefault(QuestionVersion.ValidationState.FLAGGED, 0L),
+                    sc.getOrDefault(MarkScheme.ValidationState.SUGGESTED, 0L),
+                    bridge == null ? null : bridge.reconciliationStatus(),
+                    findingCount,
+                    confidence.get(paper.id()),
+                    paper.createdAt()));
+        }
+
+        enriched.sort(Comparator
+                .comparing((EnrichedPaperSummary p) ->
+                        "OK".equals(p.reconciliationStatus()) ? 0 : 1) // reconciled first
+                .thenComparing(p -> p.avgExtractionConfidence() == null ? 0.0
+                        : p.avgExtractionConfidence(), Comparator.reverseOrder())
+                .thenComparingLong(EnrichedPaperSummary::findingCount)
+                .thenComparing(EnrichedPaperSummary::createdAt,
+                        Comparator.reverseOrder()));
+
+        long suggestedVersions = enriched.stream()
+                .mapToLong(p -> p.versionCount() - p.validatedVersions()
+                        - p.rejectedVersions() - p.flaggedVersions())
+                .sum();
+        long suggestedSchemes = enriched.stream().mapToLong(EnrichedPaperSummary::suggestedSchemes).sum();
+        return new EnrichedReviewQueueView(enriched, (int) suggestedVersions,
+                (int) suggestedSchemes);
+    }
+
+    /** result of a batch validation */
+    public record BatchResult(UUID paperId, String paperState, int totalVersions,
+                              int versionsValidated, int schemesValidated) {
+    }
+
+    /** one SUGGESTED paper with the quality signals a reviewer triages by */
+    public record EnrichedPaperSummary(UUID id, UUID subjectId, String title,
+                                       String paperCode, String sessionLabel, String board,
+                                       String qualification, String validationState,
+                                       long versionCount, long validatedVersions,
+                                       long rejectedVersions, long flaggedVersions,
+                                       long suggestedSchemes, String reconciliationStatus,
+                                       long findingCount, Double avgExtractionConfidence,
+                                       java.time.Instant createdAt) {
+    }
+
+    public record EnrichedReviewQueueView(List<EnrichedPaperSummary> papers,
+                                          int suggestedVersions, int suggestedSchemes) {
+    }
+
     /**
      * @param markPointId        the point the criteria belong to
      * @param acceptanceCriteria deterministic matching criteria (may be empty)
@@ -209,7 +451,9 @@ public class ContentReviewService {
                 version.version(), version.validationState().name(), version.commandWord(),
                 scheme == null ? null : scheme.id(),
                 scheme == null ? null : scheme.validationState().name(),
-                points, options, parts);
+                points, options, parts,
+                version.extractionConfidence(), version.extractionMethod(),
+                version.sourceDocumentId());
     }
 
     /**
@@ -228,7 +472,8 @@ public class ContentReviewService {
             UUID versionId, UUID questionId, String externalRef, String type,
             String stem, int marks, int version, String validationState, String commandWord,
             UUID schemeId, String schemeState,
-            List<PointReview> points, List<OptionReview> options, List<PartReview> parts) {
+            List<PointReview> points, List<OptionReview> options, List<PartReview> parts,
+            Double extractionConfidence, String extractionMethod, String sourceDocumentId) {
 
         /** teacher-only: includes the correct flag and the misconception the distractor feeds */
         public record OptionReview(UUID id, String label, String text, boolean correct,
