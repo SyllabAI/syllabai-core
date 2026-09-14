@@ -38,6 +38,7 @@ public class TestBuilderService {
 
     private static final int DEFAULT_MAX = 20;
     private static final int HARD_MAX = 50;
+    private static final int HARD_MAX_MARKS = 200;
 
     private final ServableQuestionService servableQuestions;
     private final KnowledgeGraphService knowledgeGraph;
@@ -59,10 +60,17 @@ public class TestBuilderService {
      *                      its PART_OF subtree are honoured (subject isolation)
      * @param topicNodeIds  selected curriculum topics
      * @param maxQuestions  cap on assembled questions (clamped 1..50, default 20)
+     * @param targetMarks   optional marks-aware assembly target (clamped 1..200):
+     *                      questions are picked greedily in difficulty order while
+     *                      the cumulative marks stay within the target; when the
+     *                      target cannot be met exactly, the smallest-overshoot
+     *                      candidate closes the gap (deterministic, documented in
+     *                      the response). maxQuestions still applies as a hard cap.
      * @param includeAnswers attach the current mark scheme's points per question
      */
     public TestPreviewView preview(UUID rootId, List<UUID> topicNodeIds,
-                                   Integer maxQuestions, boolean includeAnswers) {
+                                   Integer maxQuestions, Integer targetMarks,
+                                   boolean includeAnswers) {
         Set<UUID> subtree = new HashSet<>(knowledgeGraph.subtreeIds(rootId));
         List<UUID> topics = topicNodeIds == null ? List.of()
                 : topicNodeIds.stream().filter(subtree::contains).distinct().toList();
@@ -89,11 +97,13 @@ public class TestBuilderService {
 
         int cap = maxQuestions == null ? DEFAULT_MAX
                 : Math.max(1, Math.min(HARD_MAX, maxQuestions));
-        List<StudentQuestionView> selected = byQuestion.values().stream()
+        Integer marksTarget = targetMarks == null ? null
+                : Math.max(1, Math.min(HARD_MAX_MARKS, targetMarks));
+        List<StudentQuestionView> difficultyOrdered = byQuestion.values().stream()
                 .sorted(Comparator.comparingInt(StudentQuestionView::difficulty)
                         .thenComparing(StudentQuestionView::id))
-                .limit(cap)
                 .toList();
+        List<StudentQuestionView> selected = selectByMarks(difficultyOrdered, cap, marksTarget);
 
         // per-topic availability BEFORE the cap (the teacher needs the honest number)
         Map<UUID, Integer> availableByTopic = new LinkedHashMap<>();
@@ -136,12 +146,69 @@ public class TestBuilderService {
                         availableByTopic.getOrDefault(t, 0)))
                 .toList();
 
-        return new TestPreviewView(rootId, selected.size(), totalMarks, coverage, questions);
+        return new TestPreviewView(rootId, selected.size(), totalMarks, marksTarget,
+                coverage, questions);
     }
 
-    /** the assembled test: validated questions only, difficulty-ordered */
+    /**
+     * Deterministic marks-aware selection:
+     * <ol>
+     *   <li>no target — the P9 behaviour: first {@code cap} questions in
+     *       difficulty order;</li>
+     *   <li>with a target — greedy pass in difficulty order adding every
+     *       question that fits within the target; then, while the total is
+     *       still short, repeatedly add the remaining candidate that lands
+     *       closest to the target (the smallest overshoot when an exact fit
+     *       is impossible). The cap always applies.</li>
+     * </ol>
+     */
+    private static List<StudentQuestionView> selectByMarks(List<StudentQuestionView> ordered,
+                                                           int cap, Integer target) {
+        if (target == null) {
+            return ordered.stream().limit(cap).toList();
+        }
+        List<StudentQuestionView> remaining = new ArrayList<>(ordered);
+        List<StudentQuestionView> chosen = new ArrayList<>();
+        int total = 0;
+        for (StudentQuestionView q : ordered) {
+            if (chosen.size() >= cap || remaining.isEmpty()) {
+                break;
+            }
+            if (total + q.marks() <= target) {
+                chosen.add(q);
+                remaining.remove(q);
+                total += q.marks();
+            }
+        }
+        while (total < target && chosen.size() < cap && !remaining.isEmpty()) {
+            StudentQuestionView best = null;
+            int bestDistance = Integer.MAX_VALUE;
+            for (StudentQuestionView q : remaining) {
+                int distance = Math.abs(total + q.marks() - target);
+                if (distance < bestDistance) {
+                    best = q;
+                    bestDistance = distance;
+                }
+            }
+            // add only when the addition lands strictly closer to the target
+            // than stopping short — overshooting for its own sake is worse
+            // than an honest undershoot
+            if (bestDistance >= target - total) {
+                break;
+            }
+            chosen.add(best);
+            remaining.remove(best);
+            total += best.marks();
+        }
+        return chosen;
+    }
+
+    /**
+     * the assembled test: validated questions only, difficulty-ordered.
+     * {@code targetMarks} echoes the requested marks target (null = question-count mode).
+     */
     public record TestPreviewView(
-            UUID rootId, int questionCount, int totalMarks,
+            UUID rootId, int questionCount, int totalMarks, Integer targetMarks,
             List<TopicCoverage> topics, List<TestQuestionView> questions) {
     }
 

@@ -79,7 +79,7 @@ class TestBuilderServiceTest {
         when(servableQuestions.countServableByTopic(topicA)).thenReturn(2);
         when(servableQuestions.countServableByTopic(topicB)).thenReturn(2);
 
-        var view = service.preview(root, List.of(topicA, topicB), 2, false);
+        var view = service.preview(root, List.of(topicA, topicB), 2, null, false);
 
         assertThat(view.questionCount()).isEqualTo(2);          // cap applied
         assertThat(view.totalMarks()).isEqualTo(10);            // easy(4) + shared(6)
@@ -98,7 +98,7 @@ class TestBuilderServiceTest {
         when(servableQuestions.activeByTopic(topicA)).thenReturn(List.of(question(UUID.randomUUID(), 2, 5)));
         when(servableQuestions.countServableByTopic(topicA)).thenReturn(1);
 
-        var view = service.preview(root, List.of(topicA, outside), 20, false);
+        var view = service.preview(root, List.of(topicA, outside), 20, null, false);
 
         assertThat(view.topics()).extracting(t -> t.topicNodeId()).containsExactly(topicA);
         assertThat(view.questionCount()).isEqualTo(1);
@@ -131,7 +131,7 @@ class TestBuilderServiceTest {
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
                 .thenReturn(Optional.of(scheme));
 
-        var view = service.preview(root, List.of(topicA), 20, true);
+        var view = service.preview(root, List.of(topicA), 20, null, true);
 
         assertThat(view.questions()).hasSize(1);
         var assembled = view.questions().get(0);
@@ -149,10 +149,72 @@ class TestBuilderServiceTest {
         when(servableQuestions.activeByTopic(Mockito.any(UUID.class))).thenReturn(List.of());
         when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(0);
 
-        var view = service.preview(root, List.of(topicA, topicB), 20, true);
+        var view = service.preview(root, List.of(topicA, topicB), 20, null, true);
 
         assertThat(view.questionCount()).isZero();
         assertThat(view.totalMarks()).isZero();
         assertThat(view.questions()).isEmpty();
+    }
+
+    // -- marks-aware assembly (V2, productization §5) ------------------------
+
+    @Test
+    @DisplayName("targetMarks: greedy difficulty-ordered fill up to the target")
+    void marksTargetGreedyFill() {
+        givenSubject();
+        UUID q1 = UUID.randomUUID();
+        UUID q2 = UUID.randomUUID();
+        UUID q3 = UUID.randomUUID();
+        when(servableQuestions.activeByTopic(topicA)).thenReturn(List.of(
+                question(q1, 1, 4), question(q2, 2, 6), question(q3, 3, 8)));
+        when(servableQuestions.activeByTopic(topicB)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(topicA)).thenReturn(3);
+        when(servableQuestions.countServableByTopic(topicB)).thenReturn(0);
+
+        // 4 + 6 = 10 fits; the 8-mark question would overshoot to 18
+        var view = service.preview(root, List.of(topicA), 20, 10, false);
+        assertThat(view.totalMarks()).isEqualTo(10);
+        assertThat(view.targetMarks()).isEqualTo(10);
+        assertThat(view.questions()).extracting(q -> q.id()).containsExactly(q1, q2);
+    }
+
+    @Test
+    @DisplayName("targetMarks: smallest overshoot closes an unreachable target deterministically")
+    void marksTargetSmallestOvershoot() {
+        givenSubject();
+        UUID q1 = UUID.randomUUID();
+        UUID q2 = UUID.randomUUID();
+        when(servableQuestions.activeByTopic(topicA)).thenReturn(List.of(
+                question(q1, 1, 6), question(q2, 2, 9)));
+        when(servableQuestions.activeByTopic(topicB)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(topicA)).thenReturn(2);
+        when(servableQuestions.countServableByTopic(topicB)).thenReturn(0);
+
+        // target 10: 6 fits, then 9 overshoots to 15 — but 15 is closer than
+        // stopping at 6 (|15-10|=5 < |6-10|=4? no: 4 < 5 — stopping short wins)
+        // exact policy: while short, add the candidate landing CLOSEST to the
+        // target; 6+9=15 distance 5 vs staying at 6 distance 4 -> do NOT add.
+        var view = service.preview(root, List.of(topicA), 20, 10, false);
+        assertThat(view.totalMarks()).isEqualTo(6);
+
+        // target 11: 6+9=15 distance 4 vs staying at 6 distance 5 -> add: 15
+        var view2 = service.preview(root, List.of(topicA), 20, 11, false);
+        assertThat(view2.totalMarks()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("targetMarks respects the question-count cap as a hard bound")
+    void marksTargetRespectsCap() {
+        givenSubject();
+        when(servableQuestions.activeByTopic(topicA)).thenReturn(List.of(
+                question(UUID.randomUUID(), 1, 2), question(UUID.randomUUID(), 2, 2),
+                question(UUID.randomUUID(), 3, 2), question(UUID.randomUUID(), 4, 2)));
+        when(servableQuestions.activeByTopic(topicB)).thenReturn(List.of());
+        when(servableQuestions.countServableByTopic(topicA)).thenReturn(4);
+        when(servableQuestions.countServableByTopic(topicB)).thenReturn(0);
+
+        var view = service.preview(root, List.of(topicA), 2, 100, false);
+        assertThat(view.questions()).hasSize(2);   // cap wins over the marks target
+        assertThat(view.totalMarks()).isEqualTo(4);
     }
 }

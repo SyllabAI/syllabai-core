@@ -24,14 +24,22 @@ public class TestBuilderController {
 
     /**
      * Assemble a printable topic test from VALIDATED content only.
-     * Example: GET /api/v1/teacher/tests/preview?rootId=...&topicNodeIds=a,b&maxQuestions=15&includeAnswers=true
+     * Examples:
+     * <pre>
+     *   GET /preview?rootId=..&topicNodeIds=a,b&maxQuestions=15&includeAnswers=true
+     *   GET /preview?rootId=..&topicNodeIds=a,b&targetMarks=40&includeAnswers=true
+     * </pre>
+     * {@code targetMarks} switches to marks-aware assembly (deterministic
+     * greedy + smallest-overshoot gap closing); {@code maxQuestions} remains a
+     * hard cap in both modes.
      */
     @GetMapping("/preview")
     public TestBuilderService.TestPreviewView preview(
             @RequestParam UUID rootId,
             @RequestParam(required = false) List<UUID> topicNodeIds,
             @RequestParam(required = false) Integer maxQuestions,
+            @RequestParam(required = false) Integer targetMarks,
             @RequestParam(required = false, defaultValue = "false") boolean includeAnswers) {
-        return builder.preview(rootId, topicNodeIds, maxQuestions, includeAnswers);
+        return builder.preview(rootId, topicNodeIds, maxQuestions, targetMarks, includeAnswers);
     }
 }
