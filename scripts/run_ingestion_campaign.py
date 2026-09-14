@@ -40,8 +40,11 @@ CAMPAIGN_LABEL = "T-C04-CAMPAIGN"
 CORE_COMMIT = subprocess.run(["git", "-C", str(CORE), "rev-parse", "--short", "HEAD"],
                              capture_output=True, text=True).stdout.strip()
 
-CAMP = Path("/home/z/my-project/download/ingestion-campaign-r2")
-STATE_FILE = Path("/home/z/my-project/scripts/campaign-state-r2.json")
+# session-66: evidence root parametrizable (default r2 = the historical campaign);
+# the fixed-parser re-ingestion ran against r3 to keep both vintages durable
+import os as _os
+CAMP = Path(_os.environ.get("CAMPAIGN_ROOT", "/home/z/my-project/download/ingestion-campaign-r2"))
+STATE_FILE = Path(_os.environ.get("CAMPAIGN_STATE", "/home/z/my-project/scripts/campaign-state-r2.json"))
 BATCH_SIZE = 5
 
 ROWCOUNT_RE = re.compile(
