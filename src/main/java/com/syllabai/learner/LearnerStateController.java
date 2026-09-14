@@ -7,9 +7,16 @@ import com.syllabai.learner.dto.LearnerStateView;
 import com.syllabai.learner.dto.MisconceptionStateView;
 import com.syllabai.learner.dto.SkillStateView;
 import com.syllabai.identity.CurrentUserId;
+import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.KnowledgeNodeRepository;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,17 +35,20 @@ public class LearnerStateController {
     private final ReviewScheduleRepository reviewSchedules;
     private final EbbinghausDecayService decayService;
     private final LearnerProperties properties;
+    private final KnowledgeNodeRepository knowledgeNodes;
 
     public LearnerStateController(LearnerModelService learnerModel,
                                   LearnerKnowledgeGraphService graphs,
                                   ReviewScheduleRepository reviewSchedules,
                                   EbbinghausDecayService decayService,
-                                  LearnerProperties properties) {
+                                  LearnerProperties properties,
+                                  KnowledgeNodeRepository knowledgeNodes) {
         this.learnerModel = learnerModel;
         this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
         this.decayService = decayService;
         this.properties = properties;
+        this.knowledgeNodes = knowledgeNodes;
     }
 
     @GetMapping("/state")
@@ -46,32 +56,50 @@ public class LearnerStateController {
         Instant now = Instant.now();
         DecayParams decayParams = properties.decay().toParams();
 
-        List<SkillStateView> skills = learnerModel.skillStates(learnerId).stream()
+        var skills = learnerModel.skillStates(learnerId);
+        var misconceptions = learnerModel.misconceptionStates(learnerId);
+        var reviews = reviewSchedules
+                .findByLearnerIdAndStatusOrderByDueAtAsc(learnerId, ReviewSchedule.Status.PENDING);
+
+        // P1 pilot UX: resolve human node titles for every id this read model
+        // exposes, so clients never have to render raw UUIDs. One batched
+        // findAllById for all three collections (a learner has few rows); a
+        // missing node row yields null and clients keep their own fallback.
+        Set<UUID> nodeIds = new HashSet<>();
+        skills.forEach(s -> nodeIds.add(s.nodeId()));
+        misconceptions.forEach(m -> nodeIds.add(m.misconceptionNodeId()));
+        reviews.forEach(r -> nodeIds.add(r.nodeId()));
+        Map<UUID, String> titles = nodeIds.isEmpty() ? Map.of()
+                : knowledgeNodes.findAllById(nodeIds).stream()
+                        .collect(Collectors.toMap(KnowledgeNode::id,
+                                KnowledgeNode::title, (a, b) -> a));
+
+        List<SkillStateView> skillViews = skills.stream()
                 .map(s -> {
                     double effective = decayService.decayed(
                             s.mastery(), s.lastPracticedAt(), now, decayParams);
                     return new SkillStateView(
                             s.nodeId(), s.mastery(), effective, bandOf(effective, decayParams),
                             s.attempts(), s.correctCount(), s.lastPracticedAt(),
-                            s.proceduralFluencyGap());
+                            s.proceduralFluencyGap(), titles.get(s.nodeId()));
                 })
                 .toList();
 
-        List<MisconceptionStateView> misconceptions = learnerModel.misconceptionStates(learnerId).stream()
+        List<MisconceptionStateView> misconceptionViews = misconceptions.stream()
                 .map(m -> new MisconceptionStateView(
                         m.misconceptionNodeId(), m.probability(),
                         m.probability() >= properties.bdt().activeThreshold(),
-                        m.evidenceCount(), m.lastEvidenceAt()))
+                        m.evidenceCount(), m.lastEvidenceAt(),
+                        titles.get(m.misconceptionNodeId())))
                 .toList();
 
-        List<LearnerStateView.ReviewView> reviews = reviewSchedules
-                .findByLearnerIdAndStatusOrderByDueAtAsc(learnerId, ReviewSchedule.Status.PENDING)
+        List<LearnerStateView.ReviewView> reviewViews = reviews
                 .stream()
                 .map(r -> new LearnerStateView.ReviewView(
-                        r.nodeId(), r.dueAt(), r.reason().name()))
+                        r.nodeId(), r.dueAt(), r.reason().name(), titles.get(r.nodeId())))
                 .toList();
 
-        return new LearnerStateView(learnerId, skills, misconceptions, reviews);
+        return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews);
     }
 
     /**
