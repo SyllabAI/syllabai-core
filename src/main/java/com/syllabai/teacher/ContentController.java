@@ -8,6 +8,8 @@ import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.NotFoundException;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
+import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import com.syllabai.teacher.ingestion.PastPaperDraftDto;
 import com.syllabai.teacher.ingestion.PastPaperIngestionService;
 import jakarta.validation.Valid;
@@ -38,17 +40,20 @@ public class ContentController {
     private final ExamPaperRepository examPapers;
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
+    private final GlmOcrBridgeRecordRepository bridgeRecords;
 
     public ContentController(PastPaperIngestionService ingestion,
                              ContentReviewService review,
                              ExamPaperRepository examPapers,
                              QuestionVersionRepository questionVersions,
-                             MarkSchemeRepository markSchemes) {
+                             MarkSchemeRepository markSchemes,
+                             GlmOcrBridgeRecordRepository bridgeRecords) {
         this.ingestion = ingestion;
         this.review = review;
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
+        this.bridgeRecords = bridgeRecords;
     }
 
     /** ingest a syllabai-parser past-paper-draft.json (schema 1.0) — all SUGGESTED */
@@ -104,6 +109,28 @@ public class ContentController {
     @GetMapping("/exam-papers/{id}/audit")
     public List<ContentReviewService.AuditRowView> paperAudit(@PathVariable UUID id) {
         return review.paperAudit(id);
+    }
+
+    /**
+     * Provenance view of one imported paper: the deterministic parser document
+     * identities and the source checksums that pin the original QP/MS files, as
+     * recorded by the sanctioned GLM-OCR bridge at ingestion time. Read-only
+     * evidence for the content-package compiler and any downstream audit; never
+     * a serving or validation authority.
+     */
+    @GetMapping("/exam-papers/{id}/provenance")
+    public PaperProvenanceView paperProvenance(@PathVariable UUID id) {
+        GlmOcrBridgeRecord record = bridgeRecords.findByPaperId(id)
+                .orElseThrow(() -> new NotFoundException("provenance for exam paper", id));
+        return new PaperProvenanceView(record.paperId(), record.qpDocumentId(),
+                record.msDocumentId(), record.qpChecksum(), record.msChecksum(),
+                record.extractionMethods(), record.reconciliationStatus());
+    }
+
+    /** provenance identity of one ingested QP/MS pair (never mutated post-ingestion) */
+    public record PaperProvenanceView(UUID paperId, String qpDocumentId, String msDocumentId,
+                                      String qpChecksum, String msChecksum,
+                                      String extractionMethods, String reconciliationStatus) {
     }
 
     /**
