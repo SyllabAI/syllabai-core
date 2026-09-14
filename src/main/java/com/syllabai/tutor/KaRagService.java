@@ -113,13 +113,17 @@ public class KaRagService {
         // 5. grounding gate: no evidence → refuse, deterministically, no LLM
         TutorGenerator.GeneratedAnswer generated;
         boolean refused = evidence.isEmpty();
+        ContextAssembler.TutorContext context = null;
         if (refused) {
             generated = new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
         } else {
-            ContextAssembler.TutorContext context =
-                    contextAssembler.assemble(knowledge, evidence, learnerId);
+            context = contextAssembler.assemble(knowledge, evidence, learnerId);
             generated = generator.generate(query, context);
         }
+        // V23 signal provenance: the deterministic policy decision for this ask
+        String interventionType = context == null || context.interventionPlan() == null
+                ? null : context.interventionPlan().type() == null
+                ? null : context.interventionPlan().type().name();
 
         List<CitationResolver.Citation> citations = citationResolver.resolve(evidence);
         double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
@@ -128,7 +132,7 @@ public class KaRagService {
                 learnerId, query.strip(), matchedTopicIds(knowledge), evidence.size(),
                 evidence.stream().map(item -> item.source().name()).toList(),
                 refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
-                latencyMs, Instant.now()));
+                latencyMs, Instant.now(), interventionType));
 
         log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} ms)",
                 evidence.size(), knowledge.topics().size(), refused,

@@ -293,20 +293,35 @@ public class SmartLessonService {
             }
         }
 
-        // (6) tutor-engaged but never practised (NBA T7a)
+        // (6) tutor-engaged but never practised (NBA T7a), with V23 structured
+        // signals: doubt/misconception-classified asks make the reason honest
+        // about WHAT the engagement was
         Instant tutorWindow = now.minus(java.time.Duration.ofDays(
                 properties.tutorEngagementWindowDays()));
-        long asks = engagements
+        List<TutorTopicEngagement> topicAsks = engagements
                 .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
                         learnerId, tutorWindow)
-                .stream().filter(e -> topic.id().equals(e.nodeId())).count();
+                .stream().filter(e -> topic.id().equals(e.nodeId())).toList();
+        long asks = topicAsks.size();
         if (asks > 0 && skill == null) {
+            Map<String, Long> signalCounts = new HashMap<>();
+            for (TutorTopicEngagement e : topicAsks) {
+                signalCounts.merge(e.signalType() == null ? "TOPIC_ENGAGEMENT" : e.signalType(),
+                        1L, Long::sum);
+            }
             evidence.add(new EvidenceFactView("tutor engagement",
                     asks + " ask(s) in the last " + properties.tutorEngagementWindowDays()
                             + " day(s), no attempt evidence yet"));
+            evidence.add(new EvidenceFactView("engagement signals", signalCounts.toString()));
+            String signalNote = signalCounts.containsKey("DOUBT_SIGNAL")
+                    ? " — including confusion you reported yourself"
+                    : signalCounts.containsKey("MISCONCEPTION_RELATED")
+                    ? " — including a question linked to an active misconception"
+                    : "";
             return practiceAction(ActionType.PRACTISE_QUESTIONS, ReasonCode.TUTOR_ENGAGED, topic,
                     "You asked the Tutor " + asks + " time(s) about " + topic.code() + " but have "
-                            + "no attempt evidence yet — convert the curiosity into practice");
+                            + "no attempt evidence yet" + signalNote
+                            + " — convert the curiosity into practice");
         }
 
         // (7) no attempt evidence — start the topic

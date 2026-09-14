@@ -43,14 +43,59 @@ public class TutorEngagementRecorder {
         if (event.learnerId() == null || event.matchedTopicIds().isEmpty()) {
             return; // anonymous preview, or nothing matched deterministically
         }
+        String signal = classify(event.question(), event.interventionType());
         List<TutorTopicEngagement> rows = new ArrayList<>(event.matchedTopicIds().size());
         for (UUID nodeId : event.matchedTopicIds()) {
             rows.add(new TutorTopicEngagement(
                     event.learnerId(), nodeId, event.occurredAt(),
-                    event.evidenceCount(), event.refused(), event.answerModel()));
+                    event.evidenceCount(), event.refused(), event.answerModel(), signal));
         }
         engagements.saveAll(rows);
-        log.debug("recorded {} tutor engagement row(s) for learner {} (refused={}, model={})",
-                rows.size(), event.learnerId(), event.refused(), event.answerModel());
+        log.debug("recorded {} tutor engagement row(s) for learner {} (refused={}, signal={}, model={})",
+                rows.size(), event.learnerId(), event.refused(), signal, event.answerModel());
     }
+
+    /**
+     * V23 deterministic signal classification, one per row, precedence-ordered.
+     * Sources (all deterministic, none LLM-derived):
+     * <ol>
+     *   <li>MISCONCEPTION_RELATED — the tutor policy intervened on an active
+     *       BDT misconception on a matched topic (the intervention plan is a
+     *       rule output over measured learner state);</li>
+     *   <li>DOUBT_SIGNAL — the question contains an explicit confusion phrase
+     *       (the learner's own words, classified by fixed substring list);</li>
+     *   <li>EXPLANATION_REQUEST — explanation command words (the same command
+     *       vocabulary the intent matcher's stop list defines);</li>
+     *   <li>TOPIC_ENGAGEMENT — the topic-match fact alone (default).</li>
+     * </ol>
+     * The raw question is read here and discarded: only the TYPE is recorded.
+     */
+    static String classify(String question, String interventionType) {
+        if ("MISCONCEPTION_REMEDIATION".equals(interventionType)) {
+            return "MISCONCEPTION_RELATED";
+        }
+        String q = question == null ? "" : question.toLowerCase(java.util.Locale.ROOT);
+        for (String pattern : DOUBT_PATTERNS) {
+            if (q.contains(pattern)) {
+                return "DOUBT_SIGNAL";
+            }
+        }
+        for (String pattern : EXPLANATION_PATTERNS) {
+            if (q.contains(pattern)) {
+                return "EXPLANATION_REQUEST";
+            }
+        }
+        return "TOPIC_ENGAGEMENT";
+    }
+
+    /** explicit self-reported confusion (fixed list, substring, case-insensitive) */
+    private static final List<String> DOUBT_PATTERNS = List.of(
+            "don't understand", "dont understand", "do not understand",
+            "confused", "not sure", "don't get", "dont get", "don't see", "dont see",
+            "struggling", "stuck on", "no idea", "lost on");
+
+    /** explanation command vocabulary (mirrors the intent matcher's) */
+    private static final List<String> EXPLANATION_PATTERNS = List.of(
+            "explain", "why ", "why?", "how ", "how?", "what is", "what are",
+            "what does", "what do", "describe", "help me understand");
 }

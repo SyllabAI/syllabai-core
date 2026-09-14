@@ -21,6 +21,13 @@ public record LearnerStateView(
      * in the research log.
      */
     public record TutorEngagementView(
-            UUID nodeId, String nodeTitle, long asks, Instant lastAskedAt, boolean refusedAny) {
+            UUID nodeId, String nodeTitle, long asks, Instant lastAskedAt, boolean refusedAny,
+            java.util.Map<String, Long> signalCounts) {
+
+        /** pre-V23 rows / empty state */
+        public TutorEngagementView(UUID nodeId, String nodeTitle, long asks,
+                                   Instant lastAskedAt, boolean refusedAny) {
+            this(nodeId, nodeTitle, asks, lastAskedAt, refusedAny, java.util.Map.of());
+        }
     }
 }

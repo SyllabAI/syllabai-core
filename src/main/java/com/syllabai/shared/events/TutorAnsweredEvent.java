@@ -21,6 +21,9 @@ import java.util.UUID;
  * @param promptVersion  registered prompt identity, e.g. "tutor-grounded/v1"
  * @param latencyMs      end-to-end pipeline latency
  * @param occurredAt     event time
+ * @param interventionType deterministic tutor-policy intervention type name
+ *                        (null on deterministic refusal, where no context is
+ *                        assembled) — V23 signal provenance
  */
 public record TutorAnsweredEvent(
         UUID learnerId,
@@ -32,5 +35,6 @@ public record TutorAnsweredEvent(
         String answerModel,
         String promptVersion,
         double latencyMs,
-        Instant occurredAt) {
+        Instant occurredAt,
+        String interventionType) {
 }

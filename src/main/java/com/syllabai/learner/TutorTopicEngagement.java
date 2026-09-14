@@ -50,6 +50,15 @@ public class TutorTopicEngagement {
     @Column(name = "answer_model", length = 120)
     private String answerModel;
 
+    /**
+     * V23 deterministic signal classification (one per row, precedence-ordered):
+     * MISCONCEPTION_RELATED > DOUBT_SIGNAL > EXPLANATION_REQUEST >
+     * TOPIC_ENGAGEMENT. Computed at record time from the tutor policy plan and
+     * command-word patterns in the question — never from LLM output.
+     */
+    @Column(name = "signal_type", nullable = false, length = 24)
+    private String signalType = "TOPIC_ENGAGEMENT";
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -59,12 +68,20 @@ public class TutorTopicEngagement {
 
     public TutorTopicEngagement(UUID learnerId, UUID nodeId, Instant occurredAt,
                                 int evidenceCount, boolean refused, String answerModel) {
+        this(learnerId, nodeId, occurredAt, evidenceCount, refused, answerModel,
+                "TOPIC_ENGAGEMENT");
+    }
+
+    public TutorTopicEngagement(UUID learnerId, UUID nodeId, Instant occurredAt,
+                                int evidenceCount, boolean refused, String answerModel,
+                                String signalType) {
         this.learnerId = learnerId;
         this.nodeId = nodeId;
         this.occurredAt = occurredAt;
         this.evidenceCount = evidenceCount;
         this.refused = refused;
         this.answerModel = answerModel;
+        this.signalType = signalType == null ? "TOPIC_ENGAGEMENT" : signalType;
     }
 
     @PrePersist
@@ -80,5 +97,6 @@ public class TutorTopicEngagement {
     public int evidenceCount() { return evidenceCount; }
     public boolean refused() { return refused; }
     public String answerModel() { return answerModel; }
+    public String signalType() { return signalType; }
     public Instant createdAt() { return createdAt; }
 }

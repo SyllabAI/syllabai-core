@@ -39,7 +39,7 @@ class TutorEngagementRecorderTest {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 learner, "Why is NaCl ionic?", List.of(topicA, topicB),
                 5, List.of("KNOWLEDGE_NODE", "DOCUMENT_CHUNK"), false,
-                "openai/gpt-oss-120b", "tutor-grounded/v1", 2100.0, when));
+                "openai/gpt-oss-120b", "tutor-grounded/v1", 2100.0, when, "EXPLANATION"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =
@@ -65,7 +65,7 @@ class TutorEngagementRecorderTest {
         UUID weakMatch = UUID.randomUUID();
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 learner, "odd question", List.of(weakMatch),
-                0, List.of(), true, null, "tutor-grounded/v1", 4.0, Instant.now()));
+                0, List.of(), true, null, "tutor-grounded/v1", 4.0, Instant.now(), null));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =
@@ -82,7 +82,7 @@ class TutorEngagementRecorderTest {
     void anonymousPreviewWritesNothing() {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 null, "preview question", List.of(UUID.randomUUID()),
-                3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1", 10.0, Instant.now()));
+                3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1", 10.0, Instant.now(), null));
         verify(engagements, never()).saveAll(anyList());
     }
 
@@ -91,7 +91,47 @@ class TutorEngagementRecorderTest {
     void noMatchNoRows() {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 UUID.randomUUID(), "hello?", List.of(),
-                0, List.of(), true, null, "tutor-grounded/v1", 2.0, Instant.now()));
+                0, List.of(), true, null, "tutor-grounded/v1", 2.0, Instant.now(), null));
         verify(engagements, never()).saveAll(anyList());
+    }
+
+    // -- V23: deterministic signal classification --------------------------------
+
+    @Test
+    @DisplayName("signal classifier: precedence misconception > doubt > explanation > default")
+    void signalClassificationPrecedence() {
+        assertThat(TutorEngagementRecorder.classify(
+                "explain bonding", "MISCONCEPTION_REMEDIATION"))
+                .isEqualTo("MISCONCEPTION_RELATED");
+        assertThat(TutorEngagementRecorder.classify(
+                "I am confused about moles", "EXPLANATION"))
+                .isEqualTo("DOUBT_SIGNAL");
+        assertThat(TutorEngagementRecorder.classify(
+                "explain dynamic equilibrium", "EXPLANATION"))
+                .isEqualTo("EXPLANATION_REQUEST");
+        assertThat(TutorEngagementRecorder.classify("moles and titration", null))
+                .isEqualTo("TOPIC_ENGAGEMENT");
+        assertThat(TutorEngagementRecorder.classify(null, null))
+                .isEqualTo("TOPIC_ENGAGEMENT");
+    }
+
+    @Test
+    @DisplayName("engagement rows carry the classified signal type (never the raw text)")
+    void rowsCarrySignalType() {
+        UUID learner = UUID.randomUUID();
+        UUID topic = UUID.randomUUID();
+        Instant when = Instant.now();
+        when(engagements.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        recorder.onTutorAnswered(new TutorAnsweredEvent(
+                learner, "I don't understand ionic bonding", List.of(topic),
+                4, List.of("KNOWLEDGE_NODE"), false,
+                "openai/gpt-oss-120b", "tutor-grounded/v1", 1800.0, when, "EXPLANATION"));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TutorTopicEngagement>> captor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(engagements).saveAll(captor.capture());
+        assertThat(captor.getValue().get(0).signalType()).isEqualTo("DOUBT_SIGNAL");
     }
 }

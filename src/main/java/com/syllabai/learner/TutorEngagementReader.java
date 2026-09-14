@@ -40,6 +40,7 @@ public class TutorEngagementReader
             java.util.function.Function<UUID, String> titleResolver) {
         Map<UUID, long[]> grouped = new java.util.LinkedHashMap<>(); // [asks, refusedAny]
         Map<UUID, Instant> lastAsked = new HashMap<>();
+        Map<UUID, java.util.Map<String, Long>> signals = new HashMap<>();
         for (TutorTopicEngagement e : recent) {
             long[] agg = grouped.computeIfAbsent(e.nodeId(), k -> new long[2]);
             agg[0]++;
@@ -48,6 +49,9 @@ public class TutorEngagementReader
             }
             lastAsked.merge(e.nodeId(), e.occurredAt(),
                     (a, b) -> a.isAfter(b) ? a : b);
+            signals.computeIfAbsent(e.nodeId(), k -> new java.util.LinkedHashMap<>())
+                    .merge(e.signalType() == null ? "TOPIC_ENGAGEMENT" : e.signalType(),
+                            1L, Long::sum);
         }
         return grouped.entrySet().stream()
                 .limit(limit)
@@ -56,7 +60,9 @@ public class TutorEngagementReader
                         titleResolver.apply(entry.getKey()),
                         entry.getValue()[0],
                         lastAsked.get(entry.getKey()),
-                        entry.getValue()[1] == 1))
+                        entry.getValue()[1] == 1,
+                        java.util.Map.copyOf(signals.getOrDefault(entry.getKey(),
+                                java.util.Map.of()))))
                 .toList();
     }
 }
