@@ -4,7 +4,9 @@ import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.shared.NotFoundException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +41,7 @@ public class KnowledgeGraphService {
      * the curriculum module).
      */
     public NodeView tree(UUID rootId) {
-        return toView(node(rootId), false);
+        return buildTree(node(rootId), false);
     }
 
     /**
@@ -52,7 +54,7 @@ public class KnowledgeGraphService {
      * edges are exactly the seeded store edges, nothing is derived or invented.
      */
     public NodeView treeWithMisconceptions(UUID rootId) {
-        return toView(node(rootId), true);
+        return buildTree(node(rootId), true);
     }
 
     /**
@@ -122,6 +124,8 @@ public class KnowledgeGraphService {
     // ── internals ──────────────────────────────────────────────────
 
     private NodeView toView(KnowledgeNode n, boolean withMisconceptions) {
+        // Legacy per-node recursion: kept for single-shot callers on tiny
+        // subtrees. Tree endpoints use buildTree() below — the batched form.
         List<NodeView> children = new ArrayList<>();
         for (KnowledgeEdge edge : edges.findChildren(n.id())) {
             children.add(toView(edge.source(), withMisconceptions));
@@ -138,5 +142,84 @@ public class KnowledgeGraphService {
         }
         return new NodeView(n.id(), n.code(), n.nodeType().name(), n.title(), n.description(),
                 n.validationStatus().name(), n.provenance(), List.copyOf(children));
+    }
+
+    // ── batched tree assembly (one query per tree, not per node) ──────────────
+
+    /**
+     * Batched equivalent of the recursive {@link #toView} walk: the whole
+     * PART_OF subtree, its PART_OF child edges and its misconception-family
+     * attachments are loaded in THREE bulk queries and the NodeView tree is
+     * assembled in memory. Child ordering (source code, PART_OF children first,
+     * misconception children appended) matches the per-node semantics exactly:
+     * TOPIC/SUBTOPIC nodes take MISCONCEPTION_OF attachments only, CONCEPT
+     * nodes the full misconception family, deduped by source per target.
+     */
+    private NodeView buildTree(KnowledgeNode root, boolean withMisconceptions) {
+        List<KnowledgeNode> subtree = graph.findSubtree(root.id());
+        Map<UUID, KnowledgeNode> byId = new HashMap<>();
+        for (KnowledgeNode n : subtree) {
+            byId.put(n.id(), n);
+        }
+        List<UUID> ids = new ArrayList<>(byId.keySet());
+
+        Map<UUID, List<KnowledgeEdge>> childrenByParent = new HashMap<>();
+        for (KnowledgeEdge e : edges.findPartOfEdgesWithin(ids)) {
+            childrenByParent.computeIfAbsent(e.targetId(), k -> new ArrayList<>()).add(e);
+        }
+
+        Map<UUID, List<KnowledgeEdge>> attachmentsByTarget = new HashMap<>();
+        if (withMisconceptions) {
+            for (KnowledgeEdge e : edges.findMisconceptionFamilyEdgesWithin(ids)) {
+                attachmentsByTarget.computeIfAbsent(e.targetId(), k -> new ArrayList<>()).add(e);
+            }
+        }
+
+        return assemble(root, byId, childrenByParent, attachmentsByTarget, withMisconceptions);
+    }
+
+    private NodeView assemble(KnowledgeNode node,
+                              Map<UUID, KnowledgeNode> byId,
+                              Map<UUID, List<KnowledgeEdge>> childrenByParent,
+                              Map<UUID, List<KnowledgeEdge>> attachmentsByTarget,
+                              boolean withMisconceptions) {
+        List<NodeView> children = new ArrayList<>();
+        List<KnowledgeEdge> kids = new ArrayList<>(
+                childrenByParent.getOrDefault(node.id(), List.of()));
+        kids.sort(java.util.Comparator.comparing(e -> e.source().code()));
+        for (KnowledgeEdge e : kids) {
+            KnowledgeNode child = byId.get(e.sourceId());
+            if (child != null) {   // dangling edge → skipped, matching the walk contract
+                children.add(assemble(child, byId, childrenByParent,
+                        attachmentsByTarget, withMisconceptions));
+            }
+        }
+
+        if (withMisconceptions) {
+            boolean topicLike = node.nodeType() == NodeType.TOPIC
+                    || node.nodeType() == NodeType.SUBTOPIC;
+            if (topicLike || node.nodeType() == NodeType.CONCEPT) {
+                java.util.Set<UUID> attached = new java.util.HashSet<>();
+                List<KnowledgeEdge> attachments = new ArrayList<>(
+                        attachmentsByTarget.getOrDefault(node.id(), List.of()));
+                attachments.removeIf(e -> topicLike
+                        ? e.relationType() != RelationType.MISCONCEPTION_OF
+                        : false);
+                attachments.sort(java.util.Comparator.comparing(e -> e.source().code()));
+                for (KnowledgeEdge e : attachments) {
+                    // dedupe: a concept may be connected to the same misconception
+                    // through several family edges — the per-node DISTINCT query did
+                    if (attached.add(e.sourceId())) {
+                        // misconception sources are NOT subtree members (they attach
+                        // into it), so resolve through the join-fetched edge source
+                        children.add(NodeView.flat(e.source()));
+                    }
+                }
+            }
+        }
+
+        return new NodeView(node.id(), node.code(), node.nodeType().name(), node.title(),
+                node.description(), node.validationStatus().name(), node.provenance(),
+                List.copyOf(children));
     }
 }
