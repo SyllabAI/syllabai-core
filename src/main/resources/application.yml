@@ -97,7 +97,10 @@ syllabai:
     groq:
       enabled: ${SYLLABAI_GROQ_ENABLED:true}
       api-key: ${SYLLABAI_GROQ_API_KEY:}
-      base-url: https://api.groq.com/openai
+      # must include /v1 — Spring AI's OpenAI SDK appends /chat/completions to the
+      # base URL verbatim, and api.groq.com/openai alone 404s ("Unknown request URL:
+      # POST /openai/chat/completions") on every Groq call (live finding 2026-09-14)
+      base-url: https://api.groq.com/openai/v1
       model: llama-3.3-70b-versatile
     gemini:
       enabled: ${SYLLABAI_GEMINI_ENABLED:true}
