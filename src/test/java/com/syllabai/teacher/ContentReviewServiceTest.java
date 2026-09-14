@@ -350,4 +350,50 @@ class ContentReviewServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("ingestion anchor");
     }
+
+    @Test
+    @DisplayName("questionTopicRows shows the ingestion anchor even when no question_topics rows exist")
+    void questionTopicRowsShowsAnchorWithoutRows() {
+        UUID questionId = UUID.randomUUID();
+        UUID anchorId = UUID.randomUUID();
+        Question question = mock(Question.class);
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+        when(question.primaryTopicNodeId()).thenReturn(anchorId);
+        when(questionTopics.findByQuestionId(questionId)).thenReturn(List.of());
+        KnowledgeNode anchor = mock(KnowledgeNode.class);
+        when(anchor.code()).thenReturn("ING-4CH01CJUNE2011");
+        when(anchor.title()).thenReturn("Anchor");
+        when(knowledgeNodes.findById(anchorId)).thenReturn(Optional.of(anchor));
+
+        List<ContentReviewService.TopicRowView> rows = service.questionTopicRows(questionId);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).primary()).isTrue();
+        assertThat(rows.get(0).nodeId()).isEqualTo(anchorId);
+        assertThat(rows.get(0).code()).isEqualTo("ING-4CH01CJUNE2011");
+    }
+
+    @Test
+    @DisplayName("questionTopicRows leaves real mappings untouched (no synthesized rows)")
+    void questionTopicRowsLeavesRealMappingsAlone() {
+        UUID questionId = UUID.randomUUID();
+        UUID topicId = UUID.randomUUID();
+        Question question = mock(Question.class);
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+        com.syllabai.assessment.QuestionTopic row = mock(com.syllabai.assessment.QuestionTopic.class);
+        when(row.nodeId()).thenReturn(topicId);
+        when(row.primary()).thenReturn(true);
+        when(questionTopics.findByQuestionId(questionId)).thenReturn(List.of(row));
+        KnowledgeNode topic = mock(KnowledgeNode.class);
+        when(topic.code()).thenReturn("4CH1-S1-c");
+        when(topic.title()).thenReturn("Atomic structure");
+        when(knowledgeNodes.findById(topicId)).thenReturn(Optional.of(topic));
+
+        List<ContentReviewService.TopicRowView> rows = service.questionTopicRows(questionId);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).nodeId()).isEqualTo(topicId);
+        assertThat(rows.get(0).code()).isEqualTo("4CH1-S1-c");
+        verify(question, org.mockito.Mockito.never()).primaryTopicNodeId();
+    }
 }

@@ -99,4 +99,14 @@ public class User {
     public Set<Role> roles() {
         return Set.copyOf(roles);
     }
+
+    /**
+     * Credential rotation — the ONLY supported way to change the stored hash
+     * (self-service via /api/v1/auth/password with the current password, or an
+     * operator-level DB reset). Intent-revealing mutator: nothing else may
+     * touch password_hash.
+     */
+    public void rotatePasswordHash(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+    }
 }

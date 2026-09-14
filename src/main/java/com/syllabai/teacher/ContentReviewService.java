@@ -460,7 +460,7 @@ public class ContentReviewService {
     public List<TopicRowView> questionTopicRows(UUID questionId) {
         Question question = questions.findById(questionId)
                 .orElseThrow(() -> new NotFoundException("question", questionId));
-        return questionTopics.findByQuestionId(questionId).stream()
+        List<TopicRowView> rows = questionTopics.findByQuestionId(questionId).stream()
                 .map(row -> {
                     KnowledgeNode node = knowledgeNodes.findById(row.nodeId()).orElse(null);
                     return new TopicRowView(row.nodeId(), row.primary(),
@@ -468,6 +468,27 @@ public class ContentReviewService {
                             node == null ? null : node.title());
                 })
                 .toList();
+        // Ingested questions carry their ingestion anchor ONLY in
+        // primary_topic_node_id — no question_topics row is written for it, so
+        // the naive projection above returns an EMPTY list and the reviewer
+        // sees "no mapping" where the truth is "mapped to anchor ING-…". A
+        // reviewer cannot map a question off an anchor they cannot see (§10);
+        // found live by the V20 production battery. Synthesize the anchor row.
+        boolean hasPrimaryRow = rows.stream().anyMatch(TopicRowView::primary);
+        if (!hasPrimaryRow) {
+            UUID anchor = question.primaryTopicNodeId();
+            if (anchor != null) {
+                KnowledgeNode node = knowledgeNodes.findById(anchor).orElse(null);
+                TopicRowView anchorRow = new TopicRowView(anchor, true,
+                        node == null ? null : node.code(),
+                        node == null ? null : node.title());
+                List<TopicRowView> out = new ArrayList<>(rows.size() + 1);
+                out.add(anchorRow);
+                rows.stream().filter(r -> !r.primary()).forEach(out::add);
+                return List.copyOf(out);
+            }
+        }
+        return rows;
     }
 
     public record TopicMappingResult(UUID questionId, UUID primaryNodeId, String primaryCode,

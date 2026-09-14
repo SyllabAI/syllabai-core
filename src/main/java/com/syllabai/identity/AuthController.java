@@ -2,6 +2,7 @@ package com.syllabai.identity;
 
 import com.syllabai.identity.dto.AuthResponse;
 import com.syllabai.identity.dto.LoginRequest;
+import com.syllabai.identity.dto.PasswordChangeRequest;
 import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.identity.dto.UserView;
 import jakarta.validation.Valid;
@@ -52,5 +53,18 @@ public class AuthController {
     @GetMapping("/me")
     public UserView me(Authentication authentication) {
         return authService.me(authentication.getName());
+    }
+
+    /**
+     * Self-service credential rotation: requires the CURRENT password, so a
+     * bearer token alone cannot take over the account. 204 on success; 401 on
+     * wrong current password (no echo of which factor failed); 404 unknown
+     * user; 400 bean validation on the new password.
+     */
+    @PostMapping("/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(@Valid @RequestBody PasswordChangeRequest request,
+                               Authentication authentication) {
+        authService.changePassword(authentication.getName(), request);
     }
 }
