@@ -6,10 +6,10 @@ import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.content.Document;
+import com.syllabai.content.DocumentRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.NotFoundException;
-import com.syllabai.teacher.ingestion.GlmOcrBridgeRecord;
-import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import com.syllabai.teacher.ingestion.PastPaperDraftDto;
 import com.syllabai.teacher.ingestion.PastPaperIngestionService;
 import jakarta.validation.Valid;
@@ -40,20 +40,20 @@ public class ContentController {
     private final ExamPaperRepository examPapers;
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
-    private final GlmOcrBridgeRecordRepository bridgeRecords;
+    private final DocumentRepository documents;
 
     public ContentController(PastPaperIngestionService ingestion,
                              ContentReviewService review,
                              ExamPaperRepository examPapers,
                              QuestionVersionRepository questionVersions,
                              MarkSchemeRepository markSchemes,
-                             GlmOcrBridgeRecordRepository bridgeRecords) {
+                             DocumentRepository documents) {
         this.ingestion = ingestion;
         this.review = review;
         this.examPapers = examPapers;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
-        this.bridgeRecords = bridgeRecords;
+        this.documents = documents;
     }
 
     /** ingest a syllabai-parser past-paper-draft.json (schema 1.0) — all SUGGESTED */
@@ -112,25 +112,43 @@ public class ContentController {
     }
 
     /**
-     * Provenance view of one imported paper: the deterministic parser document
-     * identities and the source checksums that pin the original QP/MS files, as
-     * recorded by the sanctioned GLM-OCR bridge at ingestion time. Read-only
+     * Provenance view of one imported paper: the source identities that pin the
+     * original QP/MS files — document ids, file names, source URIs and the
+     * checksums recorded by the content store at ingestion time. Read-only
      * evidence for the content-package compiler and any downstream audit; never
-     * a serving or validation authority.
+     * a serving or validation authority. Fail-closed: a paper whose QP or MS
+     * document row is missing has no provenance to expose.
      */
     @GetMapping("/exam-papers/{id}/provenance")
     public PaperProvenanceView paperProvenance(@PathVariable UUID id) {
-        GlmOcrBridgeRecord record = bridgeRecords.findByPaperId(id)
+        ExamPaper paper = examPapers.findById(id)
+                .orElseThrow(() -> new NotFoundException("exam paper", id));
+        String qpDocId = paper.questionPaperDocumentId();
+        String msDocId = paper.markSchemeDocumentId();
+        if (qpDocId == null || qpDocId.isBlank() || msDocId == null || msDocId.isBlank()) {
+            throw new NotFoundException("provenance for exam paper", id);
+        }
+        // the content store keeps one row per doc_version; the imported source
+        // identity is its latest version
+        Document qp = documents.findTopByDocumentIdOrderByDocVersionDesc(qpDocId)
                 .orElseThrow(() -> new NotFoundException("provenance for exam paper", id));
-        return new PaperProvenanceView(record.paperId(), record.qpDocumentId(),
-                record.msDocumentId(), record.qpChecksum(), record.msChecksum(),
-                record.extractionMethods(), record.reconciliationStatus());
+        Document ms = documents.findTopByDocumentIdOrderByDocVersionDesc(msDocId)
+                .orElseThrow(() -> new NotFoundException("provenance for exam paper", id));
+        return new PaperProvenanceView(paper.id(),
+                new DocumentIdentity(qp.documentId(), qp.fileName(), qp.sourceUri(),
+                        qp.checksum(), qp.checksumAlgorithm()),
+                new DocumentIdentity(ms.documentId(), ms.fileName(), ms.sourceUri(),
+                        ms.checksum(), ms.checksumAlgorithm()));
+    }
+
+    /** source identity of one ingested document (never mutated post-ingestion) */
+    public record DocumentIdentity(String documentId, String fileName, String sourceUri,
+                                   String checksum, String checksumAlgorithm) {
     }
 
     /** provenance identity of one ingested QP/MS pair (never mutated post-ingestion) */
-    public record PaperProvenanceView(UUID paperId, String qpDocumentId, String msDocumentId,
-                                      String qpChecksum, String msChecksum,
-                                      String extractionMethods, String reconciliationStatus) {
+    public record PaperProvenanceView(UUID paperId, DocumentIdentity questionPaper,
+                                      DocumentIdentity markScheme) {
     }
 
     /**

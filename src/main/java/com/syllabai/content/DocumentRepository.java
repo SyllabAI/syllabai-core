@@ -12,6 +12,9 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
 
     Optional<Document> findByDocumentIdAndDocVersion(String documentId, int docVersion);
 
+    /** latest content-store row for a document id (imports pin their source identity there) */
+    Optional<Document> findTopByDocumentIdOrderByDocVersionDesc(String documentId);
+
     List<Document> findAllByOrderByCreatedAtDesc();
 
     @Query("""
