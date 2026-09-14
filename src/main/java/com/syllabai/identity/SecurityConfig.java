@@ -46,7 +46,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/register",
-                                "/api/v1/auth/login").permitAll()
+                                "/api/v1/auth/login",
+                                // one-time first-admin bootstrap (V19): gated by the
+                                // bootstrap_admin_state row + zero-admins invariant
+                                "/api/v1/auth/bootstrap-status",
+                                "/api/v1/auth/bootstrap-admin").permitAll()
                         .requestMatchers("/error").permitAll()   // error dispatch must not re-authenticate
                         .requestMatchers(
                                 "/actuator/health",
