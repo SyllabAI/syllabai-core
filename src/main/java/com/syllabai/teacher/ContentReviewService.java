@@ -6,6 +6,9 @@ import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkPointRepository;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.Question;
+import com.syllabai.assessment.QuestionOption;
+import com.syllabai.assessment.QuestionPart;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.shared.ConflictException;
@@ -123,5 +126,91 @@ public class ContentReviewService {
      * @param acceptanceCriteria deterministic matching criteria (may be empty)
      */
     public record PointCriteria(UUID markPointId, List<String> acceptanceCriteria) {
+    }
+
+    // ── teacher review read model (§7: reviewers must see WHAT they validate) ──
+
+    /**
+     * Full review view of one paper's question versions — unlike the learner
+     * projections this INCLUDES the answer key (correct options, misconceptions,
+     * mark points), because a reviewer cannot validate content they cannot see.
+     * Still a read-only projection: no serving-boundary change, SUGGESTED
+     * content remains un-servable for learners.
+     */
+    @Transactional(readOnly = true)
+    public PaperReviewView paperReview(UUID paperId) {
+        ExamPaper paper = examPapers.findById(paperId)
+                .orElseThrow(() -> new NotFoundException("exam paper", paperId));
+        List<QuestionVersion> versions = questionVersions.findByPaperId(paperId);
+        List<VersionReviewView> reviewViews = versions.stream()
+                .map(this::toVersionReviewView)
+                .toList();
+        return new PaperReviewView(
+                new PaperReviewView.PaperHeader(paper.id(), paper.title(), paper.paperCode(),
+                        paper.sessionLabel(), paper.board(), paper.qualification(),
+                        paper.validationState().name()),
+                reviewViews);
+    }
+
+    private VersionReviewView toVersionReviewView(QuestionVersion version) {
+        Question question = version.question();
+        List<VersionReviewView.OptionReview> options = question.options().stream()
+                .map(o -> new VersionReviewView.OptionReview(o.id(), o.label(), o.text(),
+                        o.correct(), o.misconceptionNodeId()))
+                .toList();
+        List<VersionReviewView.PartReview> parts = version.parts().stream()
+                .map(p -> new VersionReviewView.PartReview(p.id(), p.label(), p.prompt(),
+                        p.commandWord(), p.marks()))
+                .toList();
+        MarkScheme scheme = markSchemes
+                .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id())
+                .orElse(null);
+        List<VersionReviewView.PointReview> points = scheme == null ? List.of()
+                : scheme.points().stream()
+                        .map(mp -> new VersionReviewView.PointReview(mp.id(), mp.ref(),
+                                mp.text(), mp.marks(),
+                                mp.acceptanceCriteria() == null ? List.of()
+                                        : mp.acceptanceCriteria()))
+                        .toList();
+        return new VersionReviewView(
+                version.id(), question.id(), question.externalRef(), question.type().name(),
+                version.stem() == null ? question.stem() : version.stem(),
+                version.marks() > 0 ? version.marks() : question.marks(),
+                version.version(), version.validationState().name(), version.commandWord(),
+                scheme == null ? null : scheme.id(),
+                scheme == null ? null : scheme.validationState().name(),
+                points, options, parts);
+    }
+
+    /**
+     * Teacher-facing review projection of a paper: header + every question
+     * version with its full answer key and mark-scheme state.
+     */
+    public record PaperReviewView(PaperHeader paper, List<VersionReviewView> versions) {
+
+        public record PaperHeader(UUID id, String title, String paperCode, String sessionLabel,
+                                  String board, String qualification, String validationState) {
+        }
+    }
+
+    public record VersionReviewView(
+            UUID versionId, UUID questionId, String externalRef, String type,
+            String stem, int marks, int version, String validationState, String commandWord,
+            UUID schemeId, String schemeState,
+            List<PointReview> points, List<OptionReview> options, List<PartReview> parts) {
+
+        /** teacher-only: includes the correct flag and the misconception the distractor feeds */
+        public record OptionReview(UUID id, String label, String text, boolean correct,
+                                   UUID misconceptionNodeId) {
+        }
+
+        public record PartReview(UUID id, String label, String prompt, String commandWord,
+                                 int marks) {
+        }
+
+        /** teacher-only: the deterministic marking contract per mark point */
+        public record PointReview(UUID id, String ref, String text, int marks,
+                                  List<String> acceptanceCriteria) {
+        }
     }
 }
