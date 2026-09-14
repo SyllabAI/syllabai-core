@@ -441,6 +441,10 @@ public class ContentReviewService {
 
         question.assignPrimaryTopic(primaryNodeId);
         questionTopics.deleteByQuestionId(questionId);
+        // Hibernate orders INSERTs before DELETEs within one flush: re-mapping a
+        // question onto a node it already has would violate uq_question_topic
+        // unless the delete reaches the DB first. flush() is the barrier.
+        questionTopics.flush();
         questionTopics.save(new QuestionTopic(question, primaryNodeId, true));
         for (UUID secondary : secondaries) {
             questionTopics.save(new QuestionTopic(question, secondary, false));
