@@ -49,6 +49,30 @@ Vercel project settings (web). Nothing here changes application code.
    `SYLLABAI_R2_ACCOUNT_ID` / `SYLLABAI_R2_ACCESS_KEY_ID` /
    `SYLLABAI_R2_SECRET_ACCESS_KEY` / `SYLLABAI_R2_BUCKET` in the dashboard.
 
+### 1b. Campaign identity env vars (added 2026-09-14, session 67)
+
+The production database is now the **canonical campaign DB** (the full 4CH1
+corpus was ingested through the sanctioned campaign machinery — release
+`t-031-prod-ingestion`). Two env vars keep the campaign-identity claim stable
+across every boot/spin-down (the app's `CampaignDbIdentity` upserts the row
+at startup; without these it flips to `UNCLAIMED` on wake, which the
+fail-closed campaign preflight refuses):
+
+- `SYLLABAI_CAMPAIGN_LABEL=T-C04-CAMPAIGN`
+- `SYLLABAI_CAMPAIGN_COMMIT=<current core short SHA>`
+
+**LLM keys (operator action pending):** the provider keys
+(`SYLLABAI_GROQ_API_KEY` first, `SYLLABAI_GEMINI_API_KEY` /
+`SYLLABAI_OPENROUTER_API_KEY` fallbacks, `SYLLABAI_EMBEDDING_API_KEY`
+content-pipeline-only) were wiped from the Render service by an env-var API
+misuse on 2026-09-14 (a partial PUT replaced the full set — disclosed in the
+session-67 tracker entry). Everything else was restored and re-verified; the
+tutor endpoint honestly returns 503 until these are re-provisioned in the
+Render dashboard. The rest of the product is unaffected.
+
+**API gotcha recorded:** `PUT /v1/services/{id}/env-vars` REPLACES the entire
+set — always send the complete list, never a partial one.
+
 ## 2. Accounts
 
 - **Students** self-register via the login screen — always the STUDENT role
