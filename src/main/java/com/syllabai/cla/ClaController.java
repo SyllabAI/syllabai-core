@@ -51,6 +51,9 @@ public class ClaController {
      * @param questionId  PAST_PAPER_QUESTION: the anchored question (server-
      *                    resolves through the full serving gate; attempt state
      *                    read server-side for the §7 gate)
+     * @param specCode    SPECIFICATION_POINT: the spec-point code the learner is
+     *                    reading (e.g. "4CH1-1.18") — resolved server-side,
+     *                    subject-isolated, VALIDATED-only
      * @param mode        explicit ResponseMode (EXPLAIN | SUMMARIZE | HINT |
      *                    CHECK); unknown values fail 400
      * @param question    the learner's question within the anchored context
@@ -60,6 +63,7 @@ public class ClaController {
             UUID rootId,
             UUID topicNodeId,
             UUID questionId,
+            @Size(max = 80) String specCode,
             @NotNull ResponseMode mode,
             @NotBlank @Size(max = 2000) String question) {
     }
@@ -71,7 +75,7 @@ public class ClaController {
             throw new BadRequestException("context kind is required");
         }
         return cla.contextualAsk(learnerId, request.kind(), request.rootId(),
-                request.topicNodeId(), request.questionId(), request.mode(),
-                request.question());
+                request.topicNodeId(), request.questionId(), request.specCode(),
+                request.mode(), request.question());
     }
 }

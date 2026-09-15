@@ -149,12 +149,14 @@ public class ClaService {
      * @param rootId      opaque reference (KG_TOPIC): the subject KG root
      * @param topicNodeId opaque reference (KG_TOPIC): the anchored topic
      * @param questionId  opaque reference (PAST_PAPER_QUESTION): the anchored question
+     * @param specCode    opaque reference (SPECIFICATION_POINT): the spec-point code the
+     *                    learner is reading (e.g. "4CH1-1.18") — server resolves it
      * @param mode        explicit response mode (contract §3)
      * @param question    the learner's question within the anchored context
      */
     public ClaAnswerView contextualAsk(UUID learnerId, ResourceContext.Kind kind,
                                        UUID rootId, UUID topicNodeId, UUID questionId,
-                                       ResponseMode mode, String question) {
+                                       String specCode, ResponseMode mode, String question) {
         if (learnerId == null) {
             throw new IllegalArgumentException("learnerId is required on the CLA surface");
         }
@@ -172,6 +174,13 @@ public class ClaService {
                             "KG_TOPIC context requires rootId and topicNodeId");
                 }
                 yield resolver.resolveKgTopic(rootId, topicNodeId, learnerId);
+            }
+            case SPECIFICATION_POINT -> {
+                if (rootId == null) {
+                    throw new BadRequestException(
+                            "SPECIFICATION_POINT context requires rootId");
+                }
+                yield resolver.resolveSpecificationPoint(rootId, specCode, learnerId);
             }
             case PAST_PAPER_QUESTION -> {
                 if (questionId == null) {
@@ -196,7 +205,8 @@ public class ClaService {
                 trace(toolTraces, () -> tools.relatedConcepts(context));
 
         // 3. deterministic anchors: the resolved context is the ONLY topic match
-        //    (KG topic for KG_TOPIC; the question's primary topic for question contexts)
+        //    (curriculum-node kinds anchor the resolved node; question contexts
+        //    anchor the question's primary topic)
         List<KnowledgeRetriever.KnowledgeContext.MatchedTopic> anchors = List.of(
                 new KnowledgeRetriever.KnowledgeContext.MatchedTopic(
                         context.topicNodeId(), context.topicCode(), context.topicTitle(), 1.0));

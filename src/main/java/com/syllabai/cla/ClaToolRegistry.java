@@ -100,6 +100,7 @@ public class ClaToolRegistry {
      */
     public List<Tool> enabledFor(ResourceContext.Kind kind, ResponseMode mode) {
         if (kind != ResourceContext.Kind.KG_TOPIC
+                && kind != ResourceContext.Kind.SPECIFICATION_POINT
                 && kind != ResourceContext.Kind.PAST_PAPER_QUESTION) {
             throw new BadRequestException("context kind not supported by this runtime step: " + kind);
         }

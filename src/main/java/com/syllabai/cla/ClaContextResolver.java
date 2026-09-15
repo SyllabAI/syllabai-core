@@ -15,6 +15,7 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
 import java.util.HashMap;
@@ -82,6 +83,57 @@ public class ClaContextResolver {
      */
     @Transactional(readOnly = true)
     public ResourceContext resolveKgTopic(UUID rootId, UUID topicNodeId, UUID learnerId) {
+        if (topicNodeId == null) {
+            throw new BadRequestException("KG_TOPIC context requires topicNodeId");
+        }
+        return resolveCurriculumNode(rootId, topicNodeId, learnerId,
+                ResourceContext.Kind.KG_TOPIC, "curriculum topic");
+    }
+
+    /**
+     * Resolve a SPECIFICATION_POINT context (the syllabus-browser anchor: the
+     * client passes the spec-point CODE it is displaying — e.g. "4CH1-1.18" —
+     * an opaque string the server resolves to a validated curriculum node in
+     * the rooted subject). Same fail-closed discipline as {@link #resolveKgTopic}:
+     * unknown code / code outside the subject / non-VALIDATED node are all an
+     * indistinguishable 404 — no existence oracle, no validation-state oracle.
+     */
+    @Transactional(readOnly = true)
+    public ResourceContext resolveSpecificationPoint(UUID rootId, String specCode,
+                                                     UUID learnerId) {
+        if (specCode == null || specCode.isBlank()) {
+            throw new BadRequestException("SPECIFICATION_POINT context requires specCode");
+        }
+        Subject subject = subjects.findByKnowledgeNodeId(rootId)
+                .orElseThrow(() -> new NotFoundException("curriculum subject root", rootId));
+
+        // registry over the subject subtree; the code must resolve INSIDE it
+        // (subject isolation — a foreign subject's spec code is a 404, not a
+        // best-effort guess)
+        Map<UUID, NodeView> byId = new HashMap<>();
+        collect(graph.tree(rootId), byId);
+        String wanted = specCode.strip();
+        UUID match = byId.values().stream()
+                .filter(n -> wanted.equals(n.code()))
+                .map(NodeView::id)
+                .sorted()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException(
+                        "specification point in this subject", wanted));
+        return resolveCurriculumNode(rootId, match, learnerId,
+                ResourceContext.Kind.SPECIFICATION_POINT, "validated specification point");
+    }
+
+    /**
+     * Shared resolution spine for the curriculum-node-anchored kinds
+     * (KG_TOPIC, SPECIFICATION_POINT): subtree scoping + the §1.2 validation
+     * gate + curriculum identity from the owning subject. Every failure is an
+     * indistinguishable 404.
+     */
+    private ResourceContext resolveCurriculumNode(UUID rootId, UUID nodeId,
+                                                  UUID learnerId,
+                                                  ResourceContext.Kind kind,
+                                                  String what) {
         Subject subject = subjects.findByKnowledgeNodeId(rootId)
                 .orElseThrow(() -> new NotFoundException("curriculum subject root", rootId));
 
@@ -89,24 +141,24 @@ public class ClaContextResolver {
         Map<UUID, NodeView> byId = new HashMap<>();
         collect(graph.tree(rootId), byId);
 
-        NodeView topic = byId.get(topicNodeId);
+        NodeView topic = byId.get(nodeId);
         if (topic == null) {
-            throw new NotFoundException("curriculum topic in this subject", topicNodeId);
+            throw new NotFoundException(what + " in this subject", nodeId);
         }
 
-        KnowledgeNode node = nodes.findById(topicNodeId)
-                .orElseThrow(() -> new NotFoundException("curriculum topic", topicNodeId));
+        KnowledgeNode node = nodes.findById(nodeId)
+                .orElseThrow(() -> new NotFoundException(what, nodeId));
         if (node.validationStatus() != KnowledgeNode.ValidationStatus.VALIDATED) {
             // validation gate (contract §1.2): fail-closed, indistinguishable
             // from unresolvable — no validation-state existence oracle
-            throw new NotFoundException("validated curriculum topic", topicNodeId);
+            throw new NotFoundException("validated " + what, nodeId);
         }
 
         CurriculumVersion version = subject.curriculumVersion();
         return new ResourceContext(
-                ResourceContext.Kind.KG_TOPIC,
-                topicNodeId,
-                topicNodeId,
+                kind,
+                nodeId,
+                nodeId,
                 rootId,
                 subject.code(),
                 node.code(),

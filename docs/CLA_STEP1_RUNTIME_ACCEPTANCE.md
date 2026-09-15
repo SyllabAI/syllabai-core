@@ -101,3 +101,29 @@ Document-chunk granularity decision (recorded honestly): canonical mark-scheme C
 - **Step 1 (KG_TOPIC + EXPLAIN/SUMMARIZE + read-only tools + LIM evidence): IMPLEMENTED / VERIFIED** — core-ci GREEN + live verification 14/14 (`evidence/cla_step1_live_verification_6983d7c.log`).
 - **Step 2 (PAST_PAPER_QUESTION + HINT/CHECK + §7 leakage gate + negative suite): IMPLEMENTED / VERIFIED** — core-ci GREEN on `544bad1` (52/52 incl. ClaFlowIT negative suite) + live verification 9/9 with the real LLM (`evidence/cla_step2_live_verification_544bad1.log`): HINT zero mark-scheme citations on a real 4CH1 question (paper 4CH0/2C), CHECK 409 pre-attempt → 200 post-attempt through a real structured attempt, LIM signalCounts closed loop.
 - **Step 4 (evaluation bundle + promotion) + further context kinds: NOT IMPLEMENTED** — remaining contract-governed work. No `VERIFIED` claim is made for the complete CLA.
+
+---
+
+## Step-3 addendum (post-§10.4): SPECIFICATION_POINT context kind
+
+**Status: IMPLEMENTED / VERIFIED (core `6a89815` lineage + this change).** The
+first contract-defined extension kind beyond steps 1–2. The client passes the
+spec-point CODE it is displaying (an opaque string, e.g. "4CH1-1.18") plus the
+subject root; the server resolves it to a VALIDATED curriculum node inside
+that subject's subtree and anchors the SAME deterministic pipeline as KG_TOPIC
+(anchors → spec-structure evidence → tools → leakage gate → LIM capture).
+
+| Claim | Status | Evidence |
+|---|---|---|
+| §1.1 server-side, fail-closed resolution by code | ACCEPTED (implemented) | `ClaContextResolver.resolveSpecificationPoint` — unknown code / foreign subject's code → indistinguishable 404; pinned by `ClaContextResolverTest` |
+| §1.2 validation gate | ACCEPTED (implemented) | a code mapping to a non-VALIDATED node is a 404 indistinguishable from unknown (live-probed through the CHM mirror subject's unvalidated topics) |
+| subject isolation | ACCEPTED (implemented) | the code must resolve INSIDE the rooted subtree; foreign codes are 404 (unit + IT + live) |
+| same evidence/tool/leakage spine | ACCEPTED (implemented) | `ClaService` dispatch adds the kind; tool registry enablement extended; `ClaServiceTest.specificationPointAnchorsPipeline` |
+| evidence capture records the kind | ACCEPTED (implemented) | `context_kind=SPECIFICATION_POINT` flows through the existing `ClaInteractionEvent` → LIM columns |
+| HTTP contract | ACCEPTED (implemented) | `ClaFlowIT.specificationPointFlow` — 200 with echoed kind/code, 404 unknown/foreign, 400 missing code |
+| evaluation bundle coverage | ACCEPTED (implemented) | S-A probes extended: resolves by code + unknown-code fail-closed |
+
+Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — the runtime has no
+note-content substrate to anchor (documents are QP/MS/SYLLABUS/OTHER only);
+building one is a content-model decision, not a CLA-slice change.
+SMART_LESSON and QUESTION_PART remain contract-governed future kinds.

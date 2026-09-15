@@ -143,4 +143,62 @@ class ClaContextResolverTest {
         assertThatThrownBy(() -> resolver.resolveKgTopic(ROOT, unknown, LEARNER))
                 .isInstanceOf(NotFoundException.class);
     }
+
+    // ── SPECIFICATION_POINT: the syllabus-browser anchor resolves by CODE ──
+
+    @Test
+    @DisplayName("SPECIFICATION_POINT resolves by spec-point code to a VALIDATED node")
+    void resolvesSpecificationPointByCode() {
+        ResourceContext context = resolver.resolveSpecificationPoint(
+                ROOT, " IALCHEM2018-U1-T3 ", LEARNER);
+
+        assertThat(context.kind()).isEqualTo(ResourceContext.Kind.SPECIFICATION_POINT);
+        assertThat(context.reference()).isEqualTo(TOPIC);
+        assertThat(context.topicNodeId()).isEqualTo(TOPIC);
+        assertThat(context.topicCode()).isEqualTo("IALCHEM2018-U1-T3");
+        assertThat(context.subjectCode()).isEqualTo("4CH1");
+        assertThat(context.validationState()).isEqualTo("VALIDATED");
+        // stripped, not guessed: the client's code is matched exactly (with trim)
+        assertThat(context.curriculumVersion().code()).isEqualTo("IALCHEM2018");
+    }
+
+    @Test
+    @DisplayName("SPECIFICATION_POINT fail-closed: unknown code is a 404, never a guess")
+    void unknownSpecCodeFailsClosed() {
+        assertThatThrownBy(() -> resolver.resolveSpecificationPoint(
+                ROOT, "IALCHEM2018-U1-T99", LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("SPECIFICATION_POINT fail-closed: another subject's spec code is a 404")
+    void foreignSpecCodeFailsClosed() {
+        // WCH11 codes belong to the CHM seed subject, never to this one
+        assertThatThrownBy(() -> resolver.resolveSpecificationPoint(
+                ROOT, "WCH11-T1.1", LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("SPECIFICATION_POINT validation gate: a code on non-VALIDATED content fails closed")
+    void unvalidatedSpecCodeFailsClosed() {
+        // a SUGGESTED concept child carries a code inside the subtree; the
+        // gate must still 404 it (indistinguishable from unknown)
+        UUID conceptId = UUID.randomUUID();
+        NodeView suggested = new NodeView(conceptId, "CONCEPT-x", "CONCEPT",
+                "retrieval-graph concept", null, "SUGGESTED", null, List.of());
+        NodeView topic = node(TOPIC, "IALCHEM2018-U1-T3", "TOPIC",
+                "Bonding and structure", List.of(suggested));
+        NodeView unit = node(UNIT, "IALCHEM2018-U1", "UNIT", "Unit 1", List.of(topic));
+        when(graph.tree(ROOT)).thenReturn(
+                node(ROOT, "IALCHEM2018", "SUBJECT", "IAL Chemistry", List.of(unit)));
+        KnowledgeNode suggestedNode = org.mockito.Mockito.mock(KnowledgeNode.class);
+        when(suggestedNode.validationStatus()).thenReturn(KnowledgeNode.ValidationStatus.SUGGESTED);
+        when(nodes.findById(conceptId)).thenReturn(Optional.of(suggestedNode));
+
+        assertThatThrownBy(() -> resolver.resolveSpecificationPoint(
+                ROOT, "CONCEPT-x", LEARNER))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("validated");
+    }
 }
