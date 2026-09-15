@@ -219,9 +219,14 @@ gate did exactly its job:
    resolved by ids, part-scoped on QUESTION_PART, same admission gate as the
    scheme points — post-attempt, never HINT).
 
-CI note: every core-ci run for this slice is still blocked by the org-wide
-GitHub Actions minutes/spending limit (operator-gated; zero-step failures —
-the runner never starts). Local verification is green throughout (523 unit);
-the IT suite runs when Actions recovers. Deploys were verified through GitHub
-deployment statuses (cd7c586 success → 3f3be78 FAILURE → 4e4be8b success →
-d0dc00a success).
+CI note (updated after the concurrent agent's self-hosted-runner probe):
+the org-wide Actions minutes/spending limit blocked every cloud-runner run
+for 1110af8..d0dc00a (zero-step failures — the runner never started). A
+temporary self-hosted-runner experiment (core `958110a`, workflow file
+reverted immediately) produced run **35012221720** — a REAL executed run on
+the full QUESTION_PART code lineage: **surefire 523 run / 0 fail / 1 skip
+GREEN**; the failsafe IT suite was SKIPPED (disabledWithoutDocker — the
+sandbox runner has no Docker), so the ITs remain pending on a
+Docker-capable runner. Local verification is green throughout (523 unit).
+Deploys were verified through GitHub deployment statuses (cd7c586 success →
+3f3be78 FAILURE → 4e4be8b success → d0dc00a success).
