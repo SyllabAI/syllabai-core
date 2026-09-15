@@ -334,6 +334,9 @@ public class ClaService {
                             "Cover the WHOLE anchored specification structure: every "
                                     + "provided specification statement appears in the "
                                     + "summary — never compress only the first source.",
+                            "One concise clause per specification statement — compress, "
+                                    + "do not expand (large topics must stay inside the "
+                                    + "generation budget).",
                             "Preserve the spec anchors (topic code and source citations "
                                     + "for every statement group you cover).",
                             "Do not add material that is not present in the SOURCES."));
