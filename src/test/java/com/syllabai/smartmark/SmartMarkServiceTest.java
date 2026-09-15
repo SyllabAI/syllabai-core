@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +54,7 @@ class SmartMarkServiceTest {
     private final Question question;
     private final QuestionVersion version;
     private final QuestionPart part;
+    private final Attempt attempt;
     private final Answer answer;
 
     private final SmartMarkService service = new SmartMarkService(
@@ -79,7 +81,7 @@ class SmartMarkServiceTest {
         TestIds.withId(part, UUID.randomUUID());
         version.addPart(part);
 
-        Attempt attempt = new Attempt(LEARNER, question, null, false, null,
+        attempt = new Attempt(LEARNER, question, null, false, null,
                 5000L, 4, false, true, "test");
         TestIds.withId(attempt, UUID.randomUUID());
         attempt.beginMarking();
@@ -147,5 +149,73 @@ class SmartMarkServiceTest {
         when(agreementEvaluations.findFirstByScopeAndExamPaperIdOrderByComputedAtDesc(
                 any(), any())).thenReturn(Optional.empty());
         assertThat(service.kappaGatePassed(PAPER)).isFalse();
+    }
+
+    @Test
+    @DisplayName("multi-part κ-released smart mark: evidence waits for the completing part, then fires once")
+    void multiPartKappaReleasedSmartMarkWaitsForCompletion() {
+        // a second part on the same attempt — while it is PENDING the attempt's
+        // total is partial, so part a's authoritative smart mark must NOT fire yet
+        // (the production regression fe01b87 pins for the human path holds here too)
+        QuestionPart partB = new QuestionPart(version, "b", "part b", "State", 2, 1);
+        TestIds.withId(partB, UUID.randomUUID());
+        version.addPart(partB);
+        Answer answerB = new Answer(attempt, partB, "a second written answer");
+        TestIds.withId(answerB, UUID.randomUUID());
+        when(answers.findWithPartAndAttempt(answerB.id())).thenReturn(Optional.of(answerB));
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(answer, answerB));
+
+        // a scheme covering BOTH parts (in-scope points drive the pipeline)
+        MarkScheme bothParts = new MarkScheme(version, "2", "ms-b", "test");
+        TestIds.withId(bothParts, UUID.randomUUID());
+        MarkPoint pointA2 = new MarkPoint(bothParts, part, "1-a", 0, "first answer", 1, List.of(), 0.9);
+        TestIds.withId(pointA2, UUID.randomUUID());
+        MarkPoint pointA3 = new MarkPoint(bothParts, part, "1-a", 1, "first reason", 1, List.of(), 0.9);
+        TestIds.withId(pointA3, UUID.randomUUID());
+        MarkPoint pointB1 = new MarkPoint(bothParts, partB, "1-b", 0, "second answer", 1, List.of(), 0.9);
+        TestIds.withId(pointB1, UUID.randomUUID());
+        MarkPoint pointB2 = new MarkPoint(bothParts, partB, "1-b", 1, "second reason", 1, List.of(), 0.9);
+        TestIds.withId(pointB2, UUID.randomUUID());
+        bothParts.addPoint(pointA2);
+        bothParts.addPoint(pointA3);
+        bothParts.addPoint(pointB1);
+        bothParts.addPoint(pointB2);
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
+                .thenReturn(Optional.of(bothParts));
+
+        // κ gate released
+        when(agreementEvaluations.findFirstByScopeOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_ALL))
+                .thenReturn(Optional.of(new SmartMarkAgreementEvaluation(
+                        SmartMarkAgreementEvaluation.SCOPE_ALL, null, 10, 0.72, 0.9, 0.6, null)));
+
+        // a pipeline that awards every in-scope point (accepted, full marks)
+        SmartMarkService fullMarks = new SmartMarkService(
+                answers, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
+                questionTopics, evidencePublisher,
+                new SmartMarkPipeline(
+                        ctx -> new MarkingCandidate("test-model", ctx.points().stream()
+                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), true,
+                                        "quoted learner text", "earned"))
+                                .toList(), 0.9, "raw"),
+                        List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                                new MarkSumMarkingValidator())),
+                published::add);
+
+        // part a: authoritative (κ released) but the attempt is INCOMPLETE — no evidence
+        SmartMarkResult resultA = fullMarks.markAnswer(answer.id());
+        assertThat(resultA.validationPassed()).isTrue();
+        verify(evidencePublisher, never()).publishGraded(any(), any(), any());
+        assertThat(attempt.marksAwarded()).isEqualTo(2);   // the partial research view
+        assertThat(((SmartMarkCompletedEvent) published.get(0)).authoritative()).isTrue();
+
+        // the completing smart mark fires the evidence ONCE, with the FULL settled total
+        SmartMarkResult resultB = fullMarks.markAnswer(answerB.id());
+        assertThat(resultB.validationPassed()).isTrue();
+        verify(evidencePublisher, times(1)).publishGraded(any(), any(), any());
+        assertThat(attempt.marksAwarded()).isEqualTo(4);
+        // two completed-events, exactly one evidence call — no duplicate evidence
+        assertThat(published).hasSize(2);
     }
 }
