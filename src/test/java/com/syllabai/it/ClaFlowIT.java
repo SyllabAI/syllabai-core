@@ -234,6 +234,13 @@ class ClaFlowIT {
     @DisplayName("interaction evidence: provenance-bearing LIM rows, raw text only in research telemetry")
     void learnerEvidenceWithProvenance() throws Exception {
         seed();
+        // self-contained ask: this test instance has its own freshly-registered
+        // learner (JUnit per-method instances), so the rows asserted here are
+        // exactly the rows THIS ask produces
+        ClaAnswerView answer = cla.contextualAsk(learnerId, rootId, topicId,
+                ResponseMode.EXPLAIN, "explain ionic bonding");
+        assertThat(answer.refused()).isFalse();
+
         List<TutorTopicEngagement> rows = engagements
                 .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
                         learnerId, java.time.Instant.now().minusSeconds(3600));
@@ -243,7 +250,7 @@ class ClaFlowIT {
             assertThat(row.nodeId()).isEqualTo(topicId);
             assertThat(row.contextKind()).isEqualTo("KG_TOPIC");
             assertThat(row.contextReference()).isEqualTo(topicId);
-            assertThat(row.responseMode()).isIn("EXPLAIN", "SUMMARIZE");
+            assertThat(row.responseMode()).isEqualTo("EXPLAIN");
             assertThat(row.evidenceCount()).isGreaterThanOrEqualTo(1);
             assertThat(row.refused()).isFalse();
             assertThat(row.answerModel()).isEqualTo("stub-model");
@@ -266,8 +273,8 @@ class ClaFlowIT {
         assertThat(events).isNotEmpty();
         var last = events.get(0);
         assertThat(last.type().name()).isEqualTo("CLA_EXCHANGE_COMPLETED");
-        assertThat(last.payload().get("question")).isEqualTo("summarize bonding and structure");
-        assertThat(last.payload().get("mode")).isEqualTo("SUMMARIZE");
+        assertThat(last.payload().get("question")).isEqualTo("explain ionic bonding");
+        assertThat(last.payload().get("mode")).isEqualTo("EXPLAIN");
         assertThat(last.payload().get("contextKind")).isEqualTo("KG_TOPIC");
         assertThat(last.payload().get("provenance")).isEqualTo("cla-contextual/1.0.0");
         // the tool invocation trace is in research telemetry (contract §4.4)
