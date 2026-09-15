@@ -120,3 +120,38 @@ artifact. Do not leave durable knowledge only in a chat, agent transcript, or
 PR discussion. Update the central knowledge map when a new cross-project
 canonical artifact is introduced. This is a normal completion step, not a
 human approval gate.
+
+## 10. Learner Interaction Memory rules (binding)
+
+The implementation contract is `docs/LEARNER_INTERACTION_MEMORY_IMPLEMENTATION.md`;
+the canonical architecture lives in `SyllabAI/syllabai`
+(`LEARNER_INTERACTION_MEMORY_ARCHITECTURE.md` + addenda). Rules that bind all
+conversational-surface work in this repository:
+
+- **Raw chat is audit/history only** (research telemetry). Raw conversation
+  text never enters learner-memory tables, learner-state computation, or
+  serving decisions.
+- **LLM output is candidate evidence, never authoritative.** Only
+  deterministic pipeline outputs (intent matcher topic ids, tutor-policy
+  intervention plan, fixed pattern classification) may back a learner-memory
+  signal row.
+- **Provenance is mandatory** on every interaction-memory row: grounding
+  strength, refusal flag, answering-model identity, deterministic signal type.
+- **Student isolation**: every read path is learner-scoped at the repository
+  level; no cross-learner aggregation outside the evidence-lineage rules.
+- **No chat path mutates the canonical knowledge graph** (nodes, edges,
+  validation state) or **writes mastery/misconception probabilities directly**.
+  Conversational evidence reaches learner state only through the governed
+  evidence → learner-model pipeline.
+- **Bounded reads only**: consumers access interaction memory through explicit
+  windows; unbounded history reads need an architecture decision first.
+- **Shared model, separate workloads**: the free-LLM chain is shared
+  infrastructure, but tutor generation, Smart Mark, extraction and embeddings
+  remain separately pinned, separately telemetry-tagged, independently
+  replaceable workloads.
+- **Agentic tools are application-controlled**: any tool registry, context
+  assembly and memory boundary is server-owned; provider-autonomous tools,
+  memory or session state are rejected. The next tool-calling surface (the
+  Contextual Learning Assistant) must implement
+  `docs/CONTEXTUAL_LEARNING_ASSISTANT_IMPLEMENTATION.md` before any runtime
+  code lands.
