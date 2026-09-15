@@ -434,12 +434,15 @@ class ClaFlowIT {
     void checkPreAttemptRefuses() throws Exception {
         seed();
         UUID learner = freshLearner();
+        int generatorCallsBefore = generator.calls.get();
         assertThatThrownBy(() -> cla.contextualAsk(learner,
                 ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ,
                 ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
-        // the refusal happened BEFORE the generator: no LLM call, no grounded answer
-        assertThat(generator.lastContext).isNull();
+        // the refusal happened BEFORE the generator: no LLM call for this ask
+        // (lastContext persists from earlier tests in the shared context, so
+        // the call counter is the self-contained proof)
+        assertThat(generator.calls.get()).isEqualTo(generatorCallsBefore);
     }
 
     @Test
