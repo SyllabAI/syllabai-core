@@ -1,5 +1,6 @@
 package com.syllabai.learner;
 
+import com.syllabai.shared.events.ClaInteractionEvent;
 import com.syllabai.shared.events.TutorAnsweredEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,14 +13,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Learner-memory half of the Tutor pipeline (V21, P7): turns every
- * {@code TutorAnsweredEvent} into structured per-topic engagement rows.
+ * Learner-memory half of the conversational pipeline (V21, P7): turns every
+ * {@code TutorAnsweredEvent} (free Tutor) and every {@code ClaInteractionEvent}
+ * (Contextual Learning Assistant, V24) into structured per-topic engagement
+ * rows.
  *
- * <p>Hard boundaries (operator directive, P7): only the deterministic intent
- * matcher's topic IDs, the grounding strength and the model identity are
- * recorded — never the raw chat text, never LLM-invented entities. Anonymous
- * previews (null learnerId) write nothing. The research log
- * ({@code TelemetryService}) keeps the full exchange independently.</p>
+ * <p>Hard boundaries (operator directive, P7; LIM contract §3; CLA contract
+ * §6): only the deterministic topic anchors, the grounding strength and the
+ * model identity are recorded — never the raw chat text, never LLM-invented
+ * entities. Anonymous previews (null learnerId) write nothing. The research
+ * log ({@code TelemetryService}) keeps the full exchange independently.</p>
  *
  * <p>Order 30: after the learner-model updates (10) and ahead of nothing that
  * depends on it — engagement rows are pure appends with no read-modify-write,
@@ -43,16 +46,45 @@ public class TutorEngagementRecorder {
         if (event.learnerId() == null || event.matchedTopicIds().isEmpty()) {
             return; // anonymous preview, or nothing matched deterministically
         }
-        String signal = classify(event.question(), event.interventionType());
-        List<TutorTopicEngagement> rows = new ArrayList<>(event.matchedTopicIds().size());
-        for (UUID nodeId : event.matchedTopicIds()) {
-            rows.add(new TutorTopicEngagement(
-                    event.learnerId(), nodeId, event.occurredAt(),
-                    event.evidenceCount(), event.refused(), event.answerModel(), signal));
+        append(event.learnerId(), event.matchedTopicIds(), event.occurredAt(),
+                event.evidenceCount(), event.refused(), event.answerModel(),
+                classify(event.question(), event.interventionType()),
+                "FREE_TUTOR", null, null, null);
+    }
+
+    /**
+     * V24: the Contextual Learning Assistant attaches to LIM via the extension
+     * rules (LIM §4): deterministic anchors are the SERVER-RESOLVED context
+     * (never model-invented), classification reuses the same precedence list,
+     * and rows carry the surface identity triple (surface, mode, context).
+     */
+    @EventListener
+    @Order(30)
+    @Transactional
+    public void onClaInteraction(ClaInteractionEvent event) {
+        if (event.learnerId() == null || event.matchedTopicIds().isEmpty()) {
+            return; // defensive symmetry with the tutor path — the CLA surface is authenticated
+        }
+        append(event.learnerId(), event.matchedTopicIds(), event.occurredAt(),
+                event.evidenceCount(), event.refused(), event.answerModel(),
+                classify(event.question(), event.interventionType()),
+                "CONTEXTUAL_ASSISTANT", event.responseMode(), event.contextKind(),
+                event.contextReference());
+    }
+
+    private void append(UUID learnerId, List<UUID> nodeIds, java.time.Instant occurredAt,
+                        int evidenceCount, boolean refused, String answerModel, String signal,
+                        String surface, String responseMode, String contextKind,
+                        UUID contextReference) {
+        List<TutorTopicEngagement> rows = new ArrayList<>(nodeIds.size());
+        for (UUID nodeId : nodeIds) {
+            rows.add(new TutorTopicEngagement(learnerId, nodeId, occurredAt,
+                    evidenceCount, refused, answerModel, signal,
+                    surface, responseMode, contextKind, contextReference));
         }
         engagements.saveAll(rows);
-        log.debug("recorded {} tutor engagement row(s) for learner {} (refused={}, signal={}, model={})",
-                rows.size(), event.learnerId(), event.refused(), signal, event.answerModel());
+        log.debug("recorded {} {} engagement row(s) for learner {} (refused={}, signal={}, model={})",
+                rows.size(), surface, learnerId, refused, signal, answerModel);
     }
 
     /**

@@ -110,7 +110,11 @@ public class GroundedTutorGenerator implements TutorGenerator {
         return safe.length() <= max ? safe : safe.substring(0, max) + "…";
     }
 
-    static String promptIdentity() {
+    /** registered prompt identity, e.g. "tutor-grounded/v2" — public since V24:
+     * the CLA pipeline reuses this prompt verbatim and must record the SAME
+     * identity (contract: compose the Tutor's generation stack; a duplicated
+     * constant would create drift risk). */
+    public static String promptIdentity() {
         return PROMPT_REGISTRY_KEY + "/v" + PROMPT_VERSION;
     }
 }

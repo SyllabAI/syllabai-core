@@ -73,6 +73,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "bad_request", "malformed request");
     }
 
+    // 400, not 500, when the JSON body cannot be read into the request type
+    // (e.g. an unknown ResponseMode enum value on the CLA surface — V24):
+    // invalid identifiers fail safely with an honest status.
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ApiError> unreadableBody(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return build(HttpStatus.BAD_REQUEST, "malformed_body",
+                "request body is not readable (check field types and enum values)");
+    }
+
     // 400, not 500, when a required query parameter is absent (pilot-readiness
     // session-56 finding: /api/v1/learners/me/recommendations without rootId
     // surfaced a generic 500 — honest body, wrong status)

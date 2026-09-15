@@ -34,7 +34,8 @@ public class TelemetryEvent {
         HUMAN_MARK_RECORDED,
         KA_RAG_COMPLETED,
         STRUGGLE_INFERRED,
-        TUTOR_INTERVENTION_SELECTED
+        TUTOR_INTERVENTION_SELECTED,
+        CLA_EXCHANGE_COMPLETED
     }
 
     @Id

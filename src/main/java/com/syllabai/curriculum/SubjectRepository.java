@@ -19,4 +19,9 @@ public interface SubjectRepository extends JpaRepository<Subject, UUID> {
 
     @EntityGraph(attributePaths = "curriculumVersion")
     List<Subject> findAllByOrderByCode();
+
+    /** CLA context resolution (V24): the subject owning a KG subject root —
+     * resolves curriculum identity server-side from the referenced anchor. */
+    @EntityGraph(attributePaths = "curriculumVersion")
+    Optional<Subject> findByKnowledgeNodeId(UUID knowledgeNodeId);
 }

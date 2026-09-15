@@ -10,6 +10,7 @@ import com.syllabai.shared.events.SmartMarkCompletedEvent;
 import com.syllabai.shared.events.TutorAnsweredEvent;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -201,6 +202,48 @@ public class TelemetryService {
         events.save(new TelemetryEvent(
                 event.learnerId() == null ? new UUID(0, 0) : event.learnerId(),
                 TelemetryEvent.Type.KA_RAG_COMPLETED,
+                payload,
+                event.occurredAt()));
+    }
+
+    /**
+     * CLA exchange record (V24, CLA contract §4.4 + §6): the contextual
+     * counterpart of the KA-RAG chat-exchange record. Append-only research
+     * telemetry — the question text and the read-only tool invocation trace
+     * (tool, arguments reference, result size, latency) live ONLY here, never
+     * in learner memory. Anonymous/defensive null learners land under the
+     * reserved zero id, mirroring the tutor handler.
+     */
+    @EventListener
+    @Transactional
+    public void onClaInteraction(com.syllabai.shared.events.ClaInteractionEvent event) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("question", event.question());
+        payload.put("mode", event.responseMode());
+        payload.put("contextKind", event.contextKind());
+        payload.put("contextReference", event.contextReference() == null
+                ? "" : event.contextReference().toString());
+        payload.put("matchedTopicIds",
+                event.matchedTopicIds().stream().map(UUID::toString).toList());
+        payload.put("evidenceCount", event.evidenceCount());
+        payload.put("evidenceSources", event.evidenceSources());
+        payload.put("refused", event.refused());
+        payload.put("answerModel", event.answerModel() == null ? "" : event.answerModel());
+        payload.put("promptVersion", event.promptVersion());
+        payload.put("latencyMs", event.latencyMs());
+        payload.put("provenance", "cla-contextual/1.0.0");
+        payload.put("tools", event.tools() == null ? List.of()
+                : event.tools().stream().map(t -> {
+                    Map<String, Object> tool = new LinkedHashMap<>();
+                    tool.put("tool", t.tool());
+                    tool.put("args", t.args());
+                    tool.put("resultSize", t.resultSize());
+                    tool.put("latencyMs", t.latencyMs());
+                    return tool;
+                }).toList());
+        events.save(new TelemetryEvent(
+                event.learnerId() == null ? new UUID(0, 0) : event.learnerId(),
+                TelemetryEvent.Type.CLA_EXCHANGE_COMPLETED,
                 payload,
                 event.occurredAt()));
     }

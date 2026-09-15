@@ -59,6 +59,27 @@ public class TutorTopicEngagement {
     @Column(name = "signal_type", nullable = false, length = 24)
     private String signalType = "TOPIC_ENGAGEMENT";
 
+    /**
+     * V24 surface identity (CLA contract §6): FREE_TUTOR (default, all legacy
+     * rows) or CONTEXTUAL_ASSISTANT. The row semantics are identical across
+     * surfaces — deterministic topic anchors, provenance, append-only — the
+     * surface column says which conversational surface produced the fact.
+     */
+    @Column(name = "surface", nullable = false, length = 24)
+    private String surface = "FREE_TUTOR";
+
+    /** V24: explicit response mode of the exchange (EXPLAIN/SUMMARIZE; null on tutor rows) */
+    @Column(name = "response_mode", length = 20)
+    private String responseMode;
+
+    /** V24: resolved context kind (KG_TOPIC in step 1; null on tutor rows) */
+    @Column(name = "context_kind", length = 32)
+    private String contextKind;
+
+    /** V24: resolved context anchor (the topic node id; null on tutor rows) */
+    @Column(name = "context_reference")
+    private UUID contextReference;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -75,6 +96,15 @@ public class TutorTopicEngagement {
     public TutorTopicEngagement(UUID learnerId, UUID nodeId, Instant occurredAt,
                                 int evidenceCount, boolean refused, String answerModel,
                                 String signalType) {
+        this(learnerId, nodeId, occurredAt, evidenceCount, refused, answerModel,
+                signalType, "FREE_TUTOR", null, null, null);
+    }
+
+    /** V24 full provenance constructor (CLA contract §6): surface + context identity. */
+    public TutorTopicEngagement(UUID learnerId, UUID nodeId, Instant occurredAt,
+                                int evidenceCount, boolean refused, String answerModel,
+                                String signalType, String surface, String responseMode,
+                                String contextKind, UUID contextReference) {
         this.learnerId = learnerId;
         this.nodeId = nodeId;
         this.occurredAt = occurredAt;
@@ -82,6 +112,10 @@ public class TutorTopicEngagement {
         this.refused = refused;
         this.answerModel = answerModel;
         this.signalType = signalType == null ? "TOPIC_ENGAGEMENT" : signalType;
+        this.surface = surface == null ? "FREE_TUTOR" : surface;
+        this.responseMode = responseMode;
+        this.contextKind = contextKind;
+        this.contextReference = contextReference;
     }
 
     @PrePersist
@@ -98,5 +132,9 @@ public class TutorTopicEngagement {
     public boolean refused() { return refused; }
     public String answerModel() { return answerModel; }
     public String signalType() { return signalType; }
+    public String surface() { return surface; }
+    public String responseMode() { return responseMode; }
+    public String contextKind() { return contextKind; }
+    public UUID contextReference() { return contextReference; }
     public Instant createdAt() { return createdAt; }
 }
