@@ -517,12 +517,11 @@ public class ClaService {
     private EvidenceItem schemePointEvidence(ResourceContext context) {
         // the scheme lookup keys on the question id: question-level contexts
         // carry it as the reference; part-level contexts resolve it through the
-        // canonical part → version → question FK (the resolver has already
-        // gated that the part belongs to the CURRENT validated version)
+        // canonical part → version → question FK via a SCALAR projection (the
+        // service is non-transactional with OSIV off — an entity traversal
+        // would LazyInitializationException; see QuestionPartRepository)
         UUID questionId = context.isQuestionPartContext()
-                ? questionParts.findById(context.reference())
-                        .map(p -> p.questionVersion().questionId())
-                        .orElse(null)
+                ? questionParts.findQuestionIdByPartId(context.reference()).orElse(null)
                 : context.reference();
         if (questionId == null) {
             return null;

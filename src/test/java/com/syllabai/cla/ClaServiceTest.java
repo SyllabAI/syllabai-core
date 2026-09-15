@@ -580,14 +580,13 @@ class ClaServiceTest {
                 new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
                         new OwnLearnerState(List.of(), List.of())));
 
-        // canonical part → version → question FK chain
-        com.syllabai.assessment.QuestionPart part =
-                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionPart.class);
+        // the part → question FK resolves through the SCALAR projection query
+        // (production-safe: no entity hydration, no lazy loading)
+        when(questionParts.findQuestionIdByPartId(partId))
+                .thenReturn(java.util.Optional.of(questionId));
         com.syllabai.assessment.QuestionVersion version =
                 org.mockito.Mockito.mock(com.syllabai.assessment.QuestionVersion.class);
-        when(version.questionId()).thenReturn(questionId);
-        when(part.questionVersion()).thenReturn(version);
-        when(questionParts.findById(partId)).thenReturn(java.util.Optional.of(part));
+        when(version.id()).thenReturn(UUID.randomUUID());
         when(questionVersions.findByQuestionIdOrderByVersionDesc(questionId))
                 .thenReturn(List.of(version));
 
