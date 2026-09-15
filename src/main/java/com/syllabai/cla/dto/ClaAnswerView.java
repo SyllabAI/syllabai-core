@@ -32,6 +32,7 @@ public record ClaAnswerView(
     public record ContextView(
             String kind,
             UUID reference,
+            UUID topicNodeId,
             UUID rootId,
             String subjectCode,
             String topicCode,
@@ -40,15 +41,23 @@ public record ClaAnswerView(
             String curriculumBoard,
             String curriculumQualification,
             String validationState,
-            ResponseMode mode) {
+            ResponseMode mode,
+            String questionStem,
+            String questionCommandWord,
+            int questionMarks,
+            String paperCode,
+            Boolean attempted) {
 
         public static ContextView of(ResourceContext context, ResponseMode mode) {
             return new ContextView(
-                    context.kind().name(), context.reference(), context.rootId(),
+                    context.kind().name(), context.reference(), context.topicNodeId(),
+                    context.rootId(),
                     context.subjectCode(), context.topicCode(), context.topicTitle(),
                     context.curriculumVersion().code(), context.curriculumVersion().board(),
                     context.curriculumVersion().qualification(),
-                    context.validationState().name(), mode);
+                    context.validationState(), mode,
+                    context.questionStem(), context.questionCommandWord(),
+                    context.questionMarks(), context.paperCode(), context.attempted());
         }
     }
 

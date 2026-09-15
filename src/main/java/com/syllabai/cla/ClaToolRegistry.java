@@ -111,16 +111,16 @@ public class ClaToolRegistry {
     public ToolResultWith<List<SpecAnchor>> specificationContext(ResourceContext context,
                                                                  NodeView subjectTree) {
         List<SpecAnchor> chain = new ArrayList<>();
-        collectChain(subjectTree, context.reference(), 0, chain);
+        collectChain(subjectTree, context.topicNodeId(), 0, chain);
         return new ToolResultWith<>(Tool.GET_SPECIFICATION_CONTEXT,
-                "root=" + context.rootId() + ",topic=" + context.reference(),
+                "root=" + context.rootId() + ",topic=" + context.topicNodeId(),
                 List.copyOf(chain));
     }
 
     /** GET_RELATED_CONCEPTS: prerequisite chain + attached misconceptions. */
     public ToolResultWith<RelatedConcepts> relatedConcepts(ResourceContext context) {
-        List<PrerequisiteView> prerequisites = graph.prerequisiteChain(context.reference());
-        List<NodeView> misconceptionNodes = graph.misconceptions(context.reference());
+        List<PrerequisiteView> prerequisites = graph.prerequisiteChain(context.topicNodeId());
+        List<NodeView> misconceptionNodes = graph.misconceptions(context.topicNodeId());
         List<RelatedMisconception> misconceptions = misconceptionNodes.stream()
                 .limit(MAX_MISCONCEPTIONS)
                 .map(m -> new RelatedMisconception(m.id(), m.title()))

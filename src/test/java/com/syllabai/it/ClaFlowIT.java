@@ -4,8 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.syllabai.assessment.AssessmentService;
+import com.syllabai.assessment.dto.SubmitAnswerRequest;
+import com.syllabai.cla.AttemptRequiredException;
 import com.syllabai.cla.ClaService;
 import com.syllabai.cla.ResponseMode;
+import com.syllabai.cla.ResourceContext;
 import com.syllabai.cla.dto.ClaAnswerView;
 import com.syllabai.content.CanonicalDocumentDto;
 import com.syllabai.content.ContentIngestionService;
@@ -16,7 +20,6 @@ import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.dto.LoginRequest;
 import com.syllabai.identity.dto.RegisterRequest;
-import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.learner.TutorTopicEngagement;
 import com.syllabai.learner.TutorTopicEngagementRepository;
@@ -52,14 +55,22 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * CLA step-1 vertical slice over real Postgres/HTTP (V24): the full chain
- * RESOURCE_CONTEXT → KG topic resolution → bounded read-only tools → grounded
- * Tutor stack → citations → interaction evidence → provenance-bearing learner
- * signal — plus the invariant suite the contract demands: fail-closed
- * resolution (subject isolation, validation gate, no existence oracle),
- * read-only tool boundaries (no canonical KG / mastery mutation from chat),
- * LIM provenance (surface + mode + context, never raw text), and honest
- * research telemetry with the tool trace.
+ * CLA step-1 + step-2 vertical slice over real Postgres/HTTP (V24): the full
+ * chain RESOURCE_CONTEXT → KG topic / question resolution → bounded read-only
+ * tools → grounded Tutor stack → citations → interaction evidence →
+ * provenance-bearing learner signal — plus the invariant suite the contract
+ * demands, INCLUDING the CI-mandatory answer-leakage negative suite (§7.5):
+ *
+ * <ul>
+ *   <li>fail-closed resolution (subject isolation, validation gates, no
+ *       existence oracles) for both context kinds;</li>
+ *   <li>read-only tool boundaries (no canonical KG / mastery mutation);</li>
+ *   <li>LIM provenance (surface + mode + context, never raw text);</li>
+ *   <li>the §7 leakage gate over real attempt state: HINT never carries
+ *       mark-scheme evidence (unit-pinned non-vacuously; asserted here
+ *       end-to-end), CHECK pre-attempt is a deterministic 409 BEFORE any
+ *       generation, and the post-attempt attempt evidence unlocks CHECK.</li>
+ * </ul>
  *
  * <p>Generation runs against a recording stub (the GroundedTutorGenerator
  * prompt path is covered by GroundedTutorGeneratorTest); retrieval is real
@@ -112,6 +123,19 @@ class ClaFlowIT {
         }
     }
 
+    /** V6 seed: subject root CHM. */
+    private static final UUID SEED_SUBJECT_ROOT =
+            UUID.fromString("20000000-0000-0000-0000-000000000001");
+    /** V6 seed: WCH11-T1.1 (mole calculations) — the seed MCQs' topic. */
+    private static final UUID SEED_TOPIC_T1_1 =
+            UUID.fromString("20000000-0000-0000-0000-000000000012");
+    /** V7 seed: SEED-WCH11-001 (mass of 0.25 mol CaCO3) — servable seed MCQ. */
+    private static final UUID SEED_MCQ =
+            UUID.fromString("40000000-0000-0000-0000-000000000001");
+    /** V7 seed: option C "25.0 g" — the correct answer. */
+    private static final UUID SEED_MCQ_CORRECT_OPTION =
+            UUID.fromString("41000000-0000-0000-0000-000000000003");
+
     @Autowired
     private ContentIngestionService contentIngestion;
     @Autowired
@@ -124,6 +148,8 @@ class ClaFlowIT {
     private ClaService cla;
     @Autowired
     private AuthService authService;
+    @Autowired
+    private AssessmentService assessment;
     @Autowired
     private TelemetryEventRepository telemetry;
     @Autowired
@@ -173,14 +199,23 @@ class ClaFlowIT {
         topicId = knowledgeNodes.findByCode("IALCHEM2018-U1-T3").orElseThrow().id();
     }
 
+    private UUID freshLearner() {
+        return authService.register(new RegisterRequest(
+                "cla-n-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
+                "ItLearner123!", "Cla Learner N")).user().id();
+    }
+
+    // ── step 1: the KG_TOPIC vertical slice ─────────────────────────────────
+
     @Test
     @Order(1)
     @DisplayName("EXPLAIN: anchored grounded answer, resolved context, tool trace, citations")
     void explainAskGrounded() throws Exception {
         seed();
 
-        ClaAnswerView answer = cla.contextualAsk(learnerId, rootId, topicId,
-                ResponseMode.EXPLAIN, "explain bonding and structure");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                rootId, topicId, null, ResponseMode.EXPLAIN,
+                "explain bonding and structure");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.answer()).contains("[1]");
@@ -191,6 +226,7 @@ class ClaFlowIT {
         // validation state — and never what the client asserted
         assertThat(answer.context().kind()).isEqualTo("KG_TOPIC");
         assertThat(answer.context().reference()).isEqualTo(topicId);
+        assertThat(answer.context().topicNodeId()).isEqualTo(topicId);
         assertThat(answer.context().rootId()).isEqualTo(rootId);
         assertThat(answer.context().subjectCode()).isEqualTo("CHM");
         assertThat(answer.context().topicCode()).isEqualTo("IALCHEM2018-U1-T3");
@@ -198,6 +234,7 @@ class ClaFlowIT {
         assertThat(answer.context().curriculumBoard()).isEqualTo("Edexcel");
         assertThat(answer.context().validationState()).isEqualTo("VALIDATED");
         assertThat(answer.context().mode()).isEqualTo(ResponseMode.EXPLAIN);
+        assertThat(answer.context().attempted()).isNull();
 
         // deterministic anchors: exactly the resolved topic
         assertThat(answer.topics()).hasSize(1);
@@ -220,8 +257,8 @@ class ClaFlowIT {
     @DisplayName("SUMMARIZE: mode recorded end to end, plan constrained")
     void summarizeAsk() throws Exception {
         seed();
-        ClaAnswerView answer = cla.contextualAsk(learnerId, rootId, topicId,
-                ResponseMode.SUMMARIZE, "summarize bonding and structure");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                rootId, topicId, null, ResponseMode.SUMMARIZE, "summarize bonding and structure");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().mode()).isEqualTo(ResponseMode.SUMMARIZE);
@@ -237,8 +274,8 @@ class ClaFlowIT {
         // self-contained ask: this test instance has its own freshly-registered
         // learner (JUnit per-method instances), so the rows asserted here are
         // exactly the rows THIS ask produces
-        ClaAnswerView answer = cla.contextualAsk(learnerId, rootId, topicId,
-                ResponseMode.EXPLAIN, "explain ionic bonding");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                rootId, topicId, null, ResponseMode.EXPLAIN, "explain ionic bonding");
         assertThat(answer.refused()).isFalse();
 
         List<TutorTopicEngagement> rows = engagements
@@ -298,8 +335,8 @@ class ClaFlowIT {
         Integer edgesBefore = jdbc.queryForObject(
                 "select count(*) from knowledge_edges", Integer.class);
 
-        cla.contextualAsk(learnerId, rootId, topicId, ResponseMode.EXPLAIN,
-                "explain bonding and structure again");
+        cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null,
+                ResponseMode.EXPLAIN, "explain bonding and structure again");
 
         Integer nodeStatusCountAfter = jdbc.queryForObject(
                 "select count(*) from knowledge_nodes where validation_status = 'VALIDATED'",
@@ -321,19 +358,24 @@ class ClaFlowIT {
 
     @Test
     @Order(5)
-    @DisplayName("fail-closed context: foreign topic, unknown root, and unvalidated content are all 404s")
+    @DisplayName("fail-closed context: foreign topic, unknown root, unknown question, unvalidated content are all 404s")
     void contextResolutionFailsClosed() throws Exception {
         seed();
 
         // a topic id that exists nowhere in this subject's subtree
         UUID foreign = UUID.randomUUID();
-        assertThatThrownBy(() -> cla.contextualAsk(learnerId, rootId, foreign,
-                ResponseMode.EXPLAIN, "explain"))
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                rootId, foreign, null, ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(NotFoundException.class);
 
         // a root that is not a subject root
-        assertThatThrownBy(() -> cla.contextualAsk(learnerId, UUID.randomUUID(), topicId,
-                ResponseMode.EXPLAIN, "explain"))
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                UUID.randomUUID(), topicId, null, ResponseMode.EXPLAIN, "explain"))
+                .isInstanceOf(NotFoundException.class);
+
+        // an unknown question id → 404 (no question existence oracle)
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.PAST_PAPER_QUESTION,
+                null, null, UUID.randomUUID(), ResponseMode.HINT, "hint me"))
                 .isInstanceOf(NotFoundException.class);
 
         // unvalidated content is invisible to the CLA — indistinguishable 404,
@@ -342,14 +384,104 @@ class ClaFlowIT {
         jdbc.update("update knowledge_nodes set validation_status = 'SUGGESTED' where id = ?",
                 suggestible);
         try {
-            assertThatThrownBy(() -> cla.contextualAsk(learnerId, rootId, suggestible,
-                    ResponseMode.EXPLAIN, "explain"))
+            assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
+                    rootId, suggestible, null, ResponseMode.EXPLAIN, "explain"))
                     .isInstanceOf(NotFoundException.class)
                     .hasMessageContaining("validated");
         } finally {
             jdbc.update("update knowledge_nodes set validation_status = 'VALIDATED' where id = ?",
                     suggestible);
         }
+    }
+
+    // ── step 2: question contexts + the §7 answer-leakage negative suite ────
+
+    @Test
+    @Order(6)
+    @DisplayName("§7.5 negative suite: HINT on a question context never carries mark-scheme evidence")
+    void hintNeverLeaksMarkScheme() throws Exception {
+        seed();
+        // the V7 seed MCQ is servable and topic-mapped; the corpus contains the
+        // real canonical mark-scheme fixture chunks the vector side can retrieve
+        ClaAnswerView answer = cla.contextualAsk(freshLearner(),
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ,
+                ResponseMode.HINT, "give me the mass of calcium carbonate");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().kind()).isEqualTo("PAST_PAPER_QUESTION");
+        assertThat(answer.context().reference()).isEqualTo(SEED_MCQ);
+        assertThat(answer.context().topicCode()).isEqualTo("WCH11-T1.1");
+        assertThat(answer.context().attempted()).isFalse();
+        assertThat(answer.context().questionMarks()).isGreaterThan(0);
+        assertThat(answer.context().paperCode()).isNotBlank();
+
+        // THE INVARIANT: no mark-scheme source anywhere in the evidence
+        assertThat(answer.citations())
+                .noneSatisfy(c -> assertThat(c.sourceType()).isEqualTo("MARK_SCHEME"));
+        // the deterministic anchor is the question's primary topic
+        assertThat(answer.topics()).extracting(t -> t.code()).containsExactly("WCH11-T1.1");
+        // HINT plan carries the leakage constraint
+        assertThat(generator.lastContext.interventionPlan().rationale())
+                .contains("CLA HINT mode").contains("no final answers");
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("§7.5 negative suite: CHECK pre-attempt is a deterministic refusal before any generation")
+    void checkPreAttemptRefuses() throws Exception {
+        seed();
+        UUID learner = freshLearner();
+        assertThatThrownBy(() -> cla.contextualAsk(learner,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ,
+                ResponseMode.CHECK, "check my answer"))
+                .isInstanceOf(AttemptRequiredException.class);
+        // the refusal happened BEFORE the generator: no LLM call, no grounded answer
+        assertThat(generator.lastContext).isNull();
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("§7.3 post-attempt unlock: real attempt evidence enables CHECK full feedback")
+    void checkPostAttemptUnlocks() throws Exception {
+        seed();
+        UUID learner = freshLearner();
+
+        // pre-attempt: the gate refuses
+        assertThatThrownBy(() -> cla.contextualAsk(learner,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ,
+                ResponseMode.CHECK, "check my answer"))
+                .isInstanceOf(AttemptRequiredException.class);
+
+        // real attempt evidence through the REAL assessment pipeline (Review Hub substrate)
+        assessment.submit(learner, new SubmitAnswerRequest(
+                SEED_MCQ, SEED_MCQ_CORRECT_OPTION, 20_000L, 4, false, false));
+
+        // post-attempt: the gate unlocks
+        ClaAnswerView answer = cla.contextualAsk(learner,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ,
+                ResponseMode.CHECK, "check my answer now");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().attempted()).isTrue();
+        assertThat(answer.context().mode()).isEqualTo(ResponseMode.CHECK);
+        assertThat(generator.lastContext.interventionPlan().rationale())
+                .contains("CLA CHECK mode").contains("post-attempt");
+        // no mark-scheme DOCUMENT chunks even post-attempt (page-level chunks
+        // cannot be bound to one question) — feedback grounds on the anchor
+        assertThat(answer.citations())
+                .noneSatisfy(c -> assertThat(c.sourceType()).isEqualTo("MARK_SCHEME"));
+
+        // the exchange landed in LIM with the question context identity
+        List<TutorTopicEngagement> rows = engagements
+                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                        learner, java.time.Instant.now().minusSeconds(3600));
+        assertThat(rows).anySatisfy(row -> {
+            assertThat(row.surface()).isEqualTo("CONTEXTUAL_ASSISTANT");
+            assertThat(row.contextKind()).isEqualTo("PAST_PAPER_QUESTION");
+            assertThat(row.contextReference()).isEqualTo(SEED_MCQ);
+            assertThat(row.responseMode()).isEqualTo("CHECK");
+            assertThat(row.nodeId()).isEqualTo(SEED_TOPIC_T1_1);
+        });
     }
 
     // ── HTTP surface: authorization + fail-safe request handling ────────────────
@@ -366,14 +498,20 @@ class ClaFlowIT {
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private String body(UUID root, UUID topic, String mode, String question) {
+    private String kgBody(UUID root, UUID topic, String mode, String question) {
         return """
-                {"rootId": "%s", "topicNodeId": "%s", "mode": "%s", "question": "%s"}
+                {"kind": "KG_TOPIC", "rootId": "%s", "topicNodeId": "%s", "mode": "%s", "question": "%s"}
                 """.formatted(root, topic, mode, question);
     }
 
+    private String questionBody(UUID questionId, String mode, String question) {
+        return """
+                {"kind": "PAST_PAPER_QUESTION", "questionId": "%s", "mode": "%s", "question": "%s"}
+                """.formatted(questionId, mode, question);
+    }
+
     @Test
-    @Order(6)
+    @Order(9)
     @DisplayName("authorization: anonymous 401; valid learner token 200 on the same route")
     void httpAuthorization() throws Exception {
         seed();
@@ -384,24 +522,24 @@ class ClaFlowIT {
 
         // anonymous → 401 (real filter chain, real socket)
         HttpResponse<String> anonymous = post("/api/v1/learners/me/cla/ask", null,
-                body(rootId, topicId, "EXPLAIN", "explain bonding"));
+                kgBody(rootId, topicId, "EXPLAIN", "explain bonding"));
         assertThat(anonymous.statusCode()).isEqualTo(401);
 
         // forged token → 401
         HttpResponse<String> forged = post("/api/v1/learners/me/cla/ask", "not-a-jwt",
-                body(rootId, topicId, "EXPLAIN", "explain bonding"));
+                kgBody(rootId, topicId, "EXPLAIN", "explain bonding"));
         assertThat(forged.statusCode()).isEqualTo(401);
 
         // control: a valid learner token IS served (the 401s above are not vacuous)
         HttpResponse<String> ok = post("/api/v1/learners/me/cla/ask", realToken,
-                body(rootId, topicId, "EXPLAIN", "explain bonding"));
+                kgBody(rootId, topicId, "EXPLAIN", "explain bonding"));
         assertThat(ok.statusCode()).isEqualTo(200);
         assertThat(ok.body()).contains("IALCHEM2018-U1-T3");
     }
 
     @Test
-    @Order(7)
-    @DisplayName("fail-safe requests: unknown mode and unknown ids fail 400/404, never 500 or an oracle")
+    @Order(10)
+    @DisplayName("fail-safe requests: unknown mode/kind and unknown ids fail 400/404/409, never 500 or an oracle")
     void httpFailSafe() throws Exception {
         seed();
         String email = "cla-http2-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test";
@@ -410,22 +548,42 @@ class ClaFlowIT {
 
         // unknown mode → 400 (undeclared modes are rejected, contract §3)
         HttpResponse<String> badMode = post("/api/v1/learners/me/cla/ask", token,
-                body(rootId, topicId, "WHISPER", "explain bonding"));
+                kgBody(rootId, topicId, "WHISPER", "explain bonding"));
         assertThat(badMode.statusCode()).isEqualTo(400);
+
+        // unsupported context kind (closed enum, not served by this runtime) → 400
+        HttpResponse<String> badKind = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "NOTE_SECTION", "mode": "EXPLAIN", "question": "explain"}
+                """);
+        assertThat(badKind.statusCode()).isEqualTo(400);
+
+        // missing reference for the declared kind → 400
+        HttpResponse<String> missingRef = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "KG_TOPIC", "mode": "EXPLAIN", "question": "explain"}
+                """);
+        assertThat(missingRef.statusCode()).isEqualTo(400);
 
         // nonexistent topic → 404, same shape as an unauthorized one (no oracle)
         HttpResponse<String> missing = post("/api/v1/learners/me/cla/ask", token,
-                body(rootId, UUID.randomUUID(), "EXPLAIN", "explain bonding"));
+                kgBody(rootId, UUID.randomUUID(), "EXPLAIN", "explain bonding"));
         assertThat(missing.statusCode()).isEqualTo(404);
 
         // nonexistent root → 404
         HttpResponse<String> missingRoot = post("/api/v1/learners/me/cla/ask", token,
-                body(UUID.randomUUID(), topicId, "EXPLAIN", "explain bonding"));
+                kgBody(UUID.randomUUID(), topicId, "EXPLAIN", "explain bonding"));
         assertThat(missingRoot.statusCode()).isEqualTo(404);
+
+        // §7.5 over real HTTP: CHECK pre-attempt → 409 attempt_required
+        HttpResponse<String> preAttempt = post("/api/v1/learners/me/cla/ask", token,
+                questionBody(SEED_MCQ, "CHECK", "check my answer"));
+        assertThat(preAttempt.statusCode()).isEqualTo(409);
+        assertThat(preAttempt.body()).contains("attempt_required");
 
         // blank question → 400 (validation)
         HttpResponse<String> blank = post("/api/v1/learners/me/cla/ask", token,
-                body(rootId, topicId, "EXPLAIN", "   "));
+                kgBody(rootId, topicId, "EXPLAIN", "   "));
         assertThat(blank.statusCode()).isEqualTo(400);
     }
 }

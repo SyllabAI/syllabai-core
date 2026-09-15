@@ -36,6 +36,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());
     }
 
+    // CLA answer-leakage gate (contract §7.3/§7.4): CHECK without attempt
+    // evidence is a deterministic 409 BEFORE any retrieval or generation.
+    @ExceptionHandler(com.syllabai.cla.AttemptRequiredException.class)
+    ResponseEntity<ApiError> attemptRequired(com.syllabai.cla.AttemptRequiredException ex) {
+        return build(HttpStatus.CONFLICT, "attempt_required", ex.getMessage());
+    }
+
     // A concurrent write to an optimistic-locked row (learner state aggregates
     // carry @Version, C-4) surfaces here instead of silently dropping one update.
     // 409 tells the client the operation collided with another write and can be

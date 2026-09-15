@@ -1,5 +1,10 @@
 package com.syllabai.cla;
 
+import com.syllabai.assessment.MarkScheme;
+import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.MarkPoint;
+import com.syllabai.assessment.QuestionVersion;
+import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.cla.ClaToolRegistry.RelatedConcepts;
 import com.syllabai.cla.ClaToolRegistry.Tool;
 import com.syllabai.cla.ClaToolRegistry.ToolResultWith;
@@ -9,6 +14,7 @@ import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.learner.MisconceptionState;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.events.ClaInteractionEvent;
 import com.syllabai.tutor.CitationResolver;
 import com.syllabai.tutor.ContextAssembler;
@@ -79,6 +85,8 @@ public class ClaService {
     private final ClaToolRegistry tools;
     private final KnowledgeGraphService graph;
     private final KnowledgeNodeRepository knowledgeNodes;
+    private final MarkSchemeRepository markSchemes;
+    private final QuestionVersionRepository questionVersions;
     private final VectorRetriever vectorRetriever;
     private final ReciprocalRankFusion fusion;
     private final EvidenceReranker reranker;
@@ -94,6 +102,8 @@ public class ClaService {
                       ClaToolRegistry tools,
                       KnowledgeGraphService graph,
                       KnowledgeNodeRepository knowledgeNodes,
+                      MarkSchemeRepository markSchemes,
+                      QuestionVersionRepository questionVersions,
                       VectorRetriever vectorRetriever,
                       ReciprocalRankFusion fusion,
                       EvidenceReranker reranker,
@@ -107,6 +117,8 @@ public class ClaService {
         this.tools = tools;
         this.graph = graph;
         this.knowledgeNodes = knowledgeNodes;
+        this.markSchemes = markSchemes;
+        this.questionVersions = questionVersions;
         this.vectorRetriever = vectorRetriever;
         this.fusion = fusion;
         this.reranker = reranker;
@@ -120,12 +132,16 @@ public class ClaService {
 
     /**
      * @param learnerId   the authenticated learner (learner surface — required)
-     * @param rootId      opaque reference: the subject KG root being viewed
-     * @param topicNodeId opaque reference: the anchored curriculum topic
+     * @param kind        the context kind (KG_TOPIC | PAST_PAPER_QUESTION in this
+     *                    runtime step; anything else is a 400 — closed enum, §1)
+     * @param rootId      opaque reference (KG_TOPIC): the subject KG root
+     * @param topicNodeId opaque reference (KG_TOPIC): the anchored topic
+     * @param questionId  opaque reference (PAST_PAPER_QUESTION): the anchored question
      * @param mode        explicit response mode (contract §3)
      * @param question    the learner's question within the anchored context
      */
-    public ClaAnswerView contextualAsk(UUID learnerId, UUID rootId, UUID topicNodeId,
+    public ClaAnswerView contextualAsk(UUID learnerId, ResourceContext.Kind kind,
+                                       UUID rootId, UUID topicNodeId, UUID questionId,
                                        ResponseMode mode, String question) {
         if (learnerId == null) {
             throw new IllegalArgumentException("learnerId is required on the CLA surface");
@@ -137,21 +153,41 @@ public class ClaService {
         List<ClaToolRegistry.ToolTrace> toolTraces = new ArrayList<>();
 
         // 1. server-side context resolution — fail-closed (contract §1, §5)
-        ResourceContext context = resolver.resolveKgTopic(rootId, topicNodeId, learnerId);
-        // the registry, not the caller, decides which tools may run (§4.1)
+        ResourceContext context = switch (kind) {
+            case KG_TOPIC -> {
+                if (rootId == null || topicNodeId == null) {
+                    throw new BadRequestException(
+                            "KG_TOPIC context requires rootId and topicNodeId");
+                }
+                yield resolver.resolveKgTopic(rootId, topicNodeId, learnerId);
+            }
+            case PAST_PAPER_QUESTION -> {
+                if (questionId == null) {
+                    throw new BadRequestException(
+                            "PAST_PAPER_QUESTION context requires questionId");
+                }
+                yield resolver.resolvePastPaperQuestion(questionId, learnerId);
+            }
+            default -> throw new BadRequestException(
+                    "context kind not supported by this runtime step: " + kind);
+        };
+        // the registry, not the caller, decides which tools may run (§4.1);
+        // the leakage gate (§7.4) runs BEFORE any retrieval or generation
         tools.enabledFor(context.kind(), mode);
+        ClaLeakagePolicy.checkModeAdmission(context, mode);
 
         // 2. bounded read-only tools, fixed composition (§4) — each invocation timed
-        NodeView subjectTree = graph.tree(rootId);
+        NodeView subjectTree = graph.tree(context.rootId());
         ToolResultWith<List<ClaToolRegistry.SpecAnchor>> specContext =
                 trace(toolTraces, () -> tools.specificationContext(context, subjectTree));
         ToolResultWith<RelatedConcepts> related =
                 trace(toolTraces, () -> tools.relatedConcepts(context));
 
         // 3. deterministic anchors: the resolved context is the ONLY topic match
+        //    (KG topic for KG_TOPIC; the question's primary topic for question contexts)
         List<KnowledgeRetriever.KnowledgeContext.MatchedTopic> anchors = List.of(
                 new KnowledgeRetriever.KnowledgeContext.MatchedTopic(
-                        context.reference(), context.topicCode(), context.topicTitle(), 1.0));
+                        context.topicNodeId(), context.topicCode(), context.topicTitle(), 1.0));
         List<KnowledgeRetriever.KnowledgeContext.PrerequisiteLink> prerequisiteLinks =
                 related.value().prerequisites().stream()
                         .map(p -> new KnowledgeRetriever.KnowledgeContext.PrerequisiteLink(
@@ -167,10 +203,10 @@ public class ClaService {
                         anchors, prerequisiteLinks, misconceptionSignals);
 
         // 4. hybrid evidence: the anchor as authoritative prior + validated chunks
-        List<EvidenceItem> kgCandidates = anchors.stream()
-                .map(topic -> EvidenceItem.fromNode(topic.nodeId(), topic.code(), "TOPIC",
-                        topic.title(), nodeDescription(context), topic.matchScore()))
-                .toList();
+        List<EvidenceItem> kgCandidates = new ArrayList<>();
+        anchors.stream().map(topic -> EvidenceItem.fromNode(topic.nodeId(), topic.code(),
+                        "TOPIC", topic.title(), nodeDescription(context), topic.matchScore()))
+                .forEach(kgCandidates::add);
         List<EvidenceItem> vectorList = vectorRetriever.retrieve(question, vectorCandidates);
         List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorList));
         List<EvidenceItem> evidence = reranker.rerank(question, fused)
@@ -178,8 +214,30 @@ public class ClaService {
                 .limit(evidenceLimit)
                 .map(item -> item.source() == EvidenceItem.EvidenceSource.KNOWLEDGE_NODE
                         ? item
-                        : item.withTopicIds(List.of(context.reference())))
+                        : item.withTopicIds(List.of(context.topicNodeId())))
+                // §7.4 deterministic evidence filter (mark-scheme chunks on
+                // question contexts), applied post-fusion, pre-gate
+                .filter(item -> ClaLeakagePolicy.evidenceEligible(context, mode, item))
                 .toList();
+
+        // question contexts lead with FIXED deterministic evidence outside the
+        // fusion pool (fusion keys on node/chunk identity; the anchored stem and
+        // the question's own scheme points are id-anchored, not similarity-anchored):
+        //   [stem (always — what the learner is looking at)]
+        //   [+ VALIDATED scheme points (§7.3, post-attempt, never HINT)]
+        // then the bounded cap applies to the whole list
+        if (context.isQuestionContext()) {
+            List<EvidenceItem> lead = new ArrayList<>();
+            lead.add(questionStemEvidence(context));
+            if (ClaLeakagePolicy.schemePointEvidenceAllowed(context, mode)) {
+                EvidenceItem schemeEvidence = schemePointEvidence(context);
+                if (schemeEvidence != null) {
+                    lead.add(schemeEvidence);
+                }
+            }
+            lead.addAll(evidence);
+            evidence = List.copyOf(lead.subList(0, Math.min(lead.size(), evidenceLimit)));
+        }
 
         // 5. grounding gate → mode-constrained grounded generation (Tutor stack)
         TutorGenerator.GeneratedAnswer generated;
@@ -188,7 +246,7 @@ public class ClaService {
         if (refused) {
             generated = new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
         } else {
-            var scope = tools.learnerStateScope(context.reference(), related.value().prerequisites());
+            var scope = tools.learnerStateScope(context.topicNodeId(), related.value().prerequisites());
             ToolResultWith<ClaToolRegistry.OwnLearnerState> ownState =
                     trace(toolTraces, () -> tools.learnerState(learnerId, scope));
             TutorPolicyService.InterventionPlan policyPlan =
@@ -209,7 +267,7 @@ public class ClaService {
 
         // 7. interaction evidence (contract §6): deterministic anchors + provenance
         events.publishEvent(new ClaInteractionEvent(
-                learnerId, question.strip(), List.of(context.reference()), evidence.size(),
+                learnerId, question.strip(), List.of(context.topicNodeId()), evidence.size(),
                 evidence.stream().map(item -> item.source().name()).toList(),
                 refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
                 latencyMs, Instant.now(), interventionType,
@@ -232,7 +290,9 @@ public class ClaService {
     static TutorPolicyService.InterventionPlan modePlan(ResponseMode mode,
                                                         ResourceContext context,
                                                         TutorPolicyService.InterventionPlan policyPlan) {
-        String anchored = "anchored topic " + context.topicCode();
+        String anchored = context.isQuestionContext()
+                ? "anchored question on topic " + context.topicCode()
+                : "anchored topic " + context.topicCode();
         return switch (mode) {
             case EXPLAIN -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
@@ -247,6 +307,22 @@ public class ClaService {
                     List.of("Summarize the anchored topic from the numbered SOURCES only.",
                             "Preserve the spec anchors (topic code and source citations).",
                             "Do not add material that is not present in the SOURCES."));
+            case HINT -> new TutorPolicyService.InterventionPlan(
+                    policyPlan.type(),
+                    "CLA HINT mode on the " + anchored + " — scaffolding only "
+                            + "(answer-leakage gate: no final answers, no mark-scheme points)",
+                    List.of("Scaffold the learner's OWN next step: questions, cues and worked "
+                            + "analogies from the SOURCES.",
+                            "Never state the final answer; never enumerate mark-scheme points.",
+                            "Stay within the anchored topic and its prerequisites."));
+            case CHECK -> new TutorPolicyService.InterventionPlan(
+                    policyPlan.type(),
+                    "CLA CHECK mode post-attempt on the " + anchored
+                            + " — full feedback unlocked by the attempt-state gate",
+                    List.of("Review the learner's submitted work against the numbered SOURCES.",
+                            "Walk through the mark-scheme points where they apply, citing [n].",
+                            "Be specific about what earned marks and what did not, without "
+                                    + "revealing internal probabilities or diagnostic rules."));
         };
     }
 
@@ -299,8 +375,53 @@ public class ClaService {
     }
 
     private String nodeDescription(ResourceContext context) {
-        return knowledgeNodes.findById(context.reference())
+        return knowledgeNodes.findById(context.topicNodeId())
                 .map(node -> node.description())
+                .orElse(null);
+    }
+
+    /**
+     * The anchored question's own stem as lead evidence (§2.1: the learner is
+     * already looking at it — presenting it back is not a leak; it is the
+     * anchor). Provenance: the served stem of the VALIDATED current version.
+     */
+    private EvidenceItem questionStemEvidence(ResourceContext context) {
+        String command = context.questionCommandWord() == null ? ""
+                : context.questionCommandWord() + " — ";
+        String content = "Question (" + context.questionMarks() + " marks) " + command
+                + context.questionStem();
+        return new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER, content,
+                null, null, null, null, null, null, null, null, null, null, null,
+                List.of(), List.of(context.topicNodeId()), 1.0, 0.0, null);
+    }
+
+    /**
+     * §7.3 post-attempt feedback evidence: the question's OWN VALIDATED
+     * mark-scheme points from the assessment model (question-granular,
+     * resolved by ids) — NOT page-level document chunks, which cannot be
+     * bound to one question deterministically. Null when no VALIDATED scheme
+     * exists (honest — feedback then grounds on spec context alone).
+     */
+    private EvidenceItem schemePointEvidence(ResourceContext context) {
+        return questionVersions.findByQuestionIdOrderByVersionDesc(context.reference())
+                .stream().findFirst()
+                .flatMap(v -> markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v.id()))
+                .filter(s -> s.validationState() == MarkScheme.ValidationState.VALIDATED)
+                .map(s -> {
+                    String content = s.points().stream()
+                            .sorted(java.util.Comparator.comparingInt(MarkPoint::ordering))
+                            .map(p -> p.ref() + " (" + p.marks() + "): " + p.text())
+                            .reduce((a, b) -> a + "; " + b)
+                            .orElse("");
+                    if (content.isBlank()) {
+                        return null;
+                    }
+                    return new EvidenceItem(EvidenceItem.EvidenceSource.MARK_SCHEME,
+                            "Mark scheme points: " + content,
+                            null, null, null, null, null, null, null, null, null,
+                            null, null, List.of(), List.of(context.topicNodeId()),
+                            1.0, 0.0, null);
+                })
                 .orElse(null);
     }
 

@@ -14,6 +14,13 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     @EntityGraph(attributePaths = "question")
     List<Attempt> findByLearnerIdOrderByCreatedAtDesc(UUID learnerId, Pageable pageable);
 
+    /**
+     * CLA §7.3/§7.4 post-attempt gate input: whether the requesting learner has
+     * attempt evidence on this question (the same evidence substrate as Review
+     * Hub). Deterministic read over resolved ids — never model-judged.
+     */
+    boolean existsByLearnerIdAndQuestionId(UUID learnerId, UUID questionId);
+
     long countByLearnerId(UUID learnerId);
 
     /**

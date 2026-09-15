@@ -1,6 +1,5 @@
 package com.syllabai.cla;
 
-import com.syllabai.knowledge.KnowledgeNode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -17,28 +16,49 @@ import java.util.UUID;
  * memory.</p>
  *
  * @param kind              closed context-kind enum (extensible by decision only)
- * @param reference         the resolved topic node id (canonical anchor)
+ * @param reference         the resolved anchor id (KG topic node id, or the
+ *                          question id for PAST_PAPER_QUESTION)
+ * @param topicNodeId       the KG topic the context is anchored to (== reference
+ *                          for KG_TOPIC; the question's primary topic for
+ *                          PAST_PAPER_QUESTION) — the deterministic spec anchor
  * @param rootId            the subject KG root the request was scoped to
  * @param subjectCode       owning subject code (isolation + provenance)
- * @param topicCode         canonical KG code, e.g. IALCHEM2018-U1-T3
- * @param topicTitle        canonical topic title
+ * @param topicCode         canonical KG code of the anchor topic
+ * @param topicTitle        canonical title of the anchor topic
  * @param curriculumVersion curriculum identity RESOLVED from the anchor —
  *                          never client-supplied
- * @param validationState   resolved server-side from the curriculum store
+ * @param validationState   resolved server-side from the curriculum/question store
+ *                          (name of the store's own validation enum — VALIDATED only
+ *                          passes the gate)
  * @param learnerId         provenance: the learner this request belongs to
  * @param resolvedAt        provenance: resolution time
+ * @param questionStem      question-anchored contexts: the served stem (null on
+ *                          KG_TOPIC) — the learner is already looking at it
+ * @param questionCommandWord  question-anchored contexts: command word (nullable)
+ * @param questionMarks     question-anchored contexts: total marks (0 on KG_TOPIC)
+ * @param paperCode         question-anchored contexts: exam paper code (nullable)
+ * @param attempted         question-anchored contexts: DETERMINISTIC attempt-state
+ *                          read (the §7.3/§7.4 gate input — attempt history for
+ *                          this learner and question, the same substrate as
+ *                          Review Hub); null on KG_TOPIC
  */
 public record ResourceContext(
         Kind kind,
         UUID reference,
+        UUID topicNodeId,
         UUID rootId,
         String subjectCode,
         String topicCode,
         String topicTitle,
         CurriculumVersionInfo curriculumVersion,
-        KnowledgeNode.ValidationStatus validationState,
+        String validationState,
         UUID learnerId,
-        Instant resolvedAt) {
+        Instant resolvedAt,
+        String questionStem,
+        String questionCommandWord,
+        int questionMarks,
+        String paperCode,
+        Boolean attempted) {
 
     /**
      * Closed enum (contract §1) — SPECIFICATION_POINT | KG_TOPIC |
@@ -61,5 +81,10 @@ public record ResourceContext(
      */
     public record CurriculumVersionInfo(String code, String board, String qualification,
                                         String status) {
+    }
+
+    /** question-anchored context predicate (§7 gate input shaping) */
+    public boolean isQuestionContext() {
+        return kind == Kind.PAST_PAPER_QUESTION;
     }
 }

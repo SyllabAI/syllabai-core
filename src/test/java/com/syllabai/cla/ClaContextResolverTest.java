@@ -5,6 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.assessment.AttemptRepository;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.curriculum.CurriculumVersion;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
@@ -37,8 +42,15 @@ class ClaContextResolverTest {
     private final KnowledgeGraphService graph = mock(KnowledgeGraphService.class);
     private final KnowledgeNodeRepository nodes = mock(KnowledgeNodeRepository.class);
     private final SubjectRepository subjects = mock(SubjectRepository.class);
+    private final QuestionRepository questions = mock(QuestionRepository.class);
+    private final ExamPaperRepository examPapers = mock(ExamPaperRepository.class);
+    private final QuestionVersionRepository questionVersions =
+            mock(QuestionVersionRepository.class);
+    private final ServableQuestionService servableQuestions = mock(ServableQuestionService.class);
+    private final AttemptRepository attempts = mock(AttemptRepository.class);
 
-    private final ClaContextResolver resolver = new ClaContextResolver(graph, nodes, subjects);
+    private final ClaContextResolver resolver = new ClaContextResolver(graph, nodes, subjects,
+            questions, examPapers, questionVersions, servableQuestions, attempts);
 
     private CurriculumVersion version;
 
@@ -86,7 +98,7 @@ class ClaContextResolverTest {
         assertThat(context.curriculumVersion().code()).isEqualTo("IALCHEM2018");
         assertThat(context.curriculumVersion().board()).isEqualTo("Edexcel");
         assertThat(context.curriculumVersion().status()).isEqualTo("ACTIVE");
-        assertThat(context.validationState()).isEqualTo(KnowledgeNode.ValidationStatus.VALIDATED);
+        assertThat(context.validationState()).isEqualTo("VALIDATED");
         assertThat(context.learnerId()).isEqualTo(LEARNER);
         assertThat(context.resolvedAt()).isNotNull();
     }

@@ -54,6 +54,12 @@ public class SimpleCitationResolver implements CitationResolver {
         if (item.source() == EvidenceItem.EvidenceSource.KNOWLEDGE_NODE) {
             return "/api/v1/knowledge/nodes/" + item.nodeId();
         }
+        if (item.documentRowId() == null) {
+            // no content-store row backs this item (e.g. the CLA's synthesized
+            // question-stem / assessment-model scheme-point evidence) — an
+            // honest null link, never a fabricated path
+            return null;
+        }
         String link = "/api/v1/teacher/content/documents/" + item.documentRowId();
         return item.pageStart() == null ? link : link + "?page=" + item.pageStart();
     }

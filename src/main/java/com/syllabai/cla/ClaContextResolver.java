@@ -1,5 +1,13 @@
 package com.syllabai.cla;
 
+import com.syllabai.assessment.AttemptRepository;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.assessment.Question;
+import com.syllabai.assessment.QuestionRepository;
+import com.syllabai.assessment.QuestionVersion;
+import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.curriculum.CurriculumVersion;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
@@ -43,13 +51,28 @@ public class ClaContextResolver {
     private final KnowledgeGraphService graph;
     private final KnowledgeNodeRepository nodes;
     private final SubjectRepository subjects;
+    private final QuestionRepository questions;
+    private final ExamPaperRepository examPapers;
+    private final QuestionVersionRepository questionVersions;
+    private final ServableQuestionService servableQuestions;
+    private final AttemptRepository attempts;
 
     public ClaContextResolver(KnowledgeGraphService graph,
                               KnowledgeNodeRepository nodes,
-                              SubjectRepository subjects) {
+                              SubjectRepository subjects,
+                              QuestionRepository questions,
+                              ExamPaperRepository examPapers,
+                              QuestionVersionRepository questionVersions,
+                              ServableQuestionService servableQuestions,
+                              AttemptRepository attempts) {
         this.graph = graph;
         this.nodes = nodes;
         this.subjects = subjects;
+        this.questions = questions;
+        this.examPapers = examPapers;
+        this.questionVersions = questionVersions;
+        this.servableQuestions = servableQuestions;
+        this.attempts = attempts;
     }
 
     /**
@@ -83,6 +106,7 @@ public class ClaContextResolver {
         return new ResourceContext(
                 ResourceContext.Kind.KG_TOPIC,
                 topicNodeId,
+                topicNodeId,
                 rootId,
                 subject.code(),
                 node.code(),
@@ -90,9 +114,95 @@ public class ClaContextResolver {
                 new ResourceContext.CurriculumVersionInfo(
                         version.code(), version.board(), version.qualification(),
                         version.status().name()),
-                node.validationStatus(),
+                node.validationStatus().name(),
                 learnerId,
-                Instant.now());
+                Instant.now(),
+                null, null, 0, null, null);
+    }
+
+    /**
+     * Resolve a PAST_PAPER_QUESTION context (step 2, CLA contract §7). The
+     * question is the anchor; its primary KG topic is the deterministic spec
+     * anchor. Resolution order (contract §5): resolve → validation gate →
+     * scope → attempt state:
+     * <ol>
+     *   <li>the question must exist and be active — else 404;</li>
+     *   <li>the question must be SERVABLE through the exact serving gate
+     *       ({@link ServableQuestionService#isServable} — validated current
+     *       version + paper-level integrity gate) — else an indistinguishable
+     *       404, no serving-state oracle;</li>
+     *   <li>subject identity comes from the question's paper (server-side);
+     *       the primary topic must live in that subject's subtree and be
+     *       VALIDATED (the same curriculum gate as KG_TOPIC) — else 404;</li>
+     *   <li>the attempt-state read (§7.3) is deterministic over attempt
+     *       history — the SAME substrate as Review Hub.</li>
+     * </ol>
+     */
+    @Transactional(readOnly = true)
+    public ResourceContext resolvePastPaperQuestion(UUID questionId, UUID learnerId) {
+        Question question = questions.findById(questionId)
+                .filter(q -> q.active())
+                .orElseThrow(() -> new NotFoundException("servable question", questionId));
+        if (!servableQuestions.isServable(questionId)) {
+            // validation/paper-integrity gate: fail-closed, indistinguishable
+            // from unresolvable — no serving-state oracle (contract §7.1/§1.2)
+            throw new NotFoundException("servable question", questionId);
+        }
+        ExamPaper paper = examPapers.findById(question.examPaperId())
+                .orElseThrow(() -> new NotFoundException("exam paper", question.examPaperId()));
+        Subject subject = subjects.findById(paper.subjectId())
+                .orElseThrow(() -> new NotFoundException("subject", paper.subjectId()));
+
+        UUID rootId = subject.knowledgeNodeId();
+        UUID topicNodeId = question.primaryTopicNodeId();
+        if (topicNodeId == null || rootId == null) {
+            throw new NotFoundException("question topic anchor", questionId);
+        }
+
+        Map<UUID, NodeView> byId = new HashMap<>();
+        collect(graph.tree(rootId), byId);
+        NodeView topic = byId.get(topicNodeId);
+        if (topic == null) {
+            throw new NotFoundException("curriculum topic in this subject", topicNodeId);
+        }
+
+        QuestionVersion currentVersion = questionVersions
+                .findByQuestionIdOrderByVersionDesc(questionId).stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("question version", questionId));
+        if (currentVersion.validationState() != QuestionVersion.ValidationState.VALIDATED) {
+            throw new NotFoundException("validated question", questionId);
+        }
+
+        KnowledgeNode topicNode = nodes.findById(topicNodeId)
+                .orElseThrow(() -> new NotFoundException("curriculum topic", topicNodeId));
+        if (topicNode.validationStatus() != KnowledgeNode.ValidationStatus.VALIDATED) {
+            // curriculum validation gate on the spec anchor (contract §1.2)
+            throw new NotFoundException("validated curriculum topic", topicNodeId);
+        }
+
+        boolean attempted = attempts.existsByLearnerIdAndQuestionId(learnerId, questionId);
+        CurriculumVersion version = subject.curriculumVersion();
+        return new ResourceContext(
+                ResourceContext.Kind.PAST_PAPER_QUESTION,
+                questionId,
+                topicNodeId,
+                rootId,
+                subject.code(),
+                topicNode.code(),
+                topicNode.title(),
+                new ResourceContext.CurriculumVersionInfo(
+                        version.code(), version.board(), version.qualification(),
+                        version.status().name()),
+                currentVersion.validationState().name(),
+                learnerId,
+                Instant.now(),
+                currentVersion.stem(),
+                currentVersion.commandWord() != null ? currentVersion.commandWord()
+                        : question.commandWord(),
+                currentVersion.marks(),
+                paper.paperCode(),
+                attempted);
     }
 
     private void collect(NodeView node, Map<UUID, NodeView> byId) {
