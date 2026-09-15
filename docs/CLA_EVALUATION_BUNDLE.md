@@ -174,3 +174,54 @@ GitHub Actions infrastructure failure, not a code failure: the evaluated
 lineage's behavior is verified live above, and local `mvn` verification is
 green. CI re-runs continue until Actions recovers; the bundle's S-F record
 points at the last executed GREEN run (34970016257, `6092650` lineage).
+
+---
+
+## S-G extension: QUESTION_PART part-level gate (core `d0dc00a` lineage)
+
+After the QUESTION_PART slice shipped (379b0c5 → cd7c586 → d0dc00a), the
+evaluation harness gained an S-G set exercising the part-level kind over real
+validated 4CH1 material (same phased harness, same gate discipline — nothing
+weakened). Canonical result: **S-G 7/7 GREEN**, lifting the canonical record
+to **37/37 CHECKS GREEN — VERIFIED** (S-A 18, S-B 10, S-G 8, S-F 1; record:
+`.syllabai/evidence/cla/cla_eval_questionpart_d0dc00a.json`).
+
+| Check | Result |
+|---|---|
+| part HINT pre-attempt: kind/reference/partLabel/attempted=false anchored, grounded, zero mark-scheme citations, zero unresolvable markers | PASS |
+| unknown part → 404 (no existence oracle) | PASS |
+| missing partId → 400 | PASS |
+| CHECK pre-attempt → deterministic 409 attempt_required | PASS |
+| real structured attempt recorded (PENDING marking) | PASS |
+| CHECK post-attempt: unlocked, grounded, citations valid — sources include LEARNER_WORK (the learner's own submitted answer) + MARK_SCHEME (the part's own scheme points) | PASS |
+| learner-state signalCounts include the part-anchored exchange | PASS |
+
+PART-scoping of the scheme evidence is pinned non-vacuously by unit +
+integration tests with seeded sibling points (the learner API honestly does
+not expose scheme text to diff against live).
+
+Live verification (9/9 PASS, `cla_question_part_live_verification_d0dc00a`
+record) additionally found and fixed three REAL defects on this slice — the
+gate did exactly its job:
+
+1. **LazyInitializationException (500)** — `MarkPoint.questionPartId()` /
+   `Answer.questionPartId()` initialized LAZY part proxies outside any
+   transaction (OSIV off, non-transactional service). Fixed: read-only scalar
+   FK columns (house pattern) + scalar projection query + eager entity graph.
+2. **Deploy-killing JPQL** — the first fix's derived query named a
+   non-persistent property; named-query validation failed at BOOT and the
+   deploy died (3f3be78 never served — caught via GitHub deployment status,
+   not by serving broken code). Fixed as native SQL over the stable FK columns.
+3. **CHECK could not see the learner's work** — the model could not perform
+   the mode's stated job ("review the learner's submitted answers") because
+   the learner's own submissions never entered the evidence. Fixed:
+   `EvidenceSource.LEARNER_WORK` (provenance = the learner's attempt row,
+   resolved by ids, part-scoped on QUESTION_PART, same admission gate as the
+   scheme points — post-attempt, never HINT).
+
+CI note: every core-ci run for this slice is still blocked by the org-wide
+GitHub Actions minutes/spending limit (operator-gated; zero-step failures —
+the runner never starts). Local verification is green throughout (523 unit);
+the IT suite runs when Actions recovers. Deploys were verified through GitHub
+deployment statuses (cd7c586 success → 3f3be78 FAILURE → 4e4be8b success →
+d0dc00a success).
