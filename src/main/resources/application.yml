@@ -122,7 +122,12 @@ syllabai:
       # key 2026-09-14 (2.4s latency); gemma-4-31b-it:free is the known secondary.
       model: nvidia/nemotron-3-super-120b-a12b:free
     chain:
-      timeout-seconds: 30
+      # 60s: the CLA enriched-evidence profile (5 deterministic evidence items +
+      # full-scope SUMMARIZE plans) pushes large-topic generations past the old
+      # 30s ceiling — §10.4 bundle found the deterministic 503 tutor_unavailable
+      # on 4CH1-S1-e SUMMARIZE ("generation timed out after 30s"). The circuit
+      # breaker (failure-threshold 3, cooldown 60) still bounds failure cascades.
+      timeout-seconds: 60
       cooldown-seconds: 60
       failure-threshold: 3
     # Research provenance (§26.1): a request carrying an experiment id must find a pin
