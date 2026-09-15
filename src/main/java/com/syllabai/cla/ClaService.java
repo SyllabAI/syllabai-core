@@ -321,7 +321,11 @@ public class ClaService {
                     policyPlan.type(),
                     "CLA SUMMARIZE mode on the " + anchored + " — " + policyPlan.rationale(),
                     List.of("Summarize the anchored topic from the numbered SOURCES only.",
-                            "Preserve the spec anchors (topic code and source citations).",
+                            "Cover the WHOLE anchored specification structure: every "
+                                    + "provided specification statement appears in the "
+                                    + "summary — never compress only the first source.",
+                            "Preserve the spec anchors (topic code and source citations "
+                                    + "for every statement group you cover).",
                             "Do not add material that is not present in the SOURCES."));
             case HINT -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
