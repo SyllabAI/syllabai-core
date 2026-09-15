@@ -14,7 +14,16 @@ public interface MarkSchemeRepository extends JpaRepository<MarkScheme, UUID> {
     @Query("select s from MarkScheme s where s.id = :id")
     Optional<MarkScheme> findWithPoints(@Param("id") UUID id);
 
-    @EntityGraph(attributePaths = "points")
+    /**
+     * points AND points.questionPart are fetched eagerly here: the CLA part-level
+     * pipeline reads mark points OUTSIDE any transaction (non-transactional
+     * service, OSIV off) and selects them by part id — an accessor call on a
+     * LAZY QuestionPart proxy would initialize it and blow up in production
+     * (field-access entities: even id() initializes). The question-level path
+     * is unaffected (it never touches part proxies); the extra join is cheap
+     * and the scheme is question-granular.
+     */
+    @EntityGraph(attributePaths = {"points", "points.questionPart"})
     Optional<MarkScheme> findFirstByQuestionVersionIdOrderByCreatedAtDesc(UUID questionVersionId);
 
     @EntityGraph(attributePaths = "points")

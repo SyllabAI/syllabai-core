@@ -39,6 +39,17 @@ public class MarkPoint {
     @JoinColumn(name = "question_part_id")
     private QuestionPart questionPart;
 
+    /**
+     * Read-only scalar mapping of the association's FK column (the established
+     * QuestionVersion.questionIdColumn pattern). Lets id-only readers resolve
+     * the part reference WITHOUT initializing the LAZY questionPart proxy —
+     * critical for out-of-transaction readers (the CLA pipeline: OSIV off,
+     * non-transactional service; with field-access entities even id()
+     * initializes a proxy and throws LazyInitializationException).
+     */
+    @Column(name = "question_part_id", insertable = false, updatable = false)
+    private UUID questionPartIdColumn;
+
     /** raw reference from the source document, e.g. "3-a" */
     @Column(name = "ref", length = 20)
     private String ref;
@@ -90,7 +101,18 @@ public class MarkPoint {
     public UUID id() { return id; }
     public UUID markSchemeId() { return markScheme.id(); }
     public QuestionPart questionPart() { return questionPart; }
-    public UUID questionPartId() { return questionPart == null ? null : questionPart.id(); }
+
+    /**
+     * Proxy-safe part reference: the read-only scalar column is populated on
+     * every load; the association fallback covers freshly-constructed (not yet
+     * refreshed) entities inside a transaction.
+     */
+    public UUID questionPartId() {
+        if (questionPartIdColumn != null) {
+            return questionPartIdColumn;
+        }
+        return questionPart == null ? null : questionPart.id();
+    }
     public String ref() { return ref; }
     public int ordering() { return ordering; }
     public String text() { return text; }
