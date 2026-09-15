@@ -1,5 +1,6 @@
 package com.syllabai.assessment;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Pageable;
@@ -35,4 +36,42 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
             """, nativeQuery = true)
     List<Object[]> aggregateGradedCorrectnessByCondition(@Param("learnerId") UUID learnerId,
                                                          @Param("nodeId") UUID nodeId);
+
+    /**
+     * Class-analytics aggregate (teacher class intelligence §2): per-learner
+     * attempt counts, correctness and last-activity timestamp inside a
+     * subject scope — questions mapped (primary or question_topics) into the
+     * given node set, attempts within the recency window. One batched query
+     * for the whole class; rows: [learnerId(UUID), total(long),
+     * correct(long), lastActivity(Instant)].
+     */
+    @Query(value = """
+            SELECT a.learner_id, COUNT(*),
+                   SUM(CASE WHEN a.correct THEN 1 ELSE 0 END), MAX(a.created_at)
+            FROM attempts a
+            JOIN questions q ON q.id = a.question_id
+            WHERE a.created_at >= :since
+              AND (q.primary_topic_node_id IN (:nodeIds) OR EXISTS (
+                    SELECT 1 FROM question_topics qt
+                    WHERE qt.question_id = q.id AND qt.node_id IN (:nodeIds)))
+            GROUP BY a.learner_id
+            """, nativeQuery = true)
+    List<Object[]> aggregateByLearnerSinceWithin(@Param("since") java.time.Instant since,
+                                                 @Param("nodeIds") Collection<UUID> nodeIds);
+
+    /**
+     * Class-analytics drill-down (§5): the most recent attempts on questions
+     * mapped to one topic node — representative learner evidence for the
+     * teacher. Batched fetch plan (question included), page-limited by the
+     * caller.
+     */
+    @EntityGraph(attributePaths = "question")
+    @Query("""
+            select a from Attempt a
+            where a.question.primaryTopicNodeId = :nodeId or exists (
+                select 1 from QuestionTopic qt
+                where qt.question = a.question and qt.nodeId = :nodeId)
+            order by a.createdAt desc
+            """)
+    List<Attempt> findRecentByTopicNode(@Param("nodeId") UUID nodeId, Pageable pageable);
 }

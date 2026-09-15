@@ -13,6 +13,11 @@ public interface TutorTopicEngagementRepository extends JpaRepository<TutorTopic
     List<TutorTopicEngagement> findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
             UUID learnerId, Instant since);
 
+    /** class-analytics batch (teacher class intelligence §2): every engagement
+     * on topics inside a subject scope in ONE query — evidence counts only,
+     * never mastery */
+    List<TutorTopicEngagement> findByNodeIdIn(java.util.Collection<UUID> nodeIds);
+
     /**
      * Per-topic engagement counts inside the window (NBA T7a): the learner's
      * own interest signal — which matched topics they have been asking about.

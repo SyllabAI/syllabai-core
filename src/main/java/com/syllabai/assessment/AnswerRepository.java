@@ -41,4 +41,20 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
             order by a.createdAt desc
             """)
     List<Answer> findByLearnerIdOrderByCreatedAtDesc(@Param("learnerId") UUID learnerId);
+
+    /**
+     * Class-analytics aggregate (teacher class intelligence §2): answers in a
+     * marking state whose attempt's question is mapped (primary or
+     * question_topics) into the given subject scope — one batched count for
+     * the class overview's marking-work signal.
+     */
+    @Query("""
+            select count(a) from Answer a
+            where a.markingState = :state and (
+                a.attempt.question.primaryTopicNodeId in :nodeIds or exists (
+                    select 1 from QuestionTopic qt
+                    where qt.question = a.attempt.question and qt.nodeId in :nodeIds))
+            """)
+    long countByMarkingStateWithin(@Param("state") Answer.MarkingState state,
+                                   @Param("nodeIds") Collection<UUID> nodeIds);
 }

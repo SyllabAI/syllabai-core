@@ -57,14 +57,14 @@ public class ExamPaperController {
                 }).toList());
     }
 
-    public record PaperView(UUID id, String title, String board, String qualification,
-                            String unit, String sessionLabel, String paperCode,
-                            String validationState, String provenance,
+    public record PaperView(UUID id, UUID subjectId, String title, String board,
+                            String qualification, String unit, String sessionLabel,
+                            String paperCode, String validationState, String provenance,
                             String questionPaperDocumentId, String markSchemeDocumentId) {
 
         public static PaperView from(ExamPaper p) {
-            return new PaperView(p.id(), p.title(), p.board(), p.qualification(), p.unit(),
-                    p.sessionLabel(), p.paperCode(), p.validationState().name(),
+            return new PaperView(p.id(), p.subjectId(), p.title(), p.board(), p.qualification(),
+                    p.unit(), p.sessionLabel(), p.paperCode(), p.validationState().name(),
                     p.provenance().name(), p.questionPaperDocumentId(),
                     p.markSchemeDocumentId());
         }
