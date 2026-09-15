@@ -8,7 +8,10 @@ import static org.mockito.Mockito.when;
 import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionTopic;
+import com.syllabai.assessment.QuestionTopicRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.ServableQuestionService;
@@ -38,9 +41,11 @@ class TestBuilderServiceTest {
     private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final ClassAnalyticsService classAnalytics = mock(ClassAnalyticsService.class);
+    private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
     private final TestBuilderService service = new TestBuilderService(
             servableQuestions, knowledgeGraph, questionVersions, markSchemes,
-            classAnalytics, new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0));
+            classAnalytics, new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
+            questionTopics);
 
     private final UUID root = UUID.randomUUID();
     private final UUID topicA = UUID.randomUUID();
@@ -60,6 +65,19 @@ class TestBuilderServiceTest {
                 difficulty, 300, null, null, null, List.of(),
                 List.of(new StudentQuestionView.PartView(
                         UUID.randomUUID(), "a", "prompt", null, marks)));
+    }
+
+    /** a servable view whose PRIMARY topic is the given node (targeting counts) */
+    private StudentQuestionView questionOn(UUID id, UUID topicId) {
+        return new StudentQuestionView(id, "ref-" + id, "MCQ_SINGLE", "stem " + id, 1,
+                1, 60, null, topicId, null, List.of(), List.of());
+    }
+
+    /** a secondary topic-mapping row for the targeting counts */
+    private QuestionTopic mapping(UUID questionId, UUID topicId) {
+        Question q = mock(Question.class);
+        when(q.id()).thenReturn(questionId);
+        return new QuestionTopic(q, topicId, false);
     }
 
     private void givenSubject() {
@@ -263,6 +281,17 @@ class TestBuilderServiceTest {
                         weakMastery, "4CH1-S1-a", "title 4CH1-S1-a", 4, 0.30, "LOW",
                         List.of(new ClassAnalyticsService.DependentView(
                                 blocked, "4CH1-S3-a", "title 4CH1-S3-a", 0.55))))));
+        // targeting counts (builder rule): one question primary-mapped to the
+        // weak-mastery topic, one to the gap topic, and the SAME question
+        // secondary-mapped to the misconception-only topic. The mapping row is
+        // built BEFORE the when() chain — never mock inside thenReturn args.
+        UUID sharedQuestion = UUID.randomUUID();
+        QuestionTopic miscoMapping = mapping(sharedQuestion, miscoOnly);
+        when(servableQuestions.activeWithin(any())).thenReturn(List.of(
+                questionOn(UUID.randomUUID(), weakMastery),
+                questionOn(sharedQuestion, gap)));
+        when(questionTopics.findByQuestionIdIn(any()))
+                .thenReturn(List.of(miscoMapping));
 
         var view = service.weaknessOptions(root);
 
@@ -273,16 +302,19 @@ class TestBuilderServiceTest {
         var first = view.weakTopics().get(0);
         assertThat(first.reasons()).containsExactly("LOW_MEAN_MASTERY");
         assertThat(first.meanMastery()).isEqualTo(0.30);
+        assertThat(first.servableQuestions()).isEqualTo(1);   // the targeting count, not the analytics count
         var blockedOption = view.weakTopics().get(1);
         assertThat(blockedOption.reasons()).containsExactly("BLOCKED_BY_WEAK_PREREQUISITE");
         assertThat(blockedOption.blockedByPrerequisiteCodes()).containsExactly("4CH1-S1-a");
         var miscoOption = view.weakTopics().get(2);
         assertThat(miscoOption.reasons()).containsExactly("ACTIVE_MISCONCEPTION_PRESENT");
         assertThat(miscoOption.learnersWithActiveMisconception()).isEqualTo(2);
+        assertThat(miscoOption.servableQuestions()).isEqualTo(1);   // counted through the SECONDARY mapping
         // the strong topic is not offered; the silent unmeasured topic (no activity) is not a gap
         assertThat(view.weakTopics()).noneMatch(o -> o.topicNodeId().equals(strong));
         assertThat(view.coverageGaps()).extracting("topicNodeId")
-                .containsExactly(gap);   // activity + servable but unmeasured — honest gap, never weak
+                .containsExactly(gap);   // activity + targetable content but unmeasured — honest gap, never weak
+        assertThat(view.coverageGaps().get(0).servableQuestions()).isEqualTo(1);
         assertThat(view.selectionHint()).contains("preview");
     }
 

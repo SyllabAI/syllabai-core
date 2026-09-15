@@ -11,6 +11,14 @@ public interface QuestionTopicRepository extends JpaRepository<QuestionTopic, UU
 
     List<QuestionTopic> findByQuestionId(UUID questionId);
 
+    /**
+     * Sprint-2 §10 (weakness targeting): every topic mapping of the given
+     * questions in ONE query — lets the Test Builder count, per topic, the
+     * servable questions reachable through primary OR secondary mappings with
+     * the same rule /preview assembles by. Read-only, batched by construction.
+     */
+    List<QuestionTopic> findByQuestionIdIn(java.util.Collection<UUID> questionIds);
+
     /** §10 re-mapping: drop the question's rows before the replacement set is written */
     @Modifying
     void deleteByQuestionId(UUID questionId);

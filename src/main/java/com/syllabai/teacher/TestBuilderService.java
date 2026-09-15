@@ -3,12 +3,15 @@ package com.syllabai.teacher;
 import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
+import com.syllabai.assessment.QuestionTopic;
+import com.syllabai.assessment.QuestionTopicRepository;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.recommendation.RecommendationProperties;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,19 +53,22 @@ public class TestBuilderService {
     private final MarkSchemeRepository markSchemes;
     private final ClassAnalyticsService classAnalytics;
     private final RecommendationProperties properties;
+    private final QuestionTopicRepository questionTopics;
 
     public TestBuilderService(ServableQuestionService servableQuestions,
                               KnowledgeGraphService knowledgeGraph,
                               QuestionVersionRepository questionVersions,
                               MarkSchemeRepository markSchemes,
                               ClassAnalyticsService classAnalytics,
-                              RecommendationProperties properties) {
+                              RecommendationProperties properties,
+                              QuestionTopicRepository questionTopics) {
         this.servableQuestions = servableQuestions;
         this.knowledgeGraph = knowledgeGraph;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.classAnalytics = classAnalytics;
         this.properties = properties;
+        this.questionTopics = questionTopics;
     }
 
     /**
@@ -175,10 +181,13 @@ public class TestBuilderService {
      * separately as coverage gaps ("insufficient coverage") for the teacher's
      * own judgment.</p>
      *
-     * <p>Deterministic ordering: meanMastery ascending (nulls last), then
-     * learners-with-active-misconception descending, then code ascending.
-     * Everything comes from one {@link ClassAnalyticsService#overview} call
-     * (already batched — one query per evidence table).</p>
+     * <p>{@code servableQuestions} on every option is the TARGETING count —
+     * validated questions reachable from the topic through primary OR secondary
+     * mappings, the exact rule {@code /preview} assembles by (two batched
+     * queries; NOT the primary-keyed analytics count, which would understate
+     * what a targeted test can draw on). Deterministic ordering: meanMastery
+     * ascending (nulls last), then learners-with-active-misconception
+     * descending, then code ascending.</p>
      */
     public WeaknessOptionsView weaknessOptions(UUID rootId) {
         ClassAnalyticsService.ClassOverviewView overview = classAnalytics.overview(rootId);
@@ -192,8 +201,10 @@ public class TestBuilderService {
             }
         }
 
-        List<WeakTopicOption> weak = new ArrayList<>();
-        List<CoverageGapView> gaps = new ArrayList<>();
+        // first pass: derive candidates from the class evidence
+        Map<UUID, List<String>> reasonsByTopic = new HashMap<>();
+        List<ClassAnalyticsService.TopicAggregateView> weakCandidates = new ArrayList<>();
+        List<ClassAnalyticsService.TopicAggregateView> gapCandidates = new ArrayList<>();
         for (ClassAnalyticsService.TopicAggregateView t : overview.topics()) {
             List<String> reasons = new ArrayList<>();
             if (t.learnersMeasured() > 0 && t.meanMastery() != null
@@ -207,19 +218,38 @@ public class TestBuilderService {
                 reasons.add("BLOCKED_BY_WEAK_PREREQUISITE");
             }
             if (!reasons.isEmpty()) {
-                weak.add(new WeakTopicOption(t.nodeId(), t.code(), t.title(), reasons,
-                        t.learnersMeasured(), t.meanMastery(), t.masteryBand(),
-                        t.learnersWithActiveMisconception(), t.activeMisconceptionSignals(),
-                        t.evidenceBackedAttempts(), t.tutorEngagements(), t.dueReviews(),
-                        t.servableQuestions(),
-                        List.copyOf(blockedBy.getOrDefault(t.nodeId(), List.of()))));
-            } else if (t.learnersMeasured() == 0 && t.servableQuestions() > 0
+                reasonsByTopic.put(t.nodeId(), reasons);
+                weakCandidates.add(t);
+            } else if (t.learnersMeasured() == 0
                     && (t.evidenceBackedAttempts() > 0 || t.tutorEngagements() > 0)) {
                 // unmeasured but with some class activity worth noticing — an
-                // honest coverage gap, never claimed weak
+                // honest coverage-gap candidate, never claimed weak
+                gapCandidates.add(t);
+            }
+        }
+
+        // second pass: the targeting counts (builder rule, two batched queries)
+        Set<UUID> scope = new HashSet<>();
+        weakCandidates.forEach(t -> scope.add(t.nodeId()));
+        gapCandidates.forEach(t -> scope.add(t.nodeId()));
+        Map<UUID, Integer> targetingCounts = targetingServableCounts(scope);
+
+        List<WeakTopicOption> weak = new ArrayList<>();
+        for (ClassAnalyticsService.TopicAggregateView t : weakCandidates) {
+            weak.add(new WeakTopicOption(t.nodeId(), t.code(), t.title(),
+                    reasonsByTopic.get(t.nodeId()),
+                    t.learnersMeasured(), t.meanMastery(), t.masteryBand(),
+                    t.learnersWithActiveMisconception(), t.activeMisconceptionSignals(),
+                    t.evidenceBackedAttempts(), t.tutorEngagements(), t.dueReviews(),
+                    targetingCounts.getOrDefault(t.nodeId(), 0),
+                    List.copyOf(blockedBy.getOrDefault(t.nodeId(), List.of()))));
+        }
+        List<CoverageGapView> gaps = new ArrayList<>();
+        for (ClassAnalyticsService.TopicAggregateView t : gapCandidates) {
+            int targetable = targetingCounts.getOrDefault(t.nodeId(), 0);
+            if (targetable > 0) {
                 gaps.add(new CoverageGapView(t.nodeId(), t.code(), t.title(),
-                        t.servableQuestions(), t.evidenceBackedAttempts(),
-                        t.tutorEngagements()));
+                        targetable, t.evidenceBackedAttempts(), t.tutorEngagements()));
             }
         }
         weak.sort(Comparator
@@ -234,6 +264,39 @@ public class TestBuilderService {
                 List.copyOf(weak), List.copyOf(gaps),
                 "Pass weakTopics[].topicNodeId values as topicNodeIds to GET /api/v1/teacher/tests/preview"
                         + " — assembly stays VALIDATED-only, marks-targeted and deterministic.");
+    }
+
+    /**
+     * Per-topic counts of servable questions reachable through primary OR
+     * secondary mappings — the /preview assembly rule, batched: one
+     * activeWithin query over the scope plus one QuestionTopic fetch over the
+     * returned question ids. No per-topic queries (§14).
+     */
+    private Map<UUID, Integer> targetingServableCounts(Collection<UUID> topicIds) {
+        if (topicIds.isEmpty()) {
+            return Map.of();
+        }
+        List<StudentQuestionView> servable = servableQuestions.activeWithin(topicIds);
+        Map<UUID, Set<UUID>> byTopic = new HashMap<>();
+        Set<UUID> questionIds = new HashSet<>();
+        for (StudentQuestionView q : servable) {
+            questionIds.add(q.id());
+            if (topicIds.contains(q.primaryTopicNodeId())) {
+                byTopic.computeIfAbsent(q.primaryTopicNodeId(), k -> new HashSet<>())
+                        .add(q.id());
+            }
+        }
+        if (!questionIds.isEmpty()) {
+            for (QuestionTopic qt : questionTopics.findByQuestionIdIn(questionIds)) {
+                if (topicIds.contains(qt.nodeId())) {
+                    byTopic.computeIfAbsent(qt.nodeId(), k -> new HashSet<>())
+                            .add(qt.question().id());
+                }
+            }
+        }
+        Map<UUID, Integer> counts = new HashMap<>();
+        byTopic.forEach((topic, ids) -> counts.put(topic, ids.size()));
+        return counts;
     }
 
     /**
