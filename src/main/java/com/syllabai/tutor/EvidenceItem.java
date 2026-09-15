@@ -64,7 +64,11 @@ public record EvidenceItem(
         /** other canonical document chunk */
         OTHER,
         /** a matched KG curriculum node (unit/topic/subtopic) */
-        KNOWLEDGE_NODE
+        KNOWLEDGE_NODE,
+        /** the learner's OWN submitted attempt content (§7.3 CHECK feedback:
+         *  provenance is the learner's attempt row — their own data, resolved
+         *  by ids, never another learner's, never model-invented) */
+        LEARNER_WORK
     }
 
     /** Build evidence from a vector chunk hit (retrievalScore = cosine similarity). */

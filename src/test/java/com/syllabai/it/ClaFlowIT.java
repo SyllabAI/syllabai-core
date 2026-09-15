@@ -796,6 +796,13 @@ class ClaFlowIT {
                     .contains("QUESTION LEVEL POINT")
                     .doesNotContain("SIBLING PART B POINT");
         });
+        // the learner's OWN submitted work is in the SOURCES (§7.3: CHECK
+        // reviews the learner's submitted answers), part-scoped
+        assertThat(evidence).anySatisfy(item -> {
+            assertThat(item.source()).isEqualTo(com.syllabai.tutor.EvidenceItem.EvidenceSource.LEARNER_WORK);
+            assertThat(item.content()).contains("ions are free to move when molten")
+                    .doesNotContain("solid ions vibrate about fixed positions");
+        });
 
         // the exchange landed in LIM with the PART identity as contextReference
         List<TutorTopicEngagement> rows = engagements

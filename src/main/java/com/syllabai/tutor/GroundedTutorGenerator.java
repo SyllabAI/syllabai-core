@@ -102,6 +102,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
             case SYLLABUS -> "(specification, p" + page + ") ";
             case OTHER -> "(source document, p" + page + ") ";
             case KNOWLEDGE_NODE -> "(spec topic " + evidence.nodeCode() + ") ";
+            case LEARNER_WORK -> "(the learner's submitted work) ";
         };
     }
 

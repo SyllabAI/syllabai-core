@@ -74,6 +74,10 @@ class ClaServiceTest {
             mock(QuestionVersionRepository.class);
     private final com.syllabai.assessment.QuestionPartRepository questionParts =
             mock(com.syllabai.assessment.QuestionPartRepository.class);
+    private final com.syllabai.assessment.AttemptRepository attempts =
+            mock(com.syllabai.assessment.AttemptRepository.class);
+    private final com.syllabai.assessment.AnswerRepository answers =
+            mock(com.syllabai.assessment.AnswerRepository.class);
     private final VectorRetriever vectorRetriever = mock(VectorRetriever.class);
     private final TutorGenerator generator = mock(TutorGenerator.class);
     private final CitationResolver citationResolver = mock(CitationResolver.class);
@@ -93,7 +97,7 @@ class ClaServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClaService(resolver, tools, graph, knowledgeNodes, markSchemes,
-                questionVersions, questionParts, vectorRetriever,
+                questionVersions, questionParts, attempts, answers, vectorRetriever,
                 new ReciprocalRankFusion(60), reranker, generator, citationResolver, policy,
                 events, 12, 6);
 
@@ -590,6 +594,27 @@ class ClaServiceTest {
         when(questionVersions.findByQuestionIdOrderByVersionDesc(questionId))
                 .thenReturn(List.of(version));
 
+        // the learner's OWN submitted work enters CHECK evidence, part-scoped
+        com.syllabai.assessment.Attempt attempt =
+                org.mockito.Mockito.mock(com.syllabai.assessment.Attempt.class);
+        when(attempt.id()).thenReturn(UUID.randomUUID());
+        when(attempts.findFirstByLearnerIdAndQuestionIdOrderByCreatedAtDesc(
+                LEARNER, questionId)).thenReturn(java.util.Optional.of(attempt));
+        com.syllabai.assessment.Answer ownAnswer =
+                org.mockito.Mockito.mock(com.syllabai.assessment.Answer.class);
+        when(ownAnswer.questionPartId()).thenReturn(partId);
+        when(ownAnswer.answerText()).thenReturn("ions move freely when molten");
+        com.syllabai.assessment.Answer siblingAnswer =
+                org.mockito.Mockito.mock(com.syllabai.assessment.Answer.class);
+        when(siblingAnswer.questionPartId()).thenReturn(siblingPartId);
+        when(siblingAnswer.answerText()).thenReturn("SIBLING ANSWER — must not appear");
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(ownAnswer, siblingAnswer));
+        com.syllabai.assessment.QuestionPart ownPart =
+                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionPart.class);
+        when(ownPart.label()).thenReturn("a");
+        when(questionParts.findById(partId)).thenReturn(java.util.Optional.of(ownPart));
+
         MarkScheme scheme = org.mockito.Mockito.mock(MarkScheme.class);
         when(scheme.validationState()).thenReturn(MarkScheme.ValidationState.VALIDATED);
         MarkPoint ownPoint = org.mockito.Mockito.mock(MarkPoint.class);
@@ -631,8 +656,13 @@ class ClaServiceTest {
         // anchor first: the PART prompt (explicitly labeled), not the question stem
         assertThat(evidence.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         assertThat(evidence.get(0).content()).startsWith("Part (a)").contains("2 marks");
+        // the learner's OWN work comes next, part-scoped
+        assertThat(evidence.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.LEARNER_WORK);
+        assertThat(evidence.get(1).content()).contains("ions move freely when molten")
+                .doesNotContain("SIBLING ANSWER");
         // the synthesized scheme evidence admits THIS part's + question-level points…
-        assertThat(evidence.get(1).content()).contains("ions are free to move in the molten state")
+        assertThat(evidence.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(evidence.get(2).content()).contains("ions are free to move in the molten state")
                 .contains("correct overall conclusion")
                 // …and NEVER the sibling part's marking points
                 .doesNotContain("SIBLING PART POINT");

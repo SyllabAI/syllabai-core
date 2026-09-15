@@ -37,6 +37,7 @@ public class SimpleCitationResolver implements CitationResolver {
             case OTHER -> "Source document" + pageSuffix(item);
             case KNOWLEDGE_NODE -> String.format(Locale.ROOT, "Specification topic %s — %s",
                     item.nodeCode(), item.nodeTitle());
+            case LEARNER_WORK -> "Your submitted answer";
         };
     }
 

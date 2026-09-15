@@ -39,6 +39,15 @@ public class Answer {
     @JoinColumn(name = "question_part_id", nullable = false)
     private QuestionPart questionPart;
 
+    /**
+     * Read-only scalar mapping of the association's FK column (the established
+     * QuestionVersion.questionIdColumn pattern) — id-only readers must not
+     * initialize the LAZY questionPart proxy (field-access entities: even id()
+     * initializes; the CLA pipeline reads answers outside any transaction).
+     */
+    @Column(name = "question_part_id", insertable = false, updatable = false)
+    private UUID questionPartIdColumn;
+
     @Column(name = "answer_text", columnDefinition = "text")
     private String answerText;
 
@@ -71,7 +80,12 @@ public class Answer {
     public UUID id() { return id; }
     public UUID attemptId() { return attempt.id(); }
     public Attempt attempt() { return attempt; }
-    public UUID questionPartId() { return questionPart.id(); }
+    public UUID questionPartId() {
+        if (questionPartIdColumn != null) {
+            return questionPartIdColumn;
+        }
+        return questionPart.id();
+    }
     public QuestionPart questionPart() { return questionPart; }
     public String answerText() { return answerText; }
     public Integer marksAwarded() { return marksAwarded; }

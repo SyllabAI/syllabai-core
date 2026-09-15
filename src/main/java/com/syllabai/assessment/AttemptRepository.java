@@ -22,6 +22,15 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     boolean existsByLearnerIdAndQuestionId(UUID learnerId, UUID questionId);
 
     /**
+     * The learner's most recent attempt on a question — the §7.3 CHECK-mode
+     * input: full feedback reviews the learner's OWN submitted work. Read over
+     * resolved ids (learner + question from the resolved context), never
+     * model-selected.
+     */
+    java.util.Optional<Attempt> findFirstByLearnerIdAndQuestionIdOrderByCreatedAtDesc(
+            UUID learnerId, UUID questionId);
+
+    /**
      * Sprint-2 §8 (Smart Lesson repeated-exposure avoidance): the question ids
      * inside a topic's servable set the learner has ALREADY attempted. One
      * batched query per recommendation — the caller passes the candidate

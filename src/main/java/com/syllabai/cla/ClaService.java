@@ -1,5 +1,8 @@
 package com.syllabai.cla;
 
+import com.syllabai.assessment.Answer;
+import com.syllabai.assessment.AnswerRepository;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.MarkPoint;
@@ -102,6 +105,8 @@ public class ClaService {
     private final MarkSchemeRepository markSchemes;
     private final QuestionVersionRepository questionVersions;
     private final QuestionPartRepository questionParts;
+    private final AttemptRepository attempts;
+    private final AnswerRepository answers;
     private final VectorRetriever vectorRetriever;
     private final ReciprocalRankFusion fusion;
     private final EvidenceReranker reranker;
@@ -120,6 +125,8 @@ public class ClaService {
                       MarkSchemeRepository markSchemes,
                       QuestionVersionRepository questionVersions,
                       QuestionPartRepository questionParts,
+                      AttemptRepository attempts,
+                      AnswerRepository answers,
                       VectorRetriever vectorRetriever,
                       ReciprocalRankFusion fusion,
                       EvidenceReranker reranker,
@@ -136,6 +143,8 @@ public class ClaService {
         this.markSchemes = markSchemes;
         this.questionVersions = questionVersions;
         this.questionParts = questionParts;
+        this.attempts = attempts;
+        this.answers = answers;
         this.vectorRetriever = vectorRetriever;
         this.fusion = fusion;
         this.reranker = reranker;
@@ -267,12 +276,19 @@ public class ClaService {
         // fusion pool (fusion keys on node/chunk identity; the anchored stem and
         // the question's own scheme points are id-anchored, not similarity-anchored):
         //   [stem (always — what the learner is looking at)]
+        //   [+ the learner's OWN submitted answers (§7.3 CHECK feedback: the
+        //    mode's stated job is to review the learner's submitted work —
+        //    part-scoped on QUESTION_PART, latest attempt, resolved by ids)]
         //   [+ VALIDATED scheme points (§7.3, post-attempt, never HINT)]
         // then the bounded cap applies to the whole list
         if (context.isQuestionContext()) {
             List<EvidenceItem> lead = new ArrayList<>();
             lead.add(questionStemEvidence(context));
             if (ClaLeakagePolicy.schemePointEvidenceAllowed(context, mode)) {
+                EvidenceItem workEvidence = learnerWorkEvidence(context);
+                if (workEvidence != null) {
+                    lead.add(workEvidence);
+                }
                 EvidenceItem schemeEvidence = schemePointEvidence(context);
                 if (schemeEvidence != null) {
                     lead.add(schemeEvidence);
@@ -372,7 +388,8 @@ public class ClaService {
                     policyPlan.type(),
                     "CLA CHECK mode post-attempt on the " + anchored
                             + " — full feedback unlocked by the attempt-state gate",
-                    List.of("Review the learner's submitted work against the numbered SOURCES.",
+                    List.of("Review the learner's submitted answers (in the SOURCES as the "
+                            + "learner-work entries) against the numbered SOURCES.",
                             "Walk through the mark-scheme points where they apply, citing [n].",
                             "Be specific about what earned marks and what did not, without "
                                     + "revealing internal probabilities or diagnostic rules."));
@@ -480,6 +497,59 @@ public class ClaService {
             }
         }
         return null;
+    }
+
+    /**
+     * §7.3 CHECK feedback input: the learner's OWN submitted answers from their
+     * most recent attempt on the anchored question (their own data — the mode's
+     * stated job is reviewing the learner's submitted work, which it cannot do
+     * without seeing it). Part-level contexts receive ONLY the anchored part's
+     * answer (part-scoped discipline). Resolved by ids, never model-selected;
+     * null when no attempt answers exist. Uses the same admission gate as the
+     * scheme points (post-attempt, never HINT).
+     */
+    private EvidenceItem learnerWorkEvidence(ResourceContext context) {
+        UUID questionId = context.isQuestionPartContext()
+                ? questionParts.findQuestionIdByPartId(context.reference()).orElse(null)
+                : context.reference();
+        if (questionId == null) {
+            return null;
+        }
+        return attempts.findFirstByLearnerIdAndQuestionIdOrderByCreatedAtDesc(
+                        context.learnerId(), questionId)
+                .map(attempt -> {
+                    String content = answers.findByAttemptIdOrderByQuestionPartId(attempt.id())
+                            .stream()
+                            .filter(a -> partAllowsAnswer(context, a))
+                            .map(a -> "your submitted answer for part ("
+                                    + answerPartLabel(a) + "): " + a.answerText())
+                            .reduce((x, y) -> x + "\n" + y)
+                            .orElse("");
+                    if (content.isBlank()) {
+                        return null;
+                    }
+                    return new EvidenceItem(EvidenceItem.EvidenceSource.LEARNER_WORK,
+                            "The learner's submitted work (most recent attempt): " + content,
+                            null, null, null, null, null, null, null, null, null,
+                            null, null, List.of(), List.of(context.topicNodeId()),
+                            1.0, 0.0, null);
+                })
+                .orElse(null);
+    }
+
+    /** part-scoped learner-work selection: a part context sees only ITS answer */
+    static boolean partAllowsAnswer(ResourceContext context, com.syllabai.assessment.Answer answer) {
+        if (!context.isQuestionPartContext()) {
+            return true;
+        }
+        return context.reference().equals(answer.questionPartId());
+    }
+
+    /** proxy-safe part label for the learner-work evidence line */
+    private String answerPartLabel(com.syllabai.assessment.Answer answer) {
+        return questionParts.findById(answer.questionPartId())
+                .map(com.syllabai.assessment.QuestionPart::label)
+                .orElse("?");
     }
 
     /**
