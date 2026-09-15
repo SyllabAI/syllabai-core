@@ -127,3 +127,40 @@ Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — the runtime has no
 note-content substrate to anchor (documents are QP/MS/SYLLABUS/OTHER only);
 building one is a content-model decision, not a CLA-slice change.
 SMART_LESSON and QUESTION_PART remain contract-governed future kinds.
+
+---
+
+## Step-5 addendum: QUESTION_PART context kind (part-level anchor)
+
+**Status: IMPLEMENTED / VERIFIED (core `d0dc00a` lineage).** The part-level
+contract-defined kind: the client passes the opaque part id (plus, optionally,
+the subject root its UI is scoped to); the server resolves part → version →
+question → serving gate → paper/subject → VALIDATED primary topic through the
+canonical assessment FKs, and CHECK feedback sees the learner's OWN submitted
+work plus the part-scoped marking evidence.
+
+| Claim | Status | Evidence |
+|---|---|---|
+| §1.1 canonical-relationship resolution (no free-text inference) | ACCEPTED (implemented) | `ClaContextResolver.resolveQuestionPart` — every hop a canonical FK; unit-pinned in `ClaContextResolverTest` (happy path asserts kind/reference/partLabel/stem/marks/attempted) |
+| unknown part / unknown question / unvalidated content → indistinguishable 404 | ACCEPTED (implemented) | `partOfUnservableQuestionFailsClosed`, `unknownPartFailsClosed`, live G3 (404, no existence oracle) |
+| invalid relationship (part of a superseded version) → 404 | ACCEPTED (implemented) | relationship gate: the part's version must BE the question's CURRENT version — `partOfSupersededVersionFailsClosed` |
+| foreign-subject reference → 404 | ACCEPTED (implemented) | an explicitly supplied rootId belonging to another subject is rejected — `partWithForeignRootFailsClosed` (unit) |
+| §7 gate parity (QUESTION_PART is a question context) | ACCEPTED (implemented) | `isQuestionContext()` covers the kind: CHECK pre-attempt deterministic 409 BEFORE generation (live G5, generator-call-count pinned in IT), mark-scheme DOCUMENT chunks excluded in every mode/attempt state, HINT never receives scheme points (`ClaLeakagePolicyTest` matrix) |
+| part-scoped marking evidence | ACCEPTED (implemented) | post-attempt CHECK grounds on the anchored part's VALIDATED scheme points + question-level points; sibling parts' points never enter SOURCES — `ClaService.partAllowsPoint`, pinned non-vacuously in `ClaServiceTest.partCheckSchemeEvidenceIsPartScoped` (seeded sibling point) and `ClaFlowIT` (real entities) |
+| CHECK sees the learner's OWN submitted work | ACCEPTED (implemented) | `EvidenceSource.LEARNER_WORK` — latest attempt resolved by learner+question ids; part-scoped on QUESTION_PART (`partAllowsAnswer`); live-found gap fixed in `d0dc00a` (the model previously could not perform the mode's stated job) |
+| LIM evidence carries the part identity | ACCEPTED (implemented) | `contextKind=QUESTION_PART`, `contextReference=partId`, `nodeId` = the question's primary topic — live G7 + `ClaFlowIT` row assertions |
+| no canonical KG / mastery mutation | ACCEPTED (inherited) | the read-only pipeline is unchanged; `ClaFlowIT.noCanonicalOrMasteryMutation` still green |
+| HTTP contract | ACCEPTED (implemented) | missing partId → 400; unknown part → 404; real part → 200 (live G4/G3/G2) |
+| web panel (contract: expose part-level context) | ACCEPTED (implemented) | web `1f22113`: question selector + part selector in the SAME Assistant panel; meta row renders `QUESTION_PART (a)`; 409 gate guidance verified in-browser |
+| evaluation bundle coverage | ACCEPTED (implemented) | S-G set: 7/7 live over real validated 4CH1 material (canonical record 37/37 GREEN — VERIFIED, `.syllabai/evidence/cla/cla_eval_questionpart_d0dc00a.json`) |
+
+Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — SUBSTRATE-BLOCKED /
+architecture decision required (no note-content model exists in the runtime;
+building one is a content-model decision). SMART_LESSON remains a
+contract-governed future kind. Defects found by live verification and fixed
+during this slice (all in product code, none by gate-weakening):
+LazyInitializationException on part/answer entity traversals (OSIV off,
+non-transactional service — fixed via scalar projection + read-only scalar FK
+columns + eager entity graph), a derived JPQL query that failed named-query
+validation at boot (fixed as native SQL over the stable FK columns), and the
+missing learner-work evidence for CHECK feedback.
