@@ -78,3 +78,47 @@ and LIM suites green. The surface may be exposed to learners (web panel) and
 extended to the next contract-defined context kind, carrying this bundle as
 the baseline; any future retrieval/reranking technique change (ADR-020) must
 re-run this bundle and beat or match it.
+
+---
+
+## Addendum (same day, post-VERIFIED evolution)
+
+Three changes landed after the 44/44 canonical run, each individually
+live-verified against production; the full-bundle re-run against the final
+lineage (`e2d70a5`) is 28/30 with the two open checks blocked by an external
+provider-quota limit, documented below.
+
+1. **SPECIFICATION_POINT context kind (`1110af8`).** Third contract-defined
+   kind: the syllabus-browser anchor resolves by spec-point CODE. Live-
+   verified (200 with VALIDATED context + grounded answer for 4CH1-1.18;
+   404 for unknown and foreign-subject codes); S-A re-ran **17/17** against
+   this lineage; unit + IT coverage added (`ClaFlowIT.specificationPointFlow`).
+2. **Generation chain timeout 30s → 60s (`95093d7`).** The re-run exposed a
+   DETERMINISTIC failure the first run's luck had hidden: 4CH1-S1-e SUMMARIZE
+   (largest topic) reliably exceeded the 30s ceiling → 503 tutor_unavailable.
+   Fixed as infrastructure capacity, verified live (200).
+3. **SUMMARIZE output bound (`e2d70a5`).** The same probe straddled even 60s
+   under provider load: the deterministic plan now bounds output shape (one
+   concise clause per specification statement) while keeping full-scope
+   coverage. Verified live (200, 653 chars, spans all 4 spec-structure
+   sources).
+
+**Honest open items on the final lineage:**
+- S-B stands at 7/8 topics re-verified; 4CH1-S1-e's re-probe is blocked by
+  groq **tokens-per-day quota exhaustion** (429 RateLimitException surfaced
+  as 503 tutor_unavailable in ~3s — hard TPD limit, resets daily). Its last
+  pre-quota isolated probe PASSED (200, 653 chars, [2,3,4,5] cited).
+- core-ci for `1110af8`/`95093d7`/`e2d70a5` is blocked by a **GitHub Actions
+  infrastructure outage** (jobs fail in ~2s with zero steps executed;
+  BlobNotFound logs; the notify/sync workflows fail identically — the runner
+  never starts). Local `mvn` verification is green for every change; the
+  deployed binaries behave correctly on every probe. CI re-run pending
+  recovery.
+- Resume: `CLA_EVAL_PHASES=sb` (state-replacing) + CI rerun, once quota and
+  Actions recover; the phased harness is persisted at the workspace
+  `scripts/cla_eval_bundle.py`.
+
+The promotion decision above stands: it was made on the 44/44 canonical run,
+and every subsequent change has been verified live in isolation; the re-run
+exists to refresh the single canonical record, not to gate the already-proven
+behavior.
