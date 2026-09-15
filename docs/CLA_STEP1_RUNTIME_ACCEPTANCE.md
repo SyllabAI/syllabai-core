@@ -1,6 +1,6 @@
-# CLA Step-1 Runtime Acceptance — claim-by-claim
+# CLA Runtime Acceptance — claim-by-claim (steps 1–2)
 
-**Commit:** `cla: step-1 runtime slice — KG_TOPIC ResourceContext, read-only tools, EXPLAIN/SUMMARIZE, LIM evidence (V24)`
+**Commits:** step 1 `c97dec1` (+`6983d7c` test fix); step 2 `87f0acc` (+`6b19882`/`6c3e400`/`544bad1` — paper-less subject resolution, registry enablement, self-contained gate assertion)
 **Contract:** `docs/CONTEXTUAL_LEARNING_ASSISTANT_IMPLEMENTATION.md` (PROPOSED → its §10.1 + §10.3 now implemented; the contract document remains the governing text and its HINT/CHECK / leakage-gate / evaluation-bundle claims stay unimplemented until their own steps)
 **Scope:** one vertical slice — `POST /api/v1/learners/me/cla/ask` with kind `KG_TOPIC`, modes `EXPLAIN`/`SUMMARIZE`, read-only tool composition, and interaction-evidence capture into LIM.
 
@@ -32,9 +32,10 @@ This PR states its acceptance of the contract claim-by-claim, per the contract h
 | Claim | Status | Evidence |
 |---|---|---|
 | Explicit per request; undeclared modes rejected | **ACCEPTED (implemented)** | `ResponseMode` enum binding; unknown values → 400 (`HttpMessageNotReadableException` handler added; `ClaFlowIT.httpFailSafe`) |
-| Mode constrains prompts deterministically | **ACCEPTED (implemented)** | `ClaService.modePlan` rewrites the intervention plan per mode deterministically (EXPLAIN: teach-from-sources; SUMMARIZE: compress + preserve anchors); the plan is injected into the prompt by the SAME generator the Tutor uses |
+| Mode constrains prompts deterministically | **ACCEPTED (implemented)** | `ClaService.modePlan` rewrites the intervention plan per mode deterministically (EXPLAIN / SUMMARIZE / HINT / CHECK); the plan is injected into the prompt by the SAME generator the Tutor uses |
 | Mode recorded in evidence capture | **ACCEPTED (implemented)** | `tutor_topic_engagements.response_mode` + telemetry payload `mode` — `TutorEngagementRecorderTest.claInteractionWritesProvenanceRows`, `ClaFlowIT.learnerEvidenceWithProvenance` |
-| HINT/CHECK deferred | **DEFERRED (contract sequencing §10.2)** | deliberately absent until the §7 gate exists — declaring them now would be an unsafe promotion |
+| `HINT` — scaffolding only; must not contain final answers or mark-scheme points (§7.2) | **ACCEPTED (implemented, step 2)** | `ResponseMode.HINT` + `ClaLeakagePolicy`: mark-scheme document chunks and scheme-point evidence are deterministically excluded from HINT evidence assembly — `ClaLeakagePolicyTest`, `ClaFlowIT.hintNeverLeaksMarkScheme` (live: sources = [QUESTION_PAPER, KNOWLEDGE_NODE], zero MARK_SCHEME) |
+| `CHECK` — full feedback only post-attempt (§7.3) | **ACCEPTED (implemented, step 2)** | `ResponseMode.CHECK` gated by `ClaLeakagePolicy.checkModeAdmission` over attempt history — `ClaFlowIT.checkPreAttemptRefuses` (409, zero generator calls) + `checkPostAttemptUnlocks` (real attempt via the assessment pipeline unlocks) |
 
 ## §4 ToolPolicy and tool controls
 
@@ -65,7 +66,15 @@ This PR states its acceptance of the contract claim-by-claim, per the contract h
 
 ## §7 Exam-question answer-leakage policy
 
-**DEFERRED (contract sequencing §10.2) — and structurally inert in step 1:** no QUESTION_PART / PAST_PAPER_QUESTION context kind and no HINT/CHECK mode is servable in this step, so there is no leakage surface to gate yet. The CI-mandatory negative suite lands with step 2, before any attempt-aware mode merges. NOT IMPLEMENTED here; NOT weakened.
+**IMPLEMENTED (step 2, contract §10.2)** — deterministic, application-code gate (`ClaLeakagePolicy`), never prompt-only (§7.4):
+
+1. **Protected content** — the gate arms on `PAST_PAPER_QUESTION` contexts resolved through the full serving boundary (`ServableQuestionService.isServable`: validated current version + paper-level integrity gate); attempt state read from attempt history (Review Hub substrate) per learner+question (§7.1/§7.3).
+2. **HINT** — mark-scheme evidence is excluded deterministically in every attempt state; scaffolding directives only (§7.2). `ClaLeakagePolicyTest.schemePointEvidenceMatrix`.
+3. **CHECK/EXPLAIN/SUMMARIZE full feedback** — allowed only after attempt evidence exists; the unlock is the attempt-state read (§7.3). `ClaFlowIT.checkPostAttemptUnlocks` over the REAL assessment pipeline.
+4. **Gate placement** — `checkModeAdmission` runs BEFORE retrieval and generation; pre-attempt CHECK never touches a provider, evidence assembly or learner memory (409 `attempt_required`). Pinned non-vacuously: `ClaServiceTest.questionCheckPreAttemptRefuses` asserts zero vector-retriever and zero generator calls.
+5. **Negative leakage suite (CI-mandatory, §7.5)** — `ClaLeakagePolicyTest` (full deterministic matrix: 4 modes × attempt states × evidence sources) + `ClaFlowIT` over real Postgres/HTTP: HINT end-to-end carries no MARK_SCHEME source; CHECK pre-attempt 409 with zero generation; post-attempt unlock; HTTP 409 body `attempt_required`. GREEN in core-ci run `34950281437`-lineage (final: run on `544bad1`).
+
+Document-chunk granularity decision (recorded honestly): canonical mark-scheme CHUNKS are page-level and cannot be bound to one question deterministically — on question contexts they are excluded entirely (strict-safe, any mode, any attempt state). Post-attempt full feedback grounds on the question's OWN VALIDATED assessment-model scheme points (`mark_schemes`/`mark_points`, question-granular, id-resolved) instead. KG_TOPIC evidence behavior is unchanged (tutor parity; a free topic discussion is not anchored to assessment content).
 
 ## §8 Security
 
@@ -82,10 +91,13 @@ This PR states its acceptance of the contract claim-by-claim, per the contract h
 
 ## §10 Sequencing
 
-- **§10.1 — implemented by this PR** (ResourceContext + KG_TOPIC + read-only tools + EXPLAIN/SUMMARIZE on the Tutor's generation/citation stack).
-- **§10.3 — implemented by this PR** (LIM evidence capture for CLA exchanges via the extension rules: new answered event, deterministic record-time classification, surface + context identity provenance).
-- **§10.2 (attempt-aware HINT/CHECK + leakage gate + negative CI suite)** — next; **§10.4 (evaluation bundle + promotion)** — after that. The CLA contract's overall status remains driven by those steps; this PR promotes nothing beyond its own evidence.
+- **§10.1 — implemented (step 1)** (ResourceContext + KG_TOPIC + read-only tools + EXPLAIN/SUMMARIZE on the Tutor's generation/citation stack).
+- **§10.3 — implemented (step 1)** (LIM evidence capture for CLA exchanges via the extension rules: answered event, deterministic record-time classification, surface + context identity provenance).
+- **§10.2 — implemented (step 2, `87f0acc` lineage)** (attempt-aware HINT/CHECK + the deterministic §7 leakage gate + the CI-mandatory negative suite; question-anchored contexts resolve through the exact serving boundary).
+- **§10.4 (evaluation bundle + promotion)** — remaining. The CLA contract's overall status remains driven by that step; nothing here promotes the complete CLA past its evidence.
 
 ## Status summary
 
-`CLA step-1 runtime slice: IMPLEMENTED / VERIFIED (unit + IT evidence above)` — the broader CLA (steps 2–4) remains `PROPOSED`-governed work in progress. No `VERIFIED` claim is made for HINT/CHECK, the leakage gate, question/note context kinds, or the evaluation bundle.
+- **Step 1 (KG_TOPIC + EXPLAIN/SUMMARIZE + read-only tools + LIM evidence): IMPLEMENTED / VERIFIED** — core-ci GREEN + live verification 14/14 (`evidence/cla_step1_live_verification_6983d7c.log`).
+- **Step 2 (PAST_PAPER_QUESTION + HINT/CHECK + §7 leakage gate + negative suite): IMPLEMENTED / VERIFIED** — core-ci GREEN on `544bad1` (52/52 incl. ClaFlowIT negative suite) + live verification 9/9 with the real LLM (`evidence/cla_step2_live_verification_544bad1.log`): HINT zero mark-scheme citations on a real 4CH1 question (paper 4CH0/2C), CHECK 409 pre-attempt → 200 post-attempt through a real structured attempt, LIM signalCounts closed loop.
+- **Step 4 (evaluation bundle + promotion) + further context kinds: NOT IMPLEMENTED** — remaining contract-governed work. No `VERIFIED` claim is made for the complete CLA.
