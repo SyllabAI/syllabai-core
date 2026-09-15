@@ -3,6 +3,8 @@ package com.syllabai.cla;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.MarkPoint;
+import com.syllabai.assessment.QuestionPart;
+import com.syllabai.assessment.QuestionPartRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.cla.ClaToolRegistry.RelatedConcepts;
@@ -99,6 +101,7 @@ public class ClaService {
     private final KnowledgeNodeRepository knowledgeNodes;
     private final MarkSchemeRepository markSchemes;
     private final QuestionVersionRepository questionVersions;
+    private final QuestionPartRepository questionParts;
     private final VectorRetriever vectorRetriever;
     private final ReciprocalRankFusion fusion;
     private final EvidenceReranker reranker;
@@ -116,6 +119,7 @@ public class ClaService {
                       KnowledgeNodeRepository knowledgeNodes,
                       MarkSchemeRepository markSchemes,
                       QuestionVersionRepository questionVersions,
+                      QuestionPartRepository questionParts,
                       VectorRetriever vectorRetriever,
                       ReciprocalRankFusion fusion,
                       EvidenceReranker reranker,
@@ -131,6 +135,7 @@ public class ClaService {
         this.knowledgeNodes = knowledgeNodes;
         this.markSchemes = markSchemes;
         this.questionVersions = questionVersions;
+        this.questionParts = questionParts;
         this.vectorRetriever = vectorRetriever;
         this.fusion = fusion;
         this.reranker = reranker;
@@ -144,11 +149,15 @@ public class ClaService {
 
     /**
      * @param learnerId   the authenticated learner (learner surface — required)
-     * @param kind        the context kind (KG_TOPIC | PAST_PAPER_QUESTION in this
-     *                    runtime step; anything else is a 400 — closed enum, §1)
-     * @param rootId      opaque reference (KG_TOPIC): the subject KG root
+     * @param kind        the context kind (KG_TOPIC | SPECIFICATION_POINT |
+     *                    PAST_PAPER_QUESTION | QUESTION_PART in this runtime;
+     *                    anything else is a 400 — closed enum, §1)
+     * @param rootId      opaque reference (KG_TOPIC/SPECIFICATION_POINT: required;
+     *                    QUESTION_PART: optional subject-root scope check)
      * @param topicNodeId opaque reference (KG_TOPIC): the anchored topic
      * @param questionId  opaque reference (PAST_PAPER_QUESTION): the anchored question
+     * @param partId      opaque reference (QUESTION_PART): the anchored part on the
+     *                    question's CURRENT validated version
      * @param specCode    opaque reference (SPECIFICATION_POINT): the spec-point code the
      *                    learner is reading (e.g. "4CH1-1.18") — server resolves it
      * @param mode        explicit response mode (contract §3)
@@ -156,7 +165,8 @@ public class ClaService {
      */
     public ClaAnswerView contextualAsk(UUID learnerId, ResourceContext.Kind kind,
                                        UUID rootId, UUID topicNodeId, UUID questionId,
-                                       String specCode, ResponseMode mode, String question) {
+                                       UUID partId, String specCode, ResponseMode mode,
+                                       String question) {
         if (learnerId == null) {
             throw new IllegalArgumentException("learnerId is required on the CLA surface");
         }
@@ -188,6 +198,13 @@ public class ClaService {
                             "PAST_PAPER_QUESTION context requires questionId");
                 }
                 yield resolver.resolvePastPaperQuestion(questionId, learnerId);
+            }
+            case QUESTION_PART -> {
+                if (partId == null) {
+                    throw new BadRequestException(
+                            "QUESTION_PART context requires partId");
+                }
+                yield resolver.resolveQuestionPart(partId, rootId, learnerId);
             }
             default -> throw new BadRequestException(
                     "context kind not supported by this runtime step: " + kind);
@@ -316,9 +333,12 @@ public class ClaService {
     static TutorPolicyService.InterventionPlan modePlan(ResponseMode mode,
                                                         ResourceContext context,
                                                         TutorPolicyService.InterventionPlan policyPlan) {
-        String anchored = context.isQuestionContext()
-                ? "anchored question on topic " + context.topicCode()
-                : "anchored topic " + context.topicCode();
+        String anchored = context.partLabel() != null
+                ? "anchored question part (" + context.partLabel() + ") on topic "
+                        + context.topicCode()
+                : context.isQuestionContext()
+                        ? "anchored question on topic " + context.topicCode()
+                        : "anchored topic " + context.topicCode();
         return switch (mode) {
             case EXPLAIN -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
@@ -465,14 +485,19 @@ public class ClaService {
     /**
      * The anchored question's own stem as lead evidence (§2.1: the learner is
      * already looking at it — presenting it back is not a leak; it is the
-     * anchor). Provenance: the served stem of the VALIDATED current version.
+     * anchor). Part-level contexts anchor the PART prompt they are looking at
+     * (explicitly labeled). Provenance: the served stem/prompt of the
+     * VALIDATED current version.
      */
     private EvidenceItem questionStemEvidence(ResourceContext context) {
         String command = context.questionCommandWord() == null ? ""
                 : context.questionCommandWord() + " — ";
-        String content = "Question (" + context.questionMarks() + " marks) " + command
-                + context.questionStem();
-        return new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER, content,
+        String anchored = context.partLabel() != null
+                ? "Part (" + context.partLabel() + ") (" + context.questionMarks()
+                        + " marks) " + command + context.questionStem()
+                : "Question (" + context.questionMarks() + " marks) " + command
+                        + context.questionStem();
+        return new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER, anchored,
                 null, null, null, null, null, null, null, null, null, null, null,
                 List.of(), List.of(context.topicNodeId()), 1.0, 0.0, null);
     }
@@ -483,14 +508,32 @@ public class ClaService {
      * resolved by ids) — NOT page-level document chunks, which cannot be
      * bound to one question deterministically. Null when no VALIDATED scheme
      * exists (honest — feedback then grounds on spec context alone).
+     *
+     * <p>Part-level contexts (QUESTION_PART) receive the PART-APPROPRIATE
+     * subset: points targeting the anchored part, plus whole-question points
+     * (part null). A sibling part's points are not this part's marking
+     * evidence and do not enter the SOURCES.</p>
      */
     private EvidenceItem schemePointEvidence(ResourceContext context) {
-        return questionVersions.findByQuestionIdOrderByVersionDesc(context.reference())
+        // the scheme lookup keys on the question id: question-level contexts
+        // carry it as the reference; part-level contexts resolve it through the
+        // canonical part → version → question FK (the resolver has already
+        // gated that the part belongs to the CURRENT validated version)
+        UUID questionId = context.isQuestionPartContext()
+                ? questionParts.findById(context.reference())
+                        .map(p -> p.questionVersion().questionId())
+                        .orElse(null)
+                : context.reference();
+        if (questionId == null) {
+            return null;
+        }
+        return questionVersions.findByQuestionIdOrderByVersionDesc(questionId)
                 .stream().findFirst()
                 .flatMap(v -> markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(v.id()))
                 .filter(s -> s.validationState() == MarkScheme.ValidationState.VALIDATED)
                 .map(s -> {
                     String content = s.points().stream()
+                            .filter(p -> partAllowsPoint(context, p))
                             .sorted(java.util.Comparator.comparingInt(MarkPoint::ordering))
                             .map(p -> p.ref() + " (" + p.marks() + "): " + p.text())
                             .reduce((a, b) -> a + "; " + b)
@@ -505,6 +548,19 @@ public class ClaService {
                             1.0, 0.0, null);
                 })
                 .orElse(null);
+    }
+
+    /**
+     * Part-appropriate marking-evidence selection (§7.3): a part context
+     * admits points targeting THAT part plus question-level points (part
+     * null); question-level contexts admit all the question's points.
+     */
+    static boolean partAllowsPoint(ResourceContext context, MarkPoint point) {
+        if (!context.isQuestionPartContext()) {
+            return true;
+        }
+        return point.questionPartId() == null
+                || context.reference().equals(point.questionPartId());
     }
 
     private <T> ToolResultWith<T> trace(List<ClaToolRegistry.ToolTrace> traces,

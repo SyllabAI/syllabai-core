@@ -41,6 +41,9 @@ import java.util.UUID;
  *                          read (the §7.3/§7.4 gate input — attempt history for
  *                          this learner and question, the same substrate as
  *                          Review Hub); null on KG_TOPIC
+ * @param partLabel         QUESTION_PART contexts: the anchored part's label
+ *                          ("a", "b-ii", …) on the question's CURRENT validated
+ *                          version; null on every other kind
  */
 public record ResourceContext(
         Kind kind,
@@ -58,12 +61,14 @@ public record ResourceContext(
         String questionCommandWord,
         int questionMarks,
         String paperCode,
-        Boolean attempted) {
+        Boolean attempted,
+        String partLabel) {
 
     /**
      * Closed enum (contract §1) — SPECIFICATION_POINT | KG_TOPIC |
      * NOTE_SECTION | QUESTION_PART | SMART_LESSON | PAST_PAPER_QUESTION,
-     * extensible by decision only. Step 1 RESOLVES only KG_TOPIC; the other
+     * extensible by decision only. Runtime serves KG_TOPIC,
+     * SPECIFICATION_POINT, PAST_PAPER_QUESTION and QUESTION_PART; the other
      * values name the contract's closed set so extensions are explicit.
      */
     public enum Kind {
@@ -83,8 +88,19 @@ public record ResourceContext(
                                         String status) {
     }
 
-    /** question-anchored context predicate (§7 gate input shaping) */
+    /**
+     * question-anchored context predicate (§7 gate input shaping): both
+     * question-level (PAST_PAPER_QUESTION) and part-level (QUESTION_PART)
+     * anchors are assessment content — the leakage gate treats them
+     * identically (CHECK needs attempt evidence; mark-scheme DOCUMENT chunks
+     * never serve on assessment anchors).
+     */
     public boolean isQuestionContext() {
-        return kind == Kind.PAST_PAPER_QUESTION;
+        return kind == Kind.PAST_PAPER_QUESTION || kind == Kind.QUESTION_PART;
+    }
+
+    /** part-level anchor predicate (part-scoped scheme evidence selection) */
+    public boolean isQuestionPartContext() {
+        return kind == Kind.QUESTION_PART;
     }
 }

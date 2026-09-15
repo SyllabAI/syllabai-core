@@ -31,7 +31,7 @@ class ClaLeakagePolicyTest {
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "Calculate the mass of 0.25 mol CaCO3", "Calculate", 2, "4CH0/1C",
-                attempted);
+                attempted, null);
     }
 
     private ResourceContext topicContext() {
@@ -41,7 +41,7 @@ class ClaLeakagePolicyTest {
                 new ResourceContext.CurriculumVersionInfo("IAL-CHEM-2018", "Edexcel", "IAL",
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null);
+                null, null, 0, null, null, null);
     }
 
     private EvidenceItem documentMarkSchemeChunk() {
@@ -126,5 +126,52 @@ class ClaLeakagePolicyTest {
             assertThat(ClaLeakagePolicy.evidenceEligible(
                     questionContext(false), mode, stem)).isTrue();
         }
+    }
+
+    // ── QUESTION_PART: the part-level anchor is a question context for the gate ──
+
+    private ResourceContext partContext(boolean attempted) {
+        return new ResourceContext(ResourceContext.Kind.QUESTION_PART,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "4CH1",
+                "WCH11-T1.1", "Mole Calculations",
+                new ResourceContext.CurriculumVersionInfo("IAL-CHEM-2018", "Edexcel", "IAL",
+                        "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                "State why ionic compounds conduct when molten.", "State", 2, "4CH0/1C",
+                attempted, "a");
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART: CHECK requires attempt evidence exactly like the question kind")
+    void partCheckRequiresAttempt() {
+        assertThatThrownBy(() -> ClaLeakagePolicy.checkModeAdmission(
+                partContext(false), ResponseMode.CHECK))
+                .isInstanceOf(AttemptRequiredException.class);
+        assertThatCode(() -> ClaLeakagePolicy.checkModeAdmission(
+                partContext(true), ResponseMode.CHECK)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART: mark-scheme DOCUMENT chunks are excluded in every mode/attempt state")
+    void partDocumentChunksExcluded() {
+        for (ResponseMode mode : ResponseMode.values()) {
+            for (boolean attempted : new boolean[]{false, true}) {
+                assertThat(ClaLeakagePolicy.evidenceEligible(
+                        partContext(attempted), mode, documentMarkSchemeChunk()))
+                        .as("mode=%s attempted=%s", mode, attempted)
+                        .isFalse();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART: scheme-point evidence stays post-attempt-only and never into HINT")
+    void partSchemePointMatrix() {
+        assertThat(ClaLeakagePolicy.schemePointEvidenceAllowed(
+                partContext(false), ResponseMode.CHECK)).isFalse();
+        assertThat(ClaLeakagePolicy.schemePointEvidenceAllowed(
+                partContext(true), ResponseMode.HINT)).isFalse();
+        assertThat(ClaLeakagePolicy.schemePointEvidenceAllowed(
+                partContext(true), ResponseMode.CHECK)).isTrue();
     }
 }

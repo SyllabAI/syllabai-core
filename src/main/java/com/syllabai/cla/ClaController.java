@@ -28,8 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Fail-closed request semantics: an unknown kind/mode is a 400 (undeclared
  * values rejected, §3); a kind whose required reference is missing is a 400;
  * kinds not served by the current runtime step are a 400 (closed enum, §1);
- * unresolvable references are 404 with no existence oracles; CHECK without
- * attempt evidence is a 409 (the §7.3 answer-leakage gate).</p>
+ * unresolvable references (question, part, topic, spec code) are 404 with no
+ * existence oracles; CHECK without attempt evidence is a 409 (the §7.3
+ * answer-leakage gate).</p>
  */
 @RestController
 @RequestMapping("/api/v1/learners/me/cla")
@@ -51,6 +52,11 @@ public class ClaController {
      * @param questionId  PAST_PAPER_QUESTION: the anchored question (server-
      *                    resolves through the full serving gate; attempt state
      *                    read server-side for the §7 gate)
+     * @param partId      QUESTION_PART: the anchored part on the question's
+     *                    CURRENT validated version (server resolves part →
+     *                    version → question → paper → subject → topic through
+     *                    the canonical FKs; rootId optionally checked as the
+     *                    subject scope)
      * @param specCode    SPECIFICATION_POINT: the spec-point code the learner is
      *                    reading (e.g. "4CH1-1.18") — resolved server-side,
      *                    subject-isolated, VALIDATED-only
@@ -63,6 +69,7 @@ public class ClaController {
             UUID rootId,
             UUID topicNodeId,
             UUID questionId,
+            UUID partId,
             @Size(max = 80) String specCode,
             @NotNull ResponseMode mode,
             @NotBlank @Size(max = 2000) String question) {
@@ -75,7 +82,7 @@ public class ClaController {
             throw new BadRequestException("context kind is required");
         }
         return cla.contextualAsk(learnerId, request.kind(), request.rootId(),
-                request.topicNodeId(), request.questionId(), request.specCode(),
-                request.mode(), request.question());
+                request.topicNodeId(), request.questionId(), request.partId(),
+                request.specCode(), request.mode(), request.question());
     }
 }

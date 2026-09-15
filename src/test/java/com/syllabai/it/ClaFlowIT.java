@@ -162,6 +162,18 @@ class ClaFlowIT {
     private JdbcTemplate jdbc;
     @Autowired
     private RecordingGenerator generator;
+    @Autowired
+    private com.syllabai.teacher.ingestion.PastPaperIngestionService paperIngestion;
+    @Autowired
+    private com.syllabai.assessment.QuestionRepository questions;
+    @Autowired
+    private com.syllabai.assessment.QuestionVersionRepository questionVersions;
+    @Autowired
+    private com.syllabai.assessment.MarkSchemeRepository markSchemes;
+    @Autowired
+    private com.syllabai.assessment.QuestionPartRepository questionParts;
+    @Autowired
+    private com.syllabai.teacher.ContentReviewService contentReview;
 
     @LocalServerPort
     private int port;
@@ -171,6 +183,11 @@ class ClaFlowIT {
     private UUID learnerId;
     private UUID rootId;
     private UUID topicId;
+    // QUESTION_PART slice state (seeded once, shared by the part-flow tests)
+    private UUID partQuestionId;
+    private UUID partAId;
+    private UUID partBId;
+    private UUID partAnchorNodeId;
 
     private void seed() throws Exception {
         if (learnerId != null) {
@@ -214,7 +231,7 @@ class ClaFlowIT {
         seed();
 
         ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null , ResponseMode.EXPLAIN,
+                rootId, topicId, null, null, null , ResponseMode.EXPLAIN,
                 "explain bonding and structure");
 
         assertThat(answer.refused()).isFalse();
@@ -258,7 +275,7 @@ class ClaFlowIT {
     void summarizeAsk() throws Exception {
         seed();
         ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null , ResponseMode.SUMMARIZE, "summarize bonding and structure");
+                rootId, topicId, null, null, null , ResponseMode.SUMMARIZE, "summarize bonding and structure");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().mode()).isEqualTo(ResponseMode.SUMMARIZE);
@@ -275,7 +292,7 @@ class ClaFlowIT {
         // learner (JUnit per-method instances), so the rows asserted here are
         // exactly the rows THIS ask produces
         ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
+                rootId, topicId, null, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
         assertThat(answer.refused()).isFalse();
 
         List<TutorTopicEngagement> rows = engagements
@@ -335,7 +352,7 @@ class ClaFlowIT {
         Integer edgesBefore = jdbc.queryForObject(
                 "select count(*) from knowledge_edges", Integer.class);
 
-        cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null ,
+        cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null ,
                 ResponseMode.EXPLAIN, "explain bonding and structure again");
 
         Integer nodeStatusCountAfter = jdbc.queryForObject(
@@ -365,17 +382,17 @@ class ClaFlowIT {
         // a topic id that exists nowhere in this subject's subtree
         UUID foreign = UUID.randomUUID();
         assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, foreign, null, null , ResponseMode.EXPLAIN, "explain"))
+                rootId, foreign, null, null, null , ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(NotFoundException.class);
 
         // a root that is not a subject root
         assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                UUID.randomUUID(), topicId, null, null , ResponseMode.EXPLAIN, "explain"))
+                UUID.randomUUID(), topicId, null, null, null , ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(NotFoundException.class);
 
         // an unknown question id → 404 (no question existence oracle)
         assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.PAST_PAPER_QUESTION,
-                null, null, UUID.randomUUID(), null , ResponseMode.HINT, "hint me"))
+                null, null, UUID.randomUUID(), null, null , ResponseMode.HINT, "hint me"))
                 .isInstanceOf(NotFoundException.class);
 
         // unvalidated content is invisible to the CLA — indistinguishable 404,
@@ -385,7 +402,7 @@ class ClaFlowIT {
                 suggestible);
         try {
             assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                    rootId, suggestible, null, null , ResponseMode.EXPLAIN, "explain"))
+                    rootId, suggestible, null, null, null , ResponseMode.EXPLAIN, "explain"))
                     .isInstanceOf(NotFoundException.class)
                     .hasMessageContaining("validated");
         } finally {
@@ -404,7 +421,7 @@ class ClaFlowIT {
         // the V7 seed MCQ is servable and topic-mapped; the corpus contains the
         // real canonical mark-scheme fixture chunks the vector side can retrieve
         ClaAnswerView answer = cla.contextualAsk(freshLearner(),
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null ,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
                 ResponseMode.HINT, "give me the mass of calcium carbonate");
 
         assertThat(answer.refused()).isFalse();
@@ -436,7 +453,7 @@ class ClaFlowIT {
         UUID learner = freshLearner();
         int generatorCallsBefore = generator.calls.get();
         assertThatThrownBy(() -> cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null ,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
                 ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
         // the refusal happened BEFORE the generator: no LLM call for this ask
@@ -454,7 +471,7 @@ class ClaFlowIT {
 
         // pre-attempt: the gate refuses
         assertThatThrownBy(() -> cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null ,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
                 ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
 
@@ -464,7 +481,7 @@ class ClaFlowIT {
 
         // post-attempt: the gate unlocks
         ClaAnswerView answer = cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null ,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
                 ResponseMode.CHECK, "check my answer now");
 
         assertThat(answer.refused()).isFalse();
@@ -628,5 +645,200 @@ class ClaFlowIT {
                 {"kind": "SPECIFICATION_POINT", "rootId": "%s", "mode": "EXPLAIN", "question": "explain"}
                 """.formatted(rootId));
         assertThat(missing.statusCode()).isEqualTo(400);
+    }
+
+    // ── QUESTION_PART: part-level anchor, part-scoped feedback, same gates ──
+
+    private void seedPartQuestion() throws Exception {
+        seed();
+        if (partAId != null) {
+            return;
+        }
+        String suffix = UUID.randomUUID().toString().substring(0, 6);
+        var draft = new com.syllabai.teacher.ingestion.PastPaperDraftDto(
+                "1.0",
+                new com.syllabai.teacher.ingestion.PastPaperDraftDto.PaperMeta(
+                        "Edexcel", "IGCSE", "Chemistry", "Paper 2C",
+                        "June 2013-" + suffix, "4CH0/2P-" + suffix, "it-qp-doc", "it-ms-doc"),
+                List.of(new com.syllabai.teacher.ingestion.PastPaperDraftDto.QuestionDraft(
+                        "qp1", "1", "Question 1 stem", "Explain", 4, "STRUCTURED", 1, 0.6,
+                        List.of(
+                                new com.syllabai.teacher.ingestion.PastPaperDraftDto.PartDraft(
+                                        "a", "Part a prompt: why do molten salts conduct?",
+                                        "State", 2, 0.6),
+                                new com.syllabai.teacher.ingestion.PastPaperDraftDto.PartDraft(
+                                        "b", "Part b prompt: compare with solid behavior.",
+                                        "Explain", 2, 0.6)))),
+                new com.syllabai.teacher.ingestion.PastPaperDraftDto.MarkSchemeDraft("1",
+                        "it-ms-doc",
+                        List.of(
+                                new com.syllabai.teacher.ingestion.PastPaperDraftDto.MarkPointDraft(
+                                        "1-a", 1, "PART A POINT: ions free to move when molten",
+                                        2, List.of(), 0.6),
+                                new com.syllabai.teacher.ingestion.PastPaperDraftDto.MarkPointDraft(
+                                        "1-b", 2, "SIBLING PART B POINT: solid ions fixed in lattice",
+                                        2, List.of(), 0.6),
+                                new com.syllabai.teacher.ingestion.PastPaperDraftDto.MarkPointDraft(
+                                        "1", 3, "QUESTION LEVEL POINT: conclusion consistent",
+                                        2, List.of(), 0.6))),
+                "it-test-question-part",
+                true);
+        var summary = paperIngestion.ingest(draft, null);
+        com.syllabai.assessment.Question question = questions.findAllByOrderByDifficultyAsc()
+                .stream().filter(q -> summary.paperId().equals(q.examPaperId()))
+                .findFirst().orElseThrow();
+        com.syllabai.assessment.QuestionVersion version = questionVersions
+                .findByQuestionIdOrderByVersionDesc(question.id()).get(0);
+        contentReview.validateQuestionVersion(version.id());
+        com.syllabai.assessment.MarkScheme scheme = markSchemes
+                .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()).orElseThrow();
+        contentReview.validateMarkScheme(scheme.id(), scheme.points().stream()
+                .map(pt -> new com.syllabai.teacher.ContentReviewService.PointCriteria(
+                        pt.id(), List.of(pt.text())))
+                .toList());
+        // the ingestion anchor KG node (the question's primary topic) must pass
+        // the §1.2 curriculum gate — validate it exactly like a teacher would
+        review.validateNode(question.primaryTopicNodeId());
+        partQuestionId = question.id();
+        partAId = version.parts().stream()
+                .filter(p -> "a".equals(p.label())).findFirst().orElseThrow().id();
+        partBId = version.parts().stream()
+                .filter(p -> "b".equals(p.label())).findFirst().orElseThrow().id();
+        partAnchorNodeId = question.primaryTopicNodeId();
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("QUESTION_PART: HINT anchors the PART, serves grounded, and never leaks scheme points")
+    void partHintAnchorsPartAndNeverLeaks() throws Exception {
+        seedPartQuestion();
+        UUID learner = freshLearner();
+
+        ClaAnswerView answer = cla.contextualAsk(learner,
+                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
+                ResponseMode.HINT, "how do I start this part?");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().kind()).isEqualTo("QUESTION_PART");
+        assertThat(answer.context().reference()).isEqualTo(partAId);
+        // the PART identity is resolved and exposed, not just the question
+        assertThat(answer.context().partLabel()).isEqualTo("a");
+        assertThat(answer.context().questionStem()).contains("Part a prompt");
+        assertThat(answer.context().questionMarks()).isEqualTo(2);
+        assertThat(answer.context().attempted()).isFalse();
+        // the deterministic anchor is the question's primary topic
+        assertThat(answer.topics()).hasSize(1);
+        // THE INVARIANT: HINT pre-attempt carries zero mark-scheme evidence —
+        // no synthesized scheme points (not attempted) AND no document chunks
+        assertThat(answer.citations())
+                .noneSatisfy(c -> assertThat(c.sourceType()).isEqualTo("MARK_SCHEME"));
+        assertThat(generator.lastContext.interventionPlan().rationale())
+                .contains("CLA HINT mode").contains("anchored question part (a)");
+    }
+
+    @Test
+    @Order(13)
+    @DisplayName("QUESTION_PART: unknown part / unknown root / unservable are indistinguishable 404s")
+    void partResolutionFailsClosed() throws Exception {
+        seedPartQuestion();
+
+        // unknown part id → 404, no existence oracle
+        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(),
+                ResourceContext.Kind.QUESTION_PART, null, null, null, UUID.randomUUID(), null ,
+                ResponseMode.HINT, "hint me"))
+                .isInstanceOf(NotFoundException.class);
+
+        // a root that is not a subject root → 404
+        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(),
+                ResourceContext.Kind.QUESTION_PART, UUID.randomUUID(), null, null, partAId, null ,
+                ResponseMode.HINT, "hint me"))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @Order(14)
+    @DisplayName("QUESTION_PART: CHECK pre-attempt 409 BEFORE generation; post-attempt feedback is part-scoped")
+    void partCheckGatingAndPartScopedFeedback() throws Exception {
+        seedPartQuestion();
+        UUID learner = freshLearner();
+
+        // pre-attempt: the deterministic gate refuses before any generation
+        int generatorCallsBefore = generator.calls.get();
+        assertThatThrownBy(() -> cla.contextualAsk(learner,
+                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
+                ResponseMode.CHECK, "check my part answer"))
+                .isInstanceOf(AttemptRequiredException.class);
+        assertThat(generator.calls.get()).isEqualTo(generatorCallsBefore);
+
+        // real learner attempt through the REAL assessment pipeline (both parts)
+        assessment.submitStructured(learner, new com.syllabai.assessment.dto.StructuredSubmitRequest(
+                partQuestionId,
+                List.of(
+                        new com.syllabai.assessment.dto.PartAnswerRequest(
+                                partAId, "ions are free to move when molten"),
+                        new com.syllabai.assessment.dto.PartAnswerRequest(
+                                partBId, "solid ions vibrate about fixed positions")),
+                30000L, 4, false, false));
+
+        // post-attempt: the gate unlocks and feedback grounds on the PART's points
+        ClaAnswerView answer = cla.contextualAsk(learner,
+                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
+                ResponseMode.CHECK, "check my part a answer");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().attempted()).isTrue();
+        assertThat(answer.context().mode()).isEqualTo(ResponseMode.CHECK);
+        var evidence = generator.lastContext.evidence();
+        assertThat(evidence).anySatisfy(item -> {
+            assertThat(item.source()).isEqualTo(com.syllabai.tutor.EvidenceItem.EvidenceSource.MARK_SCHEME);
+            // PART-SCOPED: this part's + question-level points only
+            assertThat(item.content()).contains("PART A POINT")
+                    .contains("QUESTION LEVEL POINT")
+                    .doesNotContain("SIBLING PART B POINT");
+        });
+
+        // the exchange landed in LIM with the PART identity as contextReference
+        List<TutorTopicEngagement> rows = engagements
+                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                        learner, java.time.Instant.now().minusSeconds(3600));
+        assertThat(rows).anySatisfy(row -> {
+            assertThat(row.surface()).isEqualTo("CONTEXTUAL_ASSISTANT");
+            assertThat(row.contextKind()).isEqualTo("QUESTION_PART");
+            assertThat(row.contextReference()).isEqualTo(partAId);
+            assertThat(row.responseMode()).isEqualTo("CHECK");
+            assertThat(row.nodeId()).isEqualTo(partAnchorNodeId);
+        });
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("QUESTION_PART over HTTP: missing partId is a 400; unknown part is a 404")
+    void partHttpFailSafe() throws Exception {
+        seedPartQuestion();
+        String email = "cla-http4-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test";
+        authService.register(new RegisterRequest(email, "ItLearner123!", "Http Learner 4"));
+        String token = authService.login(new LoginRequest(email, "ItLearner123!")).accessToken();
+
+        // missing partId for the declared kind → 400
+        HttpResponse<String> missingRef = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "QUESTION_PART", "mode": "HINT", "question": "hint me"}
+                """);
+        assertThat(missingRef.statusCode()).isEqualTo(400);
+
+        // unknown part → 404, same shape as an unauthorized one (no oracle)
+        HttpResponse<String> unknown = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "QUESTION_PART", "partId": "%s", "mode": "HINT", "question": "hint me"}
+                """.formatted(UUID.randomUUID()));
+        assertThat(unknown.statusCode()).isEqualTo(404);
+
+        // control: the real part IS served (the negatives above are not vacuous)
+        HttpResponse<String> ok = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "QUESTION_PART", "partId": "%s", "mode": "HINT", "question": "hint me"}
+                """.formatted(partAId));
+        assertThat(ok.statusCode()).isEqualTo(200);
+        assertThat(ok.body()).contains("QUESTION_PART").contains("\"partLabel\":\"a\"");
     }
 }

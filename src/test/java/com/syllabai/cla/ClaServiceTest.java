@@ -72,6 +72,8 @@ class ClaServiceTest {
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final QuestionVersionRepository questionVersions =
             mock(QuestionVersionRepository.class);
+    private final com.syllabai.assessment.QuestionPartRepository questionParts =
+            mock(com.syllabai.assessment.QuestionPartRepository.class);
     private final VectorRetriever vectorRetriever = mock(VectorRetriever.class);
     private final TutorGenerator generator = mock(TutorGenerator.class);
     private final CitationResolver citationResolver = mock(CitationResolver.class);
@@ -91,7 +93,7 @@ class ClaServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClaService(resolver, tools, graph, knowledgeNodes, markSchemes,
-                questionVersions, vectorRetriever,
+                questionVersions, questionParts, vectorRetriever,
                 new ReciprocalRankFusion(60), reranker, generator, citationResolver, policy,
                 events, 12, 6);
 
@@ -99,7 +101,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null);
+                null, null, 0, null, null, null);
 
         when(resolver.resolveKgTopic(ROOT, TOPIC, LEARNER)).thenReturn(context);
         when(graph.tree(ROOT)).thenReturn(tree());
@@ -174,7 +176,7 @@ class ClaServiceTest {
         vectorReturns(chunkEvidence("Ionic bonding is the electrostatic attraction…"));
 
         ClaAnswerView answer = service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC,
-                ROOT, TOPIC, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
+                ROOT, TOPIC, null, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
 
         assertThat(answer.refused()).isFalse();
         // deterministic anchor: exactly the resolved context, never model-invented
@@ -196,7 +198,7 @@ class ClaServiceTest {
     @DisplayName("chunk evidence is topic-stamped to the resolved anchor only")
     void chunkEvidenceStampsAnchorOnly() {
         vectorReturns(chunkEvidence("some validated chunk content"));
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.EXPLAIN, "why do ions form?");
 
         ArgumentCaptor<ContextAssembler.TutorContext> contextCaptor =
@@ -213,7 +215,7 @@ class ClaServiceTest {
     @DisplayName("EXPLAIN mode constrains the generation plan deterministically")
     void explainModeConstrainsPlan() {
         vectorReturns(chunkEvidence("validated chunk"));
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.EXPLAIN, "explain this topic");
 
         ArgumentCaptor<ContextAssembler.TutorContext> captor =
@@ -231,7 +233,7 @@ class ClaServiceTest {
     @DisplayName("SUMMARIZE mode constrains the plan and preserves provenance anchors")
     void summarizeModeConstrainsPlan() {
         vectorReturns(chunkEvidence("validated chunk"));
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.SUMMARIZE, "summarize this topic");
 
         ArgumentCaptor<ContextAssembler.TutorContext> captor =
@@ -247,7 +249,7 @@ class ClaServiceTest {
     @DisplayName("interaction evidence: deterministic anchors + full provenance, never raw text in learner memory")
     void publishesProvenanceBearingEvent() {
         vectorReturns(chunkEvidence("validated chunk"));
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.EXPLAIN, "explain ionic bonding");
 
         ArgumentCaptor<ClaInteractionEvent> captor =
@@ -271,7 +273,7 @@ class ClaServiceTest {
     void toolCompositionIsFixedAndTraced() {
         vectorReturns(chunkEvidence("validated chunk"));
         ClaAnswerView answer = service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC,
-                ROOT, TOPIC, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
+                ROOT, TOPIC, null, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
 
         assertThat(answer.tools()).extracting(ClaAnswerView.ToolTraceView::tool)
                 .containsExactly("GET_SPECIFICATION_CONTEXT", "GET_RELATED_CONCEPTS",
@@ -288,7 +290,7 @@ class ClaServiceTest {
     @DisplayName("blank question fails fast without touching any downstream component")
     void blankQuestionFailsFast() {
         assertThatThrownBy(() -> service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC,
-                ROOT, TOPIC, null, null , ResponseMode.EXPLAIN, "   "))
+                ROOT, TOPIC, null, null, null , ResponseMode.EXPLAIN, "   "))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(generator, never()).generate(any(), any());
         verify(events, never()).publishEvent(any());
@@ -305,7 +307,7 @@ class ClaServiceTest {
                 new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
                         new OwnLearnerState(List.of(skill), List.of(mis))));
 
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.EXPLAIN, "explain this");
 
         ArgumentCaptor<ContextAssembler.TutorContext> captor =
@@ -320,7 +322,7 @@ class ClaServiceTest {
     @DisplayName("the topic's validated specification structure joins the evidence deterministically")
     void specStructureJoinsEvidenceDeterministically() {
         vectorReturns(); // no chunks — the spec structure is the teachable prior
-        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null ,
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null ,
                 ResponseMode.EXPLAIN, "explain this topic");
 
         ArgumentCaptor<ContextAssembler.TutorContext> captor =
@@ -352,7 +354,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3.1", "understand how ions are formed",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null);
+                null, null, 0, null, null, null);
         when(resolver.resolveSpecificationPoint(ROOT, "IALCHEM2018-U1-T3.1", LEARNER))
                 .thenReturn(specContext);
         // the tools are context-keyed: stub the SPECIFICATION_POINT context too
@@ -369,7 +371,7 @@ class ClaServiceTest {
                         new OwnLearnerState(List.of(), List.of())));
 
         ClaAnswerView answer = service.contextualAsk(LEARNER,
-                ResourceContext.Kind.SPECIFICATION_POINT, ROOT, null, null,
+                ResourceContext.Kind.SPECIFICATION_POINT, ROOT, null, null, null,
                 "IALCHEM2018-U1-T3.1", ResponseMode.EXPLAIN, "explain this spec point");
 
         assertThat(answer.refused()).isFalse();
@@ -406,7 +408,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass of 0.25 mol of CaCO3", "Calculate", 2, "4CH0/1C", false);
+                "Calculate the mass of 0.25 mol of CaCO3", "Calculate", 2, "4CH0/1C", false, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.HINT))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -424,7 +426,7 @@ class ClaServiceTest {
 
         ClaAnswerView answer = service.contextualAsk(LEARNER,
                 ResourceContext.Kind.PAST_PAPER_QUESTION, null, null,
-                questionContext.reference(), null , ResponseMode.HINT, "give me the mass");
+                questionContext.reference(), null, null , ResponseMode.HINT, "give me the mass");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().attempted()).isFalse();
@@ -449,14 +451,14 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass", "Calculate", 2, "4CH0/1C", false);
+                "Calculate the mass", "Calculate", 2, "4CH0/1C", false, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
 
         assertThatThrownBy(() -> service.contextualAsk(LEARNER,
                 ResourceContext.Kind.PAST_PAPER_QUESTION, null, null,
-                questionContext.reference(), null , ResponseMode.CHECK, "check my answer"))
+                questionContext.reference(), null, null , ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
         // deterministic refusal happened BEFORE the vector retriever or generator ran
         verify(vectorRetriever, never()).retrieve(any(), anyInt());
@@ -472,7 +474,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass", "Calculate", 2, "4CH0/1C", true);
+                "Calculate the mass", "Calculate", 2, "4CH0/1C", true, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -504,7 +506,7 @@ class ClaServiceTest {
 
         ClaAnswerView answer = service.contextualAsk(LEARNER,
                 ResourceContext.Kind.PAST_PAPER_QUESTION, null, null,
-                questionContext.reference(), null , ResponseMode.CHECK, "check my answer");
+                questionContext.reference(), null, null , ResponseMode.CHECK, "check my answer");
 
         assertThat(answer.refused()).isFalse();
         // the synthesized scheme-point evidence LEADS the sources the generator saw
@@ -524,17 +526,147 @@ class ClaServiceTest {
     @DisplayName("question context: unsupported kind is a 400 (closed enum)")
     void unsupportedKindFailsClosed() {
         assertThatThrownBy(() -> service.contextualAsk(LEARNER,
-                ResourceContext.Kind.NOTE_SECTION, null, null, null, null ,
+                ResourceContext.Kind.NOTE_SECTION, null, null, null, null, null ,
                 ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(com.syllabai.shared.BadRequestException.class);
         assertThatThrownBy(() -> service.contextualAsk(LEARNER,
-                ResourceContext.Kind.KG_TOPIC, null, null, null, null ,
+                ResourceContext.Kind.KG_TOPIC, null, null, null, null, null ,
                 ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(com.syllabai.shared.BadRequestException.class);
         assertThatThrownBy(() -> service.contextualAsk(LEARNER,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, null, null ,
+                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, null, null, null ,
                 ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(com.syllabai.shared.BadRequestException.class);
         verify(generator, never()).generate(any(), any());
+    }
+
+    // ── QUESTION_PART: part-level anchor + part-scoped marking evidence ──────
+
+    @Test
+    @DisplayName("QUESTION_PART: missing partId is a 400 (closed-enum request shape)")
+    void partContextRequiresPartId() {
+        assertThatThrownBy(() -> service.contextualAsk(LEARNER,
+                ResourceContext.Kind.QUESTION_PART, null, null, null, null, null ,
+                ResponseMode.HINT, "hint me"))
+                .isInstanceOf(com.syllabai.shared.BadRequestException.class);
+        verify(generator, never()).generate(any(), any());
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART CHECK post-attempt: scheme evidence is PART-SCOPED — the sibling part's points never enter SOURCES")
+    void partCheckSchemeEvidenceIsPartScoped() {
+        UUID partId = UUID.randomUUID();
+        UUID siblingPartId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        ResourceContext partContext = new ResourceContext(
+                ResourceContext.Kind.QUESTION_PART, partId, TOPIC, ROOT, "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and structure",
+                new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                "State why ionic compounds conduct when molten.", "State", 2, "4CH0/1C",
+                true, "a");
+        when(resolver.resolveQuestionPart(partId, null, LEARNER)).thenReturn(partContext);
+        when(tools.enabledFor(ResourceContext.Kind.QUESTION_PART, ResponseMode.CHECK))
+                .thenReturn(List.of(ClaToolRegistry.Tool.values()));
+        when(vectorRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
+        when(tools.specificationContext(org.mockito.ArgumentMatchers.eq(partContext), any()))
+                .thenReturn(new ToolResultWith<>(ClaToolRegistry.Tool.GET_SPECIFICATION_CONTEXT,
+                        "args", List.of(new SpecAnchor(ROOT, "IALCHEM2018", "SUBJECT",
+                                "IAL Chemistry", 0))));
+        when(tools.relatedConcepts(partContext)).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_RELATED_CONCEPTS, "args",
+                        new RelatedConcepts(List.of(), List.of())));
+        when(tools.learnerState(eq(LEARNER), any())).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
+                        new OwnLearnerState(List.of(), List.of())));
+
+        // canonical part → version → question FK chain
+        com.syllabai.assessment.QuestionPart part =
+                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionPart.class);
+        com.syllabai.assessment.QuestionVersion version =
+                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionVersion.class);
+        when(version.questionId()).thenReturn(questionId);
+        when(part.questionVersion()).thenReturn(version);
+        when(questionParts.findById(partId)).thenReturn(java.util.Optional.of(part));
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(questionId))
+                .thenReturn(List.of(version));
+
+        MarkScheme scheme = org.mockito.Mockito.mock(MarkScheme.class);
+        when(scheme.validationState()).thenReturn(MarkScheme.ValidationState.VALIDATED);
+        MarkPoint ownPoint = org.mockito.Mockito.mock(MarkPoint.class);
+        when(ownPoint.questionPartId()).thenReturn(partId);
+        when(ownPoint.ref()).thenReturn("M1");
+        when(ownPoint.marks()).thenReturn(1);
+        when(ownPoint.text()).thenReturn("ions are free to move in the molten state");
+        when(ownPoint.ordering()).thenReturn(1);
+        MarkPoint siblingPoint = org.mockito.Mockito.mock(MarkPoint.class);
+        when(siblingPoint.questionPartId()).thenReturn(siblingPartId);
+        when(siblingPoint.ref()).thenReturn("M2");
+        when(siblingPoint.marks()).thenReturn(1);
+        when(siblingPoint.text()).thenReturn("SIBLING PART POINT — must not appear");
+        when(siblingPoint.ordering()).thenReturn(2);
+        MarkPoint questionLevelPoint = org.mockito.Mockito.mock(MarkPoint.class);
+        when(questionLevelPoint.questionPartId()).thenReturn(null);
+        when(questionLevelPoint.ref()).thenReturn("A1");
+        when(questionLevelPoint.marks()).thenReturn(2);
+        when(questionLevelPoint.text()).thenReturn("correct overall conclusion");
+        when(questionLevelPoint.ordering()).thenReturn(3);
+        when(scheme.points()).thenReturn(List.of(siblingPoint, questionLevelPoint, ownPoint));
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
+                .thenReturn(java.util.Optional.of(scheme));
+
+        ClaAnswerView answer = service.contextualAsk(LEARNER,
+                ResourceContext.Kind.QUESTION_PART, null, null, null, partId, null ,
+                ResponseMode.CHECK, "check my part answer");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().kind()).isEqualTo("QUESTION_PART");
+        assertThat(answer.context().reference()).isEqualTo(partId);
+        assertThat(answer.context().partLabel()).isEqualTo("a");
+
+        ArgumentCaptor<ContextAssembler.TutorContext> captor =
+                ArgumentCaptor.forClass(ContextAssembler.TutorContext.class);
+        verify(generator).generate(any(), captor.capture());
+        List<EvidenceItem> evidence = captor.getValue().evidence();
+        assertThat(evidence).isNotEmpty();
+        // anchor first: the PART prompt (explicitly labeled), not the question stem
+        assertThat(evidence.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(evidence.get(0).content()).startsWith("Part (a)").contains("2 marks");
+        // the synthesized scheme evidence admits THIS part's + question-level points…
+        assertThat(evidence.get(1).content()).contains("ions are free to move in the molten state")
+                .contains("correct overall conclusion")
+                // …and NEVER the sibling part's marking points
+                .doesNotContain("SIBLING PART POINT");
+    }
+
+    @Test
+    @DisplayName("partAllowsPoint: part contexts admit own + question-level points only")
+    void partAllowsPointMatrix() {
+        UUID partId = UUID.randomUUID();
+        UUID sibling = UUID.randomUUID();
+        ResourceContext part = new ResourceContext(
+                ResourceContext.Kind.QUESTION_PART, partId, TOPIC, ROOT, "4CH1",
+                "code", "title",
+                new ResourceContext.CurriculumVersionInfo("v", "b", "q", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, "a");
+        ResourceContext question = new ResourceContext(
+                ResourceContext.Kind.PAST_PAPER_QUESTION, UUID.randomUUID(), TOPIC, ROOT, "4CH1",
+                "code", "title",
+                new ResourceContext.CurriculumVersionInfo("v", "b", "q", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, null);
+        MarkPoint own = org.mockito.Mockito.mock(MarkPoint.class);
+        when(own.questionPartId()).thenReturn(partId);
+        MarkPoint other = org.mockito.Mockito.mock(MarkPoint.class);
+        when(other.questionPartId()).thenReturn(sibling);
+        MarkPoint whole = org.mockito.Mockito.mock(MarkPoint.class);
+        when(whole.questionPartId()).thenReturn(null);
+
+        assertThat(ClaService.partAllowsPoint(part, own)).isTrue();
+        assertThat(ClaService.partAllowsPoint(part, whole)).isTrue();
+        assertThat(ClaService.partAllowsPoint(part, other)).isFalse();
+        // question-level contexts admit everything (unchanged behavior)
+        assertThat(ClaService.partAllowsPoint(question, own)).isTrue();
+        assertThat(ClaService.partAllowsPoint(question, other)).isTrue();
+        assertThat(ClaService.partAllowsPoint(question, whole)).isTrue();
     }
 }

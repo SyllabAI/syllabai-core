@@ -46,7 +46,8 @@ public record ClaAnswerView(
             String questionCommandWord,
             int questionMarks,
             String paperCode,
-            Boolean attempted) {
+            Boolean attempted,
+            String partLabel) {
 
         public static ContextView of(ResourceContext context, ResponseMode mode) {
             return new ContextView(
@@ -57,7 +58,8 @@ public record ClaAnswerView(
                     context.curriculumVersion().qualification(),
                     context.validationState(), mode,
                     context.questionStem(), context.questionCommandWord(),
-                    context.questionMarks(), context.paperCode(), context.attempted());
+                    context.questionMarks(), context.paperCode(), context.attempted(),
+                    context.partLabel());
         }
     }
 

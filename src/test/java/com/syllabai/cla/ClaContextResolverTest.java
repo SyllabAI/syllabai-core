@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.assessment.QuestionPartRepository;
 import com.syllabai.assessment.QuestionRepository;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.ServableQuestionService;
@@ -47,10 +48,11 @@ class ClaContextResolverTest {
     private final QuestionVersionRepository questionVersions =
             mock(QuestionVersionRepository.class);
     private final ServableQuestionService servableQuestions = mock(ServableQuestionService.class);
+    private final QuestionPartRepository questionParts = mock(QuestionPartRepository.class);
     private final AttemptRepository attempts = mock(AttemptRepository.class);
 
     private final ClaContextResolver resolver = new ClaContextResolver(graph, nodes, subjects,
-            questions, examPapers, questionVersions, servableQuestions, attempts);
+            questions, examPapers, questionVersions, questionParts, servableQuestions, attempts);
 
     private CurriculumVersion version;
 
@@ -64,6 +66,7 @@ class ClaContextResolverTest {
         when(graph.tree(ROOT)).thenReturn(tree());
 
         KnowledgeNode topicNode = org.mockito.Mockito.mock(KnowledgeNode.class);
+        when(topicNode.id()).thenReturn(TOPIC);
         when(topicNode.validationStatus()).thenReturn(KnowledgeNode.ValidationStatus.VALIDATED);
         when(topicNode.code()).thenReturn("IALCHEM2018-U1-T3");
         when(topicNode.title()).thenReturn("Bonding and structure");
@@ -200,5 +203,188 @@ class ClaContextResolverTest {
                 ROOT, "CONCEPT-x", LEARNER))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("validated");
+    }
+
+    // ── QUESTION_PART: the part-level anchor resolves through canonical FKs ──
+
+    private static final String PART_LABEL = "a";
+
+    private com.syllabai.assessment.QuestionPart partOnCurrentVersion(
+            UUID partId, UUID questionId, UUID versionId, UUID paperId) {
+        com.syllabai.assessment.QuestionPart part =
+                mock(com.syllabai.assessment.QuestionPart.class);
+        when(part.id()).thenReturn(partId);
+        when(part.label()).thenReturn(PART_LABEL);
+        when(part.prompt()).thenReturn("State why ionic compounds conduct when molten.");
+        when(part.commandWord()).thenReturn("State");
+        when(part.marks()).thenReturn(2);
+
+        com.syllabai.assessment.QuestionVersion version =
+                mock(com.syllabai.assessment.QuestionVersion.class);
+        when(version.id()).thenReturn(versionId);
+        when(version.questionId()).thenReturn(questionId);
+        when(version.validationState())
+                .thenReturn(com.syllabai.assessment.QuestionVersion.ValidationState.VALIDATED);
+        when(version.marks()).thenReturn(6);
+        when(part.questionVersion()).thenReturn(version);
+
+        com.syllabai.assessment.Question question =
+                mock(com.syllabai.assessment.Question.class);
+        when(question.id()).thenReturn(questionId);
+        when(question.active()).thenReturn(true);
+        when(question.examPaperId()).thenReturn(paperId);
+        when(question.primaryTopicNodeId()).thenReturn(TOPIC);
+        when(question.commandWord()).thenReturn("Explain");
+        when(questions.findById(questionId)).thenReturn(Optional.of(question));
+
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(questionId))
+                .thenReturn(List.of(version));
+        return part;
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART resolves through part → version → question → subject → topic")
+    void resolvesQuestionPart() {
+        UUID partId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID paperId = UUID.randomUUID();
+        com.syllabai.assessment.QuestionPart part =
+                partOnCurrentVersion(partId, questionId, versionId, paperId);
+        when(questionParts.findById(partId)).thenReturn(Optional.of(part));
+
+        com.syllabai.curriculum.Subject subject = mock(com.syllabai.curriculum.Subject.class);
+        when(subject.id()).thenReturn(UUID.randomUUID());
+        when(subject.code()).thenReturn("4CH1");
+        when(subject.knowledgeNodeId()).thenReturn(ROOT);
+        when(subject.curriculumVersion()).thenReturn(version);
+        com.syllabai.assessment.ExamPaper paper = mock(com.syllabai.assessment.ExamPaper.class);
+        when(paper.subjectId()).thenReturn(UUID.randomUUID());
+        when(paper.paperCode()).thenReturn("4CH0/2C");
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(subjects.findById(paper.subjectId())).thenReturn(Optional.of(subject));
+        when(attempts.existsByLearnerIdAndQuestionId(LEARNER, questionId)).thenReturn(false);
+        when(servableQuestions.isServable(questionId)).thenReturn(true);
+
+        ResourceContext context = resolver.resolveQuestionPart(partId, null, LEARNER);
+
+        assertThat(context.kind()).isEqualTo(ResourceContext.Kind.QUESTION_PART);
+        assertThat(context.reference()).isEqualTo(partId);
+        assertThat(context.topicNodeId()).isEqualTo(TOPIC);
+        assertThat(context.rootId()).isEqualTo(ROOT);
+        assertThat(context.subjectCode()).isEqualTo("4CH1");
+        assertThat(context.topicCode()).isEqualTo("IALCHEM2018-U1-T3");
+        // the PART is what the learner is looking at: label, prompt, part marks
+        assertThat(context.partLabel()).isEqualTo(PART_LABEL);
+        assertThat(context.questionStem()).contains("ionic compounds conduct when molten");
+        assertThat(context.questionMarks()).isEqualTo(2);
+        assertThat(context.paperCode()).isEqualTo("4CH0/2C");
+        assertThat(context.attempted()).isFalse();
+        assertThat(context.validationState()).isEqualTo("VALIDATED");
+        assertThat(context.curriculumVersion().code()).isEqualTo("IALCHEM2018");
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART fail-closed: unknown part is a 404, no existence oracle")
+    void unknownPartFailsClosed() {
+        assertThatThrownBy(() -> resolver.resolveQuestionPart(UUID.randomUUID(), null, LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART relationship gate: a part of a superseded version is a 404")
+    void partOfSupersededVersionFailsClosed() {
+        UUID partId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        UUID paperId = UUID.randomUUID();
+        com.syllabai.assessment.QuestionPart part =
+                partOnCurrentVersion(partId, questionId, UUID.randomUUID()/*its version*/, paperId);
+        when(questionParts.findById(partId)).thenReturn(Optional.of(part));
+        // the question's CURRENT version is a DIFFERENT version — relationship mismatch
+        com.syllabai.assessment.QuestionVersion current =
+                mock(com.syllabai.assessment.QuestionVersion.class);
+        when(current.id()).thenReturn(UUID.randomUUID());
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(questionId))
+                .thenReturn(List.of(current));
+
+        assertThatThrownBy(() -> resolver.resolveQuestionPart(partId, null, LEARNER))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("current version");
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART fail-closed: unservable question is an indistinguishable 404")
+    void partOfUnservableQuestionFailsClosed() {
+        UUID partId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID paperId = UUID.randomUUID();
+        com.syllabai.assessment.QuestionPart part =
+                partOnCurrentVersion(partId, questionId, versionId, paperId);
+        when(questionParts.findById(partId)).thenReturn(Optional.of(part));
+        when(servableQuestions.isServable(questionId)).thenReturn(false);
+
+        assertThatThrownBy(() -> resolver.resolveQuestionPart(partId, null, LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART fail-closed: a root of ANOTHER subject is a foreign-subject 404")
+    void partWithForeignRootFailsClosed() {
+        UUID partId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID paperId = UUID.randomUUID();
+        UUID ownSubjectId = UUID.randomUUID();
+        com.syllabai.assessment.QuestionPart part =
+                partOnCurrentVersion(partId, questionId, versionId, paperId);
+        when(questionParts.findById(partId)).thenReturn(Optional.of(part));
+        when(servableQuestions.isServable(questionId)).thenReturn(true);
+
+        com.syllabai.curriculum.Subject own = mock(com.syllabai.curriculum.Subject.class);
+        when(own.id()).thenReturn(ownSubjectId);
+        when(own.knowledgeNodeId()).thenReturn(ROOT);
+        com.syllabai.assessment.ExamPaper paper = mock(com.syllabai.assessment.ExamPaper.class);
+        when(paper.subjectId()).thenReturn(UUID.randomUUID());
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(subjects.findById(paper.subjectId())).thenReturn(Optional.of(own));
+
+        // the client's root belongs to a DIFFERENT subject — the mismatch is a 404
+        com.syllabai.curriculum.Subject other = mock(com.syllabai.curriculum.Subject.class);
+        when(other.id()).thenReturn(UUID.randomUUID());
+        when(subjects.findByKnowledgeNodeId(ROOT)).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> resolver.resolveQuestionPart(partId, ROOT, LEARNER))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("in this subject");
+    }
+
+    @Test
+    @DisplayName("QUESTION_PART fail-closed: a supplied root that is no subject is a 404")
+    void partWithUnknownRootFailsClosed() {
+        UUID partId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        UUID paperId = UUID.randomUUID();
+        com.syllabai.assessment.QuestionPart part =
+                partOnCurrentVersion(partId, questionId, versionId, paperId);
+        when(questionParts.findById(partId)).thenReturn(Optional.of(part));
+        when(servableQuestions.isServable(questionId)).thenReturn(true);
+
+        // the anchor spine must resolve (the root check happens after it)
+        com.syllabai.curriculum.Subject own = mock(com.syllabai.curriculum.Subject.class);
+        when(own.id()).thenReturn(UUID.randomUUID());
+        when(own.knowledgeNodeId()).thenReturn(ROOT);
+        com.syllabai.assessment.ExamPaper paper = mock(com.syllabai.assessment.ExamPaper.class);
+        when(paper.subjectId()).thenReturn(UUID.randomUUID());
+        when(examPapers.findById(paperId)).thenReturn(Optional.of(paper));
+        when(subjects.findById(paper.subjectId())).thenReturn(Optional.of(own));
+
+        UUID unknownRoot = UUID.randomUUID();
+        when(subjects.findByKnowledgeNodeId(unknownRoot)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> resolver.resolveQuestionPart(partId, unknownRoot, LEARNER))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("subject root");
     }
 }
