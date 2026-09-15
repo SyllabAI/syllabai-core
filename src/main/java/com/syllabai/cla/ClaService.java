@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Comparator;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,8 @@ import org.springframework.stereotype.Service;
  * ResourceContext (server-resolved, fail-closed)
  *   → bounded read-only tools (fixed composition, traced)
  *   → deterministic topic anchors (the resolved context — never model-invented)
- *   → hybrid retrieval: anchor KG node (authoritative prior) + validated chunks
+ *   → hybrid retrieval: anchor KG node + its validated spec structure (the
+ *     authoritative prior) + validated chunks
  *   → reciprocal-rank fusion → rerank → evidence cap
  *   → grounding gate → mode-constrained grounded generation (Tutor stack)
  *   → citation resolution (same validation stack as the Tutor)
@@ -80,6 +82,16 @@ public class ClaService {
             topic yet — there is no matching source content to ground an answer, and
             SyllabAI never guesses. Try rephrasing within the topic, or ask your
             teacher to ingest the relevant material.""";
+
+    /**
+     * How many of the resolved topic's DIRECT VALIDATED subtopic learning
+     * outcomes may join the deterministic evidence (§10.4 evaluation finding:
+     * a bare topic title is honest but not teachable — the specification
+     * structure beneath the topic is curriculum truth and carries the actual
+     * learning outcomes). Bounded so the evidence cap still leaves room for
+     * validated chunks when retrieval has content to offer.
+     */
+    static final int SPEC_STRUCTURE_LIMIT = 4;
 
     private final ClaContextResolver resolver;
     private final ClaToolRegistry tools;
@@ -202,11 +214,15 @@ public class ClaService {
                 new KnowledgeRetriever.KnowledgeContext(
                         anchors, prerequisiteLinks, misconceptionSignals);
 
-        // 4. hybrid evidence: the anchor as authoritative prior + validated chunks
+        // 4. hybrid evidence: the anchor as authoritative prior, joined by the
+        //    topic's own validated specification structure (direct subtopic
+        //    learning outcomes — deterministic, resolved from the same subject
+        //    tree, never retrieval, never model-invented) + validated chunks
         List<EvidenceItem> kgCandidates = new ArrayList<>();
         anchors.stream().map(topic -> EvidenceItem.fromNode(topic.nodeId(), topic.code(),
                         "TOPIC", topic.title(), nodeDescription(context), topic.matchScore()))
                 .forEach(kgCandidates::add);
+        kgCandidates.addAll(specStructureEvidence(context, subjectTree));
         List<EvidenceItem> vectorList = vectorRetriever.retrieve(question, vectorCandidates);
         List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorList));
         List<EvidenceItem> evidence = reranker.rerank(question, fused)
@@ -378,6 +394,55 @@ public class ClaService {
         return knowledgeNodes.findById(context.topicNodeId())
                 .map(node -> node.description())
                 .orElse(null);
+    }
+
+    /**
+     * Deterministic specification-structure evidence (contract §5: the context
+     * is the authoritative prior): the resolved topic's DIRECT VALIDATED
+     * subtopic learning outcomes, code-ordered, bounded by
+     * {@link #SPEC_STRUCTURE_LIMIT}. These are curriculum truth resolved from
+     * the same subject tree the context was resolved from — no retrieval, no
+     * model input, provenance-bearing (each item cites its own node id).
+     * SUGGESTED/UNVALIDATED nodes are invisible here exactly as they are to
+     * context resolution (§1.2 gate parity).
+     */
+    private List<EvidenceItem> specStructureEvidence(ResourceContext context,
+                                                     NodeView subjectTree) {
+        NodeView topic = findNode(subjectTree, context.topicNodeId());
+        if (topic == null || topic.children() == null || topic.children().isEmpty()) {
+            return List.of();
+        }
+        return topic.children().stream()
+                .filter(c -> "SUBTOPIC".equals(c.type()))
+                .filter(c -> "VALIDATED".equals(c.validationStatus()))
+                .sorted(Comparator.comparing(NodeView::code,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(SPEC_STRUCTURE_LIMIT)
+                .map(c -> EvidenceItem.fromNode(c.id(), c.code(), c.type(),
+                        c.title(), c.description(), 0.9)
+                        // attribution stays on the RESOLVED anchor: the learner
+                        // asked about the topic, not each subtopic (LIM topic
+                        // attribution, telemetry and NBA all key on this)
+                        .withTopicIds(List.of(context.topicNodeId())))
+                .toList();
+    }
+
+    private NodeView findNode(NodeView node, UUID id) {
+        if (node == null) {
+            return null;
+        }
+        if (id.equals(node.id())) {
+            return node;
+        }
+        if (node.children() != null) {
+            for (NodeView child : node.children()) {
+                NodeView found = findNode(child, id);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     /**

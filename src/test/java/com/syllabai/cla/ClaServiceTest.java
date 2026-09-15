@@ -84,6 +84,10 @@ class ClaServiceTest {
 
     private ResourceContext context;
 
+    private UUID subtopicA;
+    private UUID subtopicB;
+    private UUID suggestedChild;
+
     @BeforeEach
     void setUp() {
         service = new ClaService(resolver, tools, graph, knowledgeNodes, markSchemes,
@@ -137,8 +141,23 @@ class ClaServiceTest {
     }
 
     private NodeView tree() {
+        // the resolved topic's validated specification structure: two subtopic
+        // learning outcomes + one SUGGESTED concept child (gate parity: the
+        // SUGGESTED node is invisible to evidence exactly as to resolution)
+        subtopicA = UUID.randomUUID();
+        subtopicB = UUID.randomUUID();
+        suggestedChild = UUID.randomUUID();
+        NodeView subA = new NodeView(subtopicA, "IALCHEM2018-U1-T3.2", "SUBTOPIC",
+                "understand covalent bonding in terms of electrostatic attraction",
+                null, "VALIDATED", null, List.of());
+        NodeView subB = new NodeView(subtopicB, "IALCHEM2018-U1-T3.1", "SUBTOPIC",
+                "understand how ions are formed by electron loss or gain",
+                null, "VALIDATED", null, List.of());
+        NodeView suggested = new NodeView(suggestedChild, "CONCEPT-x", "CONCEPT",
+                "some retrieval-graph concept", null, "SUGGESTED", null, List.of());
         NodeView topic = new NodeView(TOPIC, "IALCHEM2018-U1-T3", "TOPIC",
-                "Bonding and structure", "Ionic and covalent bonding", "VALIDATED", null, List.of());
+                "Bonding and structure", "Ionic and covalent bonding", "VALIDATED", null,
+                List.of(subA, subB, suggested));
         NodeView unit = new NodeView(UUID.randomUUID(), "IALCHEM2018-U1", "UNIT", "Unit 1",
                 null, "VALIDATED", null, List.of(topic));
         return new NodeView(ROOT, "IALCHEM2018", "SUBJECT", "IAL Chemistry",
@@ -295,6 +314,33 @@ class ClaServiceTest {
         String brief = captor.getValue().learnerBrief();
         assertThat(brief).contains("measured mastery");
         assertThat(brief).contains("active misconception");
+    }
+
+    @Test
+    @DisplayName("the topic's validated specification structure joins the evidence deterministically")
+    void specStructureJoinsEvidenceDeterministically() {
+        vectorReturns(); // no chunks — the spec structure is the teachable prior
+        service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null,
+                ResponseMode.EXPLAIN, "explain this topic");
+
+        ArgumentCaptor<ContextAssembler.TutorContext> captor =
+                ArgumentCaptor.forClass(ContextAssembler.TutorContext.class);
+        verify(generator).generate(any(), captor.capture());
+        List<EvidenceItem> evidence = captor.getValue().evidence();
+        // anchor first, then the topic's validated subtopic learning outcomes
+        // in code order — the SUGGESTED concept child is never evidence
+        assertThat(evidence).hasSize(3);
+        assertThat(evidence.get(0).nodeId()).isEqualTo(TOPIC);
+        assertThat(evidence.get(1).nodeId()).isEqualTo(subtopicB); // T3.1 < T3.2
+        assertThat(evidence.get(2).nodeId()).isEqualTo(subtopicA);
+        assertThat(evidence).allSatisfy(item ->
+                assertThat(item.source()).isEqualTo(EvidenceItem.EvidenceSource.KNOWLEDGE_NODE));
+        // spec-structure evidence is attributed to the RESOLVED anchor (the
+        // learner asked about the topic, not each subtopic)
+        assertThat(evidence).allSatisfy(item ->
+                assertThat(item.topicIds()).containsExactly(TOPIC));
+        assertThat(evidence).extracting(EvidenceItem::nodeId)
+                .doesNotContain(suggestedChild);
     }
 
     private static EvidenceItem chunkEvidence(String content) {
