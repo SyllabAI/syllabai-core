@@ -20,7 +20,16 @@ public interface QuestionPartRepository extends JpaRepository<QuestionPart, UUID
      * models that hold only the part id outside a transaction (the CLA
      * pipeline is deliberately non-transactional with OSIV off; an entity
      * traversal here would LazyInitializationException in production).
+     *
+     * <p>Native SQL deliberately: the derived JPQL path cannot name the
+     * question id (QuestionVersion exposes the {@code question} association,
+     * not a persistent {@code questionId} property — a derived query naming it
+     * fails named-query validation at BOOT and kills the deploy). The schema
+     * FK chain is stable: question_parts.question_version_id →
+     * question_versions.question_id.</p>
      */
-    @Query("select p.questionVersion.questionId from QuestionPart p where p.id = :partId")
+    @Query(value = "select v.question_id from question_parts p "
+            + "join question_versions v on v.id = p.question_version_id "
+            + "where p.id = :partId", nativeQuery = true)
     Optional<UUID> findQuestionIdByPartId(@Param("partId") UUID partId);
 }
