@@ -96,6 +96,17 @@ public class ContentController {
     }
 
     /**
+     * Sprint 2 §7 queue intelligence: the v2 enrichment PLUS mark-scheme
+     * linkage, curriculum mapping coverage and novel-coverage signals, with
+     * each paper's human-legible rank reasons. Deterministic ordering — a
+     * triage aid that never promotes anything or weakens any gate. Read-only.
+     */
+    @GetMapping("/review-queue-v3")
+    public ContentReviewService.EnrichedReviewQueueViewV3 reviewQueueV3() {
+        return review.enrichedReviewQueueV3();
+    }
+
+    /**
      * Full review view of one paper: every question version with its content,
      * answer key and mark-scheme state — a reviewer must see WHAT they validate
      * (§7). Read-only; the serving boundary is untouched.

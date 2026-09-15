@@ -30,4 +30,28 @@ public interface HumanMarkRepository extends JpaRepository<HumanMark, UUID> {
             order by h.createdAt asc
             """)
     List<HumanMark> findByPaperOrderByCreatedAtAsc(@Param("paperId") UUID paperId);
+
+    /**
+     * Marking throughput lane (sprint 2 §6): every human mark for a batch of
+     * answers in ONE query, oldest first — the caller keeps the newest per
+     * answer in memory. Read-only.
+     */
+    @Query("""
+            select h from HumanMark h
+            where h.answer.id in :answerIds
+            order by h.createdAt asc
+            """)
+    List<HumanMark> findByAnswerIdsOrderByCreatedAtAsc(
+            @Param("answerIds") java.util.Collection<UUID> answerIds);
+
+    /**
+     * Marking throughput lane (sprint 2 §6): authoritative human marks recorded
+     * since a point in time — the throughput windows (24h / 7d). One count per
+     * call; read-only.
+     */
+    @Query("""
+            select count(h) from HumanMark h
+            where h.createdAt >= :since
+            """)
+    long countSince(@Param("since") java.time.Instant since);
 }

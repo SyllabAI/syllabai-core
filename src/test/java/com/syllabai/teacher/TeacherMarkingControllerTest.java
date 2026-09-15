@@ -51,6 +51,8 @@ class TeacherMarkingControllerTest {
     private final AnswerRepository answers = mock(AnswerRepository.class);
     private final SmartMarkService smartMarkService = mock(SmartMarkService.class);
     private final TeacherMarkingService teacherMarkingService = mock(TeacherMarkingService.class);
+    private final TeacherMarkingQueueService markingQueueService =
+            mock(TeacherMarkingQueueService.class);
     private final SmartMarkResultRepository smartMarkResults = mock(SmartMarkResultRepository.class);
     private final HumanMarkRepository humanMarks = mock(HumanMarkRepository.class);
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations =
@@ -58,8 +60,8 @@ class TeacherMarkingControllerTest {
     private final UserRepository users = mock(UserRepository.class);
 
     private final TeacherMarkingController controller = new TeacherMarkingController(
-            answers, smartMarkService, teacherMarkingService, smartMarkResults,
-            humanMarks, agreementEvaluations, users);
+            answers, smartMarkService, teacherMarkingService, markingQueueService,
+            smartMarkResults, humanMarks, agreementEvaluations, users);
 
     private final Question question;
     private final QuestionPart part;

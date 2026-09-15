@@ -25,10 +25,13 @@ import com.syllabai.teacher.ingestion.GlmOcrBridgeRecordRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -410,6 +413,93 @@ public class ContentReviewService {
      */
     @Transactional(readOnly = true)
     public EnrichedReviewQueueView enrichedReviewQueue() {
+        List<EnrichedPaperSummary> enriched = baseEnrichment();
+        return new EnrichedReviewQueueView(enriched, suggestedVersionCount(enriched),
+                suggestedSchemeCount(enriched));
+    }
+
+    /**
+     * Sprint 2 §7 review-queue v3: the v2 quality enrichment PLUS the
+     * reviewability and value signals a reviewer actually triages by —
+     * mark-scheme linkage completeness (can the answer key be checked against
+     * source?), curriculum mapping coverage (how much of the paper is already
+     * placed on the real syllabus?) and novel coverage (how many topics would
+     * this paper let the pilot practise that validated content cannot yet?).
+     *
+     * <p>Ordering is deterministic and documented, never a fabricated
+     * confidence: reconciled-OK papers first (lowest reconciliation risk),
+     * then scheme-linkage ratio, mapping ratio, novel-topic count, mean
+     * extraction confidence, fewer findings, newest, then id. Each paper
+     * carries its human-legible rank REASONS — only signals that actually
+     * hold are stated; absent signals stay null and are never zero-filled.
+     * Ordering changes which paper a reviewer SEES first; it never promotes
+     * anything or weakens any gate.</p>
+     */
+    @Transactional(readOnly = true)
+    public EnrichedReviewQueueViewV3 enrichedReviewQueueV3() {
+        List<EnrichedPaperSummary> base = baseEnrichment();
+
+        // §7 signals — one batched query each, grouped per paper in memory
+        Map<UUID, Long> questionsWithScheme = new HashMap<>();
+        for (Object[] row : markSchemes.countQuestionsWithSchemesByPaper()) {
+            questionsWithScheme.put((UUID) row[0], (Long) row[1]);
+        }
+        Map<UUID, long[]> questionCensus = new HashMap<>();   // [total, mapped]
+        for (Object[] row : questions.countAndMappedByPaper()) {
+            questionCensus.put((UUID) row[0],
+                    new long[]{(Long) row[1], (Long) row[2]});
+        }
+        Map<UUID, Set<UUID>> mappedTopicsByPaper = new HashMap<>();
+        for (Object[] row : questionTopics.findMappingsByPaper()) {
+            mappedTopicsByPaper.computeIfAbsent((UUID) row[0], k -> new HashSet<>())
+                    .add((UUID) row[1]);
+        }
+
+        // the topics the pilot can already practise: primary topics AND mapped
+        // topics of every VALIDATED paper's questions (both are curriculum
+        // node ids once a question serves — the §1 census proved that)
+        Set<UUID> validatedIds = examPapers.findValidated().stream()
+                .map(ExamPaper::id).collect(Collectors.toSet());
+        Set<UUID> practicableTopics = new HashSet<>(
+                questions.findDistinctPrimaryTopicsByPaperIds(validatedIds));
+        for (Map.Entry<UUID, Set<UUID>> e : mappedTopicsByPaper.entrySet()) {
+            if (validatedIds.contains(e.getKey())) {
+                practicableTopics.addAll(e.getValue());
+            }
+        }
+
+        List<EnrichedPaperSummaryV3> enriched = new ArrayList<>(base.size());
+        for (EnrichedPaperSummary p : base) {
+            long[] census = questionCensus.getOrDefault(p.id(), new long[]{0, 0});
+            long withScheme = questionsWithScheme.getOrDefault(p.id(), 0L);
+            Set<UUID> novel = new HashSet<>(
+                    mappedTopicsByPaper.getOrDefault(p.id(), Set.of()));
+            novel.removeAll(practicableTopics);
+
+            enriched.add(EnrichedPaperSummaryV3.from(p, census[0], census[1],
+                    withScheme, novel.size(), rankReasons(p, census[0], census[1],
+                    withScheme, novel.size())));
+        }
+
+        enriched.sort(Comparator
+                .comparing((EnrichedPaperSummaryV3 p) ->
+                        "OK".equals(p.reconciliationStatus()) ? 0 : 1)
+                .thenComparing(p -> schemeRatio(p), Comparator.reverseOrder())
+                .thenComparing(p -> mappingRatio(p), Comparator.reverseOrder())
+                .thenComparingLong(EnrichedPaperSummaryV3::novelTopicCount)
+                .thenComparing(p -> p.avgExtractionConfidence() == null ? 0.0
+                        : p.avgExtractionConfidence(), Comparator.reverseOrder())
+                .thenComparingLong(EnrichedPaperSummaryV3::findingCount)
+                .thenComparing(EnrichedPaperSummaryV3::createdAt,
+                        Comparator.reverseOrder())
+                .thenComparing(EnrichedPaperSummaryV3::id));
+
+        return new EnrichedReviewQueueViewV3(enriched, suggestedVersionCount(base),
+                suggestedSchemeCount(base), practicableTopics.size());
+    }
+
+    /** the v2 enrichment over the SUGGESTED papers (shared by v2 and v3) */
+    private List<EnrichedPaperSummary> baseEnrichment() {
         List<ExamPaper> papers = examPapers.findSuggested();
 
         Map<UUID, Map<QuestionVersion.ValidationState, Long>> versionCounts =
@@ -469,14 +559,117 @@ public class ContentReviewService {
                 .thenComparingLong(EnrichedPaperSummary::findingCount)
                 .thenComparing(EnrichedPaperSummary::createdAt,
                         Comparator.reverseOrder()));
+        return enriched;
+    }
 
-        long suggestedVersions = enriched.stream()
+    /** versions still awaiting a decision, from the enrichment already computed */
+    private static int suggestedVersionCount(List<EnrichedPaperSummary> enriched) {
+        return (int) enriched.stream()
                 .mapToLong(p -> p.versionCount() - p.validatedVersions()
                         - p.rejectedVersions() - p.flaggedVersions())
                 .sum();
-        long suggestedSchemes = enriched.stream().mapToLong(EnrichedPaperSummary::suggestedSchemes).sum();
-        return new EnrichedReviewQueueView(enriched, (int) suggestedVersions,
-                (int) suggestedSchemes);
+    }
+
+    /** schemes still awaiting a decision, from the enrichment already computed */
+    private static int suggestedSchemeCount(List<EnrichedPaperSummary> enriched) {
+        return (int) enriched.stream()
+                .mapToLong(EnrichedPaperSummary::suggestedSchemes).sum();
+    }
+
+    /** scheme-linkage ratio for ordering (no questions → sorts last, display stays honest) */
+    private static double schemeRatio(EnrichedPaperSummaryV3 p) {
+        return p.totalQuestions() == 0 ? -1.0
+                : (double) p.questionsWithScheme() / p.totalQuestions();
+    }
+
+    /** mapping ratio for ordering (no questions → sorts last, display stays honest) */
+    private static double mappingRatio(EnrichedPaperSummaryV3 p) {
+        return p.totalQuestions() == 0 ? -1.0
+                : (double) p.mappedQuestions() / p.totalQuestions();
+    }
+
+    /**
+     * The §7 rank reasons — only signals that actually hold, in the priority
+     * order the queue sorts by. Never a fabricated number; absent confidence
+     * is simply not stated.
+     */
+    private static List<String> rankReasons(EnrichedPaperSummary p,
+                                            long totalQuestions, long mappedQuestions,
+                                            long withScheme, int novelTopicCount) {
+        List<String> reasons = new ArrayList<>();
+        if ("OK".equals(p.reconciliationStatus())) {
+            reasons.add("bridge reconciled OK");
+        }
+        if (totalQuestions > 0) {
+            if (withScheme >= totalQuestions) {
+                reasons.add("mark scheme linked for all "
+                        + totalQuestions + " question(s)");
+            } else if (withScheme > 0) {
+                reasons.add("mark scheme linked for " + withScheme + "/"
+                        + totalQuestions + " question(s)");
+            } else {
+                reasons.add("no mark scheme linked yet");
+            }
+            if (mappedQuestions >= totalQuestions) {
+                reasons.add("all " + totalQuestions + " question(s) mapped to curriculum");
+            } else if (mappedQuestions > 0) {
+                reasons.add(mappedQuestions + "/" + totalQuestions
+                        + " question(s) mapped to curriculum");
+            }
+        }
+        if (novelTopicCount > 0) {
+            reasons.add("brings " + novelTopicCount
+                    + " topic(s) not yet practicable from validated content");
+        }
+        if (p.avgExtractionConfidence() != null) {
+            reasons.add(String.format("mean extraction confidence %.2f",
+                    p.avgExtractionConfidence()));
+        }
+        if (p.findingCount() == 0 && "OK".equals(p.reconciliationStatus())) {
+            reasons.add("no parser findings");
+        }
+        return reasons;
+    }
+
+    /**
+     * v3 paper summary — FLAT by design: every v2 signal plus the §7
+     * reviewability/value signals and the rank reasons, so the JSON mirrors
+     * the v2 shape plus additions (records serialize their components; a
+     * nested base would hide the v2 fields).
+     */
+    public record EnrichedPaperSummaryV3(UUID id, UUID subjectId, String title,
+                                         String paperCode, String sessionLabel,
+                                         String board, String qualification,
+                                         String validationState,
+                                         long versionCount, long validatedVersions,
+                                         long rejectedVersions, long flaggedVersions,
+                                         long suggestedSchemes, String reconciliationStatus,
+                                         long findingCount, Double avgExtractionConfidence,
+                                         java.time.Instant createdAt,
+                                         long totalQuestions, long mappedQuestions,
+                                         long questionsWithScheme, int novelTopicCount,
+                                         List<String> rankReasons) {
+
+        /** project a v2 summary into the flat v3 shape plus its new signals */
+        public static EnrichedPaperSummaryV3 from(EnrichedPaperSummary p,
+                                                  long totalQuestions,
+                                                  long mappedQuestions,
+                                                  long withScheme,
+                                                  int novelTopicCount,
+                                                  List<String> reasons) {
+            return new EnrichedPaperSummaryV3(
+                    p.id(), p.subjectId(), p.title(), p.paperCode(), p.sessionLabel(),
+                    p.board(), p.qualification(), p.validationState(), p.versionCount(),
+                    p.validatedVersions(), p.rejectedVersions(), p.flaggedVersions(),
+                    p.suggestedSchemes(), p.reconciliationStatus(), p.findingCount(),
+                    p.avgExtractionConfidence(), p.createdAt(),
+                    totalQuestions, mappedQuestions, withScheme, novelTopicCount, reasons);
+        }
+    }
+
+    public record EnrichedReviewQueueViewV3(List<EnrichedPaperSummaryV3> papers,
+                                            int suggestedVersions, int suggestedSchemes,
+                                            int practicableTopicCount) {
     }
 
     /** result of a batch validation */

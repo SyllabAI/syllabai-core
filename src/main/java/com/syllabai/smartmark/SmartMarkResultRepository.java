@@ -1,5 +1,6 @@
 package com.syllabai.smartmark;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,20 @@ public interface SmartMarkResultRepository extends JpaRepository<SmartMarkResult
         var runs = findByAnswerIdOrderByCreatedAtDesc(answerId);
         return runs.isEmpty() ? Optional.empty() : Optional.of(runs.get(0));
     }
+
+    /**
+     * Marking throughput lane (sprint 2 §6): every smart-mark run for a batch
+     * of answers in ONE query, oldest first — the caller keeps the newest run
+     * per answer in memory. Bounded by the marking-queue page size, never the
+     * full history of the table.
+     */
+    @Query("""
+            select r from SmartMarkResult r
+            where r.answer.id in :answerIds
+            order by r.createdAt asc
+            """)
+    List<SmartMarkResult> findByAnswerIdsOrderByCreatedAtAsc(
+            @Param("answerIds") Collection<UUID> answerIds);
 
     /** all runs that passed validation — the κ sample population */
     @Query("select r from SmartMarkResult r where r.validationPassed = true order by r.createdAt asc")

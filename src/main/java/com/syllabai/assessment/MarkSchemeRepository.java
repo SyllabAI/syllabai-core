@@ -39,4 +39,19 @@ public interface MarkSchemeRepository extends JpaRepository<MarkScheme, UUID> {
             group by q.examPaperId, s.validationState
             """)
     List<Object[]> countByPaperAndState();
+
+    /**
+     * Review-queue v3 (sprint 2 §7): mark-scheme linkage completeness —
+     * per-paper count of DISTINCT questions that have at least one scheme on
+     * any of their versions. Rows: [paperId(UUID), questionsWithScheme(long)].
+     * A paper whose every question has a scheme is faster to review correctly
+     * (the reviewer can compare answer key against source). Read-only.
+     */
+    @Query("""
+            select q.examPaperId, count(distinct q.id)
+            from MarkScheme s join s.questionVersion v join v.question q
+            where q.examPaperId is not null
+            group by q.examPaperId
+            """)
+    List<Object[]> countQuestionsWithSchemesByPaper();
 }

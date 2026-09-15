@@ -57,4 +57,12 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
             """)
     long countByMarkingStateWithin(@Param("state") Answer.MarkingState state,
                                    @Param("nodeIds") Collection<UUID> nodeIds);
+
+    /**
+     * Marking throughput lane (sprint 2 §6): answer counts grouped by marking
+     * state in ONE query — the workload overview. Rows: [state, count].
+     * Read-only.
+     */
+    @Query("select a.markingState, count(a) from Answer a group by a.markingState")
+    List<Object[]> countGroupedByMarkingState();
 }

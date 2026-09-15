@@ -18,7 +18,9 @@ import com.syllabai.teacher.dto.TeacherViews;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +47,7 @@ public class TeacherMarkingController {
     private final AnswerRepository answers;
     private final SmartMarkService smartMarkService;
     private final TeacherMarkingService teacherMarkingService;
+    private final TeacherMarkingQueueService markingQueueService;
     private final SmartMarkResultRepository smartMarkResults;
     private final HumanMarkRepository humanMarks;
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations;
@@ -53,6 +56,7 @@ public class TeacherMarkingController {
     public TeacherMarkingController(AnswerRepository answers,
                                     SmartMarkService smartMarkService,
                                     TeacherMarkingService teacherMarkingService,
+                                    TeacherMarkingQueueService markingQueueService,
                                     SmartMarkResultRepository smartMarkResults,
                                     HumanMarkRepository humanMarks,
                                     SmartMarkAgreementEvaluationRepository agreementEvaluations,
@@ -60,6 +64,7 @@ public class TeacherMarkingController {
         this.answers = answers;
         this.smartMarkService = smartMarkService;
         this.teacherMarkingService = teacherMarkingService;
+        this.markingQueueService = markingQueueService;
         this.smartMarkResults = smartMarkResults;
         this.humanMarks = humanMarks;
         this.agreementEvaluations = agreementEvaluations;
@@ -87,6 +92,54 @@ public class TeacherMarkingController {
         return queue.stream()
                 .map(a -> TeacherViews.answer(a, names.get(a.attempt().learnerId())))
                 .toList();
+    }
+
+    /**
+     * Marking throughput lane (sprint 2 §6/§7): the deterministic paper-grouped
+     * queue — ordered oldest-waiting-first with one mark scheme in working
+     * memory at a time, each item carrying paper context, the newest Smart
+     * Mark run and the mark→next link. Ordering is a workflow aid; it never
+     * changes any mark, gate or evidence semantic.
+     */
+    @GetMapping("/queue-v2")
+    public TeacherMarkingQueueService.MarkingQueueView queueV2(
+            @RequestParam(defaultValue = "PENDING") String state) {
+        Answer.MarkingState filter;
+        try {
+            filter = Answer.MarkingState.valueOf(state.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("unknown marking state: " + state
+                    + " (expected PENDING, SMART_MARKED, HUMAN_MARKED or OVERRIDDEN)");
+        }
+        return markingQueueService.markingQueue(filter);
+    }
+
+    /**
+     * Marking throughput metrics (§6): workload by state, authoritative human
+     * marks in the 24h/7d windows, pending-by-paper leaders, oldest pending
+     * age. Counts of what happened — never estimates. Read-only.
+     */
+    @GetMapping("/throughput")
+    public TeacherMarkingQueueService.ThroughputView throughput() {
+        return markingQueueService.throughput();
+    }
+
+    /**
+     * Bounded Smart Mark batch (§6): runs the existing per-answer pipeline once
+     * per answer, each item its own transaction (partial success preserved).
+     * Idempotent — already-marked answers are skipped, not re-marked. The κ
+     * gate and evidence contract are untouched.
+     */
+    @PostMapping("/smart-mark-batch")
+    public TeacherMarkingQueueService.SmartMarkBatchView smartMarkBatch(
+            @Valid @RequestBody SmartMarkBatchRequest request) {
+        return markingQueueService.smartMarkBatch(request.answerIds());
+    }
+
+    /** @param answerIds 1–50 answer ids to smart-mark; deduplicated, order-preserving */
+    public record SmartMarkBatchRequest(
+            @NotNull @NotEmpty @Size(max = TeacherMarkingQueueService.SMART_MARK_BATCH_LIMIT)
+            List<UUID> answerIds) {
     }
 
     @GetMapping("/answers/{id}")
