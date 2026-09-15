@@ -99,6 +99,12 @@ public class AttemptHistoryService {
                 marksAwarded = partItems.stream()
                         .mapToInt(AttemptHistoryView.PartItem::marksAwarded)
                         .sum();
+                // settled: expose the same classification the evidence event
+                // carried (recordTotalMarks' conservative full-marks rule) —
+                // the DTO contract says null only UNTIL an authoritative mark
+                // exists; the settled attempt row is the source, nothing is
+                // recomputed or invented here
+                correct = attempt.correct();
             } else {
                 marksAwarded = null;
             }

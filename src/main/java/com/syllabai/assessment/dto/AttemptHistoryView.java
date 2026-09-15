@@ -12,8 +12,11 @@ import java.util.UUID;
  *
  * <p>Honesty rules (mirroring the evidence invariants, Master Spec §12):</p>
  * <ul>
- *   <li>{@code correct} is null for structured attempts until an authoritative
- *       mark exists; the UI must not render a guess.</li>
+ *   <li>{@code correct} is null for structured attempts while any part is
+ *       pending; once every part is authoritatively marked it carries the
+ *       settled attempt row's classification (the same conservative full-marks
+ *       rule the evidence event used) — the UI must not render a guess, and
+ *       the view must not invent a different one.</li>
  *   <li>{@code marksAwarded} is null while marking is pending.</li>
  *   <li>MCQ answers carry the chosen option and the correct option label —
  *       the same facts the immediate AttemptResultView revealed at submit

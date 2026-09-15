@@ -169,6 +169,9 @@ class AttemptHistoryFlowIT {
         AttemptHistoryView marked = historyController.attempts(learner, null);
         assertThat(marked.attempts()).singleElement().satisfies(item -> {
             assertThat(item.marksAwarded()).isEqualTo(2);
+            // settled: the same classification the evidence event carried
+            // (full marks = mastery evidence) — null only while pending
+            assertThat(item.correct()).isTrue();
             assertThat(item.markingState()).isEqualTo("HUMAN_MARKED");
             assertThat(item.evidenceEmitted()).isTrue();
             assertThat(item.parts().get(0).marksAwarded()).isEqualTo(2);

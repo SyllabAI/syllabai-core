@@ -124,6 +124,34 @@ class AttemptHistoryServiceTest {
         AttemptHistoryView.Item item = service.historyFor(LEARNER, null).attempts().get(0);
 
         assertThat(item.marksAwarded()).isEqualTo(3);
+        // the settled row's own classification (recordTotalMarks' conservative
+        // rule: partial credit = not mastery evidence) rides along unchanged
+        assertThat(item.correct()).isFalse();
+    }
+
+    @Test
+    @DisplayName("settled structured attempt carries the settled correctness flag — the classification the evidence event used")
+    void structuredSettledAttemptExposesSettledCorrectness() {
+        // the 2026-09-15 evidence-cycle finding: settled 6/6 structured attempts
+        // reported correct=null forever, although the DTO contract promises the
+        // classification "until an authoritative mark exists" — i.e. non-null
+        // once marking settles. The settled attempt row (recordTotalMarks) is
+        // the source; the view must agree with the evidence event.
+        Question question = question(Question.Type.STRUCTURED, 4, List.of());
+        Attempt attempt = structuredAttempt(question);
+        when(attempt.correct()).thenReturn(true);   // settled full marks (6/6-style)
+        List<Answer> markedAnswers = List.of(
+                answer("a", 2, 2, Answer.MarkingState.HUMAN_MARKED),
+                answer("b", 2, 2, Answer.MarkingState.HUMAN_MARKED));
+        when(answers.findByAttemptIdOrderByQuestionPartId(ATTEMPT_ID)).thenReturn(markedAnswers);
+        when(attempts.findByLearnerIdOrderByCreatedAtDesc(eq(LEARNER), any(Pageable.class)))
+                .thenReturn(List.of(attempt));
+        when(attempts.countByLearnerId(LEARNER)).thenReturn(1L);
+
+        AttemptHistoryView.Item item = service.historyFor(LEARNER, null).attempts().get(0);
+
+        assertThat(item.marksAwarded()).isEqualTo(4);
+        assertThat(item.correct()).isTrue();
     }
 
     @Test
