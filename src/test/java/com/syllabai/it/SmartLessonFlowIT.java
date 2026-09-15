@@ -120,6 +120,13 @@ class SmartLessonFlowIT {
     private static final UUID SEED_MCQ_2_WRONG_PLAIN =
             UUID.fromString("41000000-0000-0000-0000-000000000012");
 
+    /** V7 seed: SEED-WCH11-003 (empirical formula) — secondary-mapped to T1.1. */
+    private static final UUID SEED_MCQ_3 =
+            UUID.fromString("40000000-0000-0000-0000-000000000003");
+    /** V7 seed: SEED-WCH11-005 (chlorine ion) — secondary-mapped to T1.1. */
+    private static final UUID SEED_MCQ_5 =
+            UUID.fromString("40000000-0000-0000-0000-000000000005");
+
     @Autowired
     private SmartLessonService smartLesson;
     @Autowired
@@ -227,11 +234,13 @@ class SmartLessonFlowIT {
     void starterQuestionRotatesAfterAttempts() {
         UUID learner = newLearner();
 
-        // A: cold state — diagnostic practice names the deterministic starter
+        // A: cold state — diagnostic practice names the deterministic starter.
+        // WCH11-T1.1 serves FOUR seed questions (001/002 primary, 003/005
+        // secondary-mapped through question_topics).
         SmartLessonView cold = smartLesson.lessonFor(learner, SUBJECT_ROOT, TOPIC_T1_1);
         assertThat(cold.action().reasonCode()).isEqualTo(ReasonCode.INSUFFICIENT_COVERAGE);
         UUID starter = cold.action().questionId();
-        assertThat(starter).isIn(SEED_MCQ_1, SEED_MCQ_2);
+        assertThat(starter).isIn(SEED_MCQ_1, SEED_MCQ_2, SEED_MCQ_3, SEED_MCQ_5);
         assertThat(cold.action().reasonDetail()).doesNotContain("revisiting");
 
         // attempt the STARTER question twice (plain wrong options — no misconception
@@ -248,9 +257,9 @@ class SmartLessonFlowIT {
         assertThat(second.topicStatus().attempts()).isEqualTo(2);
         UUID next = second.action().questionId();
         assertThat(next).isNotEqualTo(starter);   // the rotation is real
-        assertThat(next).isIn(SEED_MCQ_1, SEED_MCQ_2);
+        assertThat(next).isIn(SEED_MCQ_1, SEED_MCQ_2, SEED_MCQ_3, SEED_MCQ_5);
         assertThat(second.action().reasonDetail())
-                .contains("not attempted yet").contains("1 of 2");
+                .contains("not attempted yet").contains("1 of 4");
     }
 
     @Test

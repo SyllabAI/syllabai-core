@@ -55,7 +55,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("it")
 @Testcontainers(disabledWithoutDocker = true)
-class TestBuilderWeaknessFlowIT {
+class WeaknessTargetingFlowIT {
 
     @Container
     @ServiceConnection
@@ -192,7 +192,9 @@ class TestBuilderWeaknessFlowIT {
         assertThat(weakT11.get("reasons").toString()).contains("ACTIVE_MISCONCEPTION_PRESENT");
         assertThat(weakT11.get("learnersMeasured").asInt()).isGreaterThanOrEqualTo(2);
         assertThat(weakT11.get("learnersWithActiveMisconception").asInt()).isGreaterThanOrEqualTo(1);
-        assertThat(weakT11.get("servableQuestions").asInt()).isEqualTo(2);
+        // WCH11-T1.1 serves 4 seed questions: 001/002 primary + 003/005
+        // secondary-mapped through question_topics
+        assertThat(weakT11.get("servableQuestions").asInt()).isEqualTo(4);
         // no synthetic score is exposed — the reasons are the explanation
         assertThat(weakT11.has("weaknessScore")).isFalse();
 
@@ -219,13 +221,13 @@ class TestBuilderWeaknessFlowIT {
                         + "&topicNodeIds=" + TOPIC_T1_1 + "&includeAnswers=true", teacher);
         assertThat(targeted.statusCode()).isEqualTo(200);
         JsonNode test = JSON.readTree(targeted.body());
-        assertThat(test.get("questionCount").asInt()).isEqualTo(2);
-        assertThat(test.get("totalMarks").asInt()).isEqualTo(2);
+        assertThat(test.get("questionCount").asInt()).isEqualTo(4);
+        assertThat(test.get("totalMarks").asInt()).isEqualTo(4);   // each seed MCQ is 1 mark
         for (JsonNode q : test.get("questions")) {
             assertThat(q.get("topicCode").asText()).isEqualTo("WCH11-T1.1");
         }
         // per-topic coverage states the honest pre-cap availability
-        assertThat(test.get("topics").get(0).get("servableQuestions").asInt()).isEqualTo(2);
+        assertThat(test.get("topics").get(0).get("servableQuestions").asInt()).isEqualTo(4);
 
         // 5. determinism: identical options and identical assembly on re-query
         HttpResponse<String> optionsAgain = get(
