@@ -108,12 +108,14 @@ provider-quota limit, documented below.
   groq **tokens-per-day quota exhaustion** (429 RateLimitException surfaced
   as 503 tutor_unavailable in ~3s — hard TPD limit, resets daily). Its last
   pre-quota isolated probe PASSED (200, 653 chars, [2,3,4,5] cited).
+  **[CLOSED 2026-09-15 ~17:05Z — see final-lineage closure below]**
 - core-ci for `1110af8`/`95093d7`/`e2d70a5` is blocked by a **GitHub Actions
   infrastructure outage** (jobs fail in ~2s with zero steps executed;
   BlobNotFound logs; the notify/sync workflows fail identically — the runner
   never starts). Local `mvn` verification is green for every change; the
   deployed binaries behave correctly on every probe. CI re-run pending
-  recovery.
+  recovery. **[STILL OPEN at the same timestamp — attempts 34973295881,
+  34986352671, 34988539417 (×2 attempts) all zero-step failures]**
 - Resume: `CLA_EVAL_PHASES=sb` (state-replacing) + CI rerun, once quota and
   Actions recover; the phased harness is persisted at the workspace
   `scripts/cla_eval_bundle.py`.
@@ -122,3 +124,53 @@ The promotion decision above stands: it was made on the 44/44 canonical run,
 and every subsequent change has been verified live in isolation; the re-run
 exists to refresh the single canonical record, not to gate the already-proven
 behavior.
+
+---
+
+## Final-lineage closure (same day, after quota recovery)
+
+When the groq daily token quota recovered, the missing S-B check was executed
+**by the evaluation harness itself** — the topic-sliced phase re-run
+(`CLA_EVAL_PHASES=sb CLA_EVAL_TOPICS=7`, the same phase code path as the
+canonical bundle, state-replacing per its documented semantics) — not by a
+manual probe. Result, first attempt, no retries:
+
+- **4CH1-S1-e EXPLAIN+SUMMARIZE served, grounded, cited, mode-shaped** —
+  HTTP 200 both modes; evidence 5/5; citations 5/5 structurally valid with
+  the deterministic spec anchor present in both; zero unresolvable markers;
+  EXPLAIN teaches (1082 chars); SUMMARIZE compresses to the output bound
+  (635 chars, one clause per specification statement) while spanning the
+  spec structure (cited sources [2,3,4,5] + anchor). This response shape is
+  itself the deployed fingerprint of the `e2d70a5` compression bound +
+  `95093d7` 60s chain timeout (pre-fix behavior: deterministic 503).
+- No mark-scheme evidence can appear in this path by construction: KG_TOPIC
+  evidence is curriculum-anchored only (the leakage differential is S-D's
+  PAST_PAPER_QUESTION gate, green in the 44/44 baseline and untouched since).
+
+**Canonical final-lineage record: 29/29 checks GREEN — VERIFIED**
+(S-A 18 = 17 resolution decisions + accuracy aggregate, all fail-closed
+negatives live; S-B 10 = 8/8 per-topic + recomputed grounded-precision and
+false-refusal aggregates; S-F 1). Two notes for the record, stated plainly:
+
+1. **Composition differs from the interim "28/30" count.** The interim
+   30-check number accumulated two partial-run duplicate artifacts (a
+   duplicated false-refusal aggregate and a redundant coarse "both modes
+   served" record for the topic that also has the richer per-topic record);
+   the closure run replaced them per the harness's documented re-run
+   semantics. No check, threshold, or dimension was removed — the S-A and
+   S-F sets are complete, and every interim check name is green or superseded
+   by its richer record.
+2. **Evidence-restoration disclosure.** A defective workspace reconciliation
+   pass briefly reduced the record to its S-B subset. The S-A and S-F sets
+   were RE-RUN through the harness on the same lineage to restore the full
+   record (17/17 resolution accuracy reproduced; 4 transient provider 503s
+   recorded as retries). No check record was hand-written; the S-B raw
+   evidence survived the incident untouched.
+
+**CI state at closure: still INFRASTRUCTURE-BLOCKED.** Every core-ci attempt
+for `1110af8` → `cff5d2f` fails at the runner level (~2-3s, zero steps,
+BlobNotFound log storage; sync/notify workflows fail identically). This is a
+GitHub Actions infrastructure failure, not a code failure: the evaluated
+lineage's behavior is verified live above, and local `mvn` verification is
+green. CI re-runs continue until Actions recovers; the bundle's S-F record
+points at the last executed GREEN run (34970016257, `6092650` lineage).
