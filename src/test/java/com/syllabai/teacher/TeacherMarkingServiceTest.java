@@ -60,6 +60,7 @@ class TeacherMarkingServiceTest {
             evidencePublisher, published::add);
 
     private final Question question;
+    private final QuestionVersion version;
     private final QuestionPart part;
     private final Attempt attempt;
     private final Answer answer;
@@ -70,7 +71,7 @@ class TeacherMarkingServiceTest {
         question = new Question("q-1", Question.Type.STRUCTURED, "stem", 2, 3, 120,
                 "Explain", TOPIC, Question.Provenance.PAST_PAPER);
         TestIds.withId(question, UUID.randomUUID());
-        QuestionVersion version = new QuestionVersion(question, 1, "stem", 2, 3, 120, "Explain",
+        version = new QuestionVersion(question, 1, "stem", 2, 3, 120, "Explain",
                 QuestionVersion.ValidationState.VALIDATED, "doc", 0.9, "test");
         TestIds.withId(version, UUID.randomUUID());
         part = new QuestionPart(version, "a", "part a", "State", 2, 0);
@@ -156,6 +157,45 @@ class TeacherMarkingServiceTest {
                         () -> service.recordHumanMark(answer.id(), MARKER, 3, null, "too many"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("outside part bound");
+    }
+
+    @Test
+    @DisplayName("multi-part attempt: evidence waits for the completing mark and carries the FULL total")
+    void multiPartAttemptFiresEvidenceOnlyWhenMarkingCompletes() {
+        // a second part on the same attempt — while it is PENDING the attempt's
+        // total is partial, so part a's authoritative mark must NOT fire yet
+        QuestionPart partB = new QuestionPart(version, "b", "part b", "State", 2, 1);
+        TestIds.withId(partB, UUID.randomUUID());
+        version.addPart(partB);
+        Answer answerB = new Answer(attempt, partB, "a second written answer");
+        TestIds.withId(answerB, UUID.randomUUID());
+        when(answers.findWithPartAndAttempt(answerB.id())).thenReturn(Optional.of(answerB));
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(answer, answerB));
+
+        // part a's mark: the attempt is INCOMPLETE — no evidence fires
+        service.recordHumanMark(answer.id(), MARKER, 2, bothPoints(), "part a full");
+        assertThat(attempt.evidenceEmitted()).isFalse();
+        assertThat(published.stream()
+                .filter(e -> e instanceof com.syllabai.shared.events.AssessmentEvidenceRecordedEvent)
+                .count()).isZero();
+        // the settled row still tracks the partial sum (research view)
+        assertThat(attempt.marksAwarded()).isEqualTo(2);
+
+        // the completing mark fires the evidence ONCE, with the FULL total —
+        // the event's marks/correctness agree with the settled attempt row
+        // (the production regression this test pins: the first-part mark used
+        // to fire with the partial total)
+        service.recordHumanMark(answerB.id(), MARKER, 2, bothPoints(), "part b full");
+        assertThat(attempt.evidenceEmitted()).isTrue();
+        assertThat(attempt.marksAwarded()).isEqualTo(4);
+        var evidence = published.stream()
+                .filter(e -> e instanceof com.syllabai.shared.events.AssessmentEvidenceRecordedEvent)
+                .map(e -> (com.syllabai.shared.events.AssessmentEvidenceRecordedEvent) e)
+                .toList();
+        assertThat(evidence).hasSize(1);
+        assertThat(evidence.get(0).marksAwarded()).isEqualTo(4);
+        assertThat(evidence.get(0).correctness()).isTrue();
     }
 
     @Test

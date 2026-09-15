@@ -100,7 +100,8 @@ class SmartMarkServiceTest {
                 .thenReturn(List.of(version));
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
                 .thenReturn(Optional.of(scheme));
-        when(answers.findByAttemptIdOrderByQuestionPartId(any())).thenReturn(List.of());
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(answer));
         when(smartMarkResults.save(any(SmartMarkResult.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         when(questionTopics.findByQuestionId(question.id())).thenReturn(List.of());

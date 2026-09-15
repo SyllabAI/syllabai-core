@@ -100,13 +100,27 @@ public class TeacherMarkingService {
             answer.humanMarked(marksAwarded);
         }
         attempt.humanMarked(revising);
-        attempt.recordTotalMarks(totalAwarded(attempt), question.marks());
         answers.save(answer);
+
+        List<Answer> attemptAnswers = answers.findByAttemptIdOrderByQuestionPartId(attempt.id());
+        attempt.recordTotalMarks(
+                attemptAnswers.stream().map(Answer::marksAwarded)
+                        .filter(m -> m != null).mapToInt(Integer::intValue).sum(),
+                question.marks());
 
         boolean evidenceFired = false;
         if (!revising) {
-            List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
-            evidenceFired = evidencePublisher.publishGraded(attempt, question, secondary);
+            // Fire once, at the authoritative mark that COMPLETES the attempt's
+            // marking: a multi-part attempt's total is partial until its last
+            // PENDING part is marked, and the settled attempt row must agree
+            // with the evidence event (full marks = mastery evidence). Until
+            // the marking completes, the evidence waits — fail-closed, exactly
+            // like PENDING answers wait for their first authoritative mark.
+            if (attemptAnswers.stream().noneMatch(
+                    a -> a.markingState() == Answer.MarkingState.PENDING)) {
+                List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
+                evidenceFired = evidencePublisher.publishGraded(attempt, question, secondary);
+            }
         }
 
         HumanMark mark = humanMarks.save(new HumanMark(
@@ -179,14 +193,6 @@ public class TeacherMarkingService {
                 evaluation.scope(), stats.sampleSize(), stats.kappa(),
                 evaluation.passed() ? "PASSED" : "NOT passed");
         return evaluation;
-    }
-
-    private int totalAwarded(Attempt attempt) {
-        return answers.findByAttemptIdOrderByQuestionPartId(attempt.id()).stream()
-                .map(Answer::marksAwarded)
-                .filter(m -> m != null)
-                .mapToInt(Integer::intValue)
-                .sum();
     }
 
     private static int clampBinary(int value) {

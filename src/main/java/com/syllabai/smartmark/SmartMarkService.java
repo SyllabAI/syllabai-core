@@ -107,10 +107,23 @@ public class SmartMarkService {
             answers.save(answer);
             authoritative = kappaGatePassed(question.examPaperId());
             if (authoritative) {
-                List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
-                evidencePublisher.publishGraded(attempt, question, secondary);
-                log.info("smart mark {} authoritative (κ gate passed) — evidence fired for attempt {}",
-                        result.id(), attempt.id());
+                // fire only when the attempt's marking is COMPLETE (no PENDING
+                // part left): a multi-part attempt's total is partial until its
+                // last part is marked, and the settled row must agree with the
+                // evidence event (full marks = mastery evidence)
+                boolean complete = answers
+                        .findByAttemptIdOrderByQuestionPartId(attempt.id()).stream()
+                        .noneMatch(a -> a.markingState() == Answer.MarkingState.PENDING);
+                if (complete) {
+                    List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
+                    evidencePublisher.publishGraded(attempt, question, secondary);
+                    log.info("smart mark {} authoritative (κ gate passed) — evidence fired for attempt {}",
+                            result.id(), attempt.id());
+                } else {
+                    log.info("smart mark {} authoritative (κ gate passed) but attempt {} "
+                            + "still has PENDING parts — evidence waits for the completing mark",
+                            result.id(), attempt.id());
+                }
             } else {
                 log.info("smart mark {} provisional (κ gate not passed) — human mark still required",
                         result.id());
