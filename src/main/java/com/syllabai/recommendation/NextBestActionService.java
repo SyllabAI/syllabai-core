@@ -75,8 +75,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NextBestActionService {
 
-    /** v1.2 (P7): T7a tutor-engagement candidates (asked-but-unpractised) added ahead of T7; tiers and thresholds unchanged. */
-    public static final String POLICY = "nba-rules/v1.2";
+    /** v1.3 (sprint-2 §9): T7a detail carries the per-topic signal-type mix; tiers, thresholds and ordering unchanged. */
+    public static final String POLICY = "nba-rules/v1.3";
 
     private final KnowledgeGraphService graph;
     private final LearnerModelService learnerModel;
@@ -115,6 +115,18 @@ public class NextBestActionService {
     public interface TutorEngagementViewReader {
         /** per-node ask counts inside the window, for one learner */
         java.util.Map<UUID, Long> askCountsSince(UUID learnerId, Instant since);
+
+        /**
+         * Sprint-2 §9 (optional enrichment, default none): the per-topic
+         * signal-type mix behind {@link #askCountsSince} — WHAT KIND of asks
+         * the learner made. Defaulting to empty keeps hand-rolled test fakes
+         * honest (no mix claimed when none is provided); the production
+         * adapter returns the real mix.
+         */
+        default java.util.Map<UUID, java.util.Map<String, Long>> signalCountsSince(
+                UUID learnerId, Instant since) {
+            return java.util.Map.of();
+        }
     }
 
     public NextBestActionsView actionsFor(UUID learnerId, UUID rootId) {
@@ -427,9 +439,14 @@ public class NextBestActionService {
         // Tutor about (deterministic matcher output, windowed) with no attempt
         // evidence yet — the learner's own interest is the strongest exploration
         // prior we have, so it outranks generic curriculum-order uncovered topics.
-        // No mastery is invented: an ask is engagement, not competence.
+        // No mastery is invented: an ask is engagement, not competence. §9 (v1.3):
+        // the detail states the signal mix — doubt/clarification/explanation —
+        // as evidence, without changing the ordering (still ask-count desc).
+        java.time.Duration tutorWindow = java.time.Duration.ofDays(properties.tutorEngagementWindowDays());
         Map<UUID, Long> askCounts = tutorEngagements.askCountsSince(
-                learnerId, now.minus(java.time.Duration.ofDays(properties.tutorEngagementWindowDays())));
+                learnerId, now.minus(tutorWindow));
+        Map<UUID, Map<String, Long>> signalMix = tutorEngagements.signalCountsSince(
+                learnerId, now.minus(tutorWindow));
         List<Map.Entry<UUID, Long>> askedUnpractised = askCounts.entrySet().stream()
                 .filter(e -> byId.containsKey(e.getKey()))   // subject isolation: ignore out-of-subtree asks
                 .filter(e -> !skills.containsKey(e.getKey()))
@@ -446,7 +463,9 @@ public class NextBestActionService {
                     ReasonCode.TUTOR_ENGAGED,
                     node.id(), node.code(), node.title(), null, count,
                     "Asked the Tutor " + asked.getValue() + " time(s) in the last "
-                            + properties.tutorEngagementWindowDays() + " days, no attempt evidence yet; "
+                            + properties.tutorEngagementWindowDays() + " days"
+                            + signalMixNote(signalMix.get(node.id()))
+                            + ", no attempt evidence yet; "
                             + count + " validated question(s) available"));
         }
 
@@ -477,6 +496,18 @@ public class NextBestActionService {
                     a.servableQuestionCount(), a.reasonDetail()));
         }
         return new NextBestActionsView(learnerId, rootId, now, POLICY, List.copyOf(actions));
+    }
+
+    /** §9: the evidence sentence for a topic's signal mix — counts only, no interpretation */
+    private static String signalMixNote(Map<String, Long> mix) {
+        if (mix == null || mix.isEmpty()) {
+            return "";
+        }
+        String joined = mix.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByKey())
+                .map(e -> e.getValue() + " " + e.getKey())
+                .collect(java.util.stream.Collectors.joining(", "));
+        return " (" + joined + ")";
     }
 
     // ── internals ──────────────────────────────────────────────────

@@ -42,4 +42,16 @@ public class TestBuilderController {
             @RequestParam(required = false, defaultValue = "false") boolean includeAnswers) {
         return builder.preview(rootId, topicNodeIds, maxQuestions, targetMarks, includeAnswers);
     }
+
+    /**
+     * Sprint-2 §10: class-weakness targeting options — weak class areas with
+     * transparent evidence summaries (reasons + raw aggregates, no synthetic
+     * score), derived read-only from the class analytics. The teacher picks
+     * areas here and passes their topicNodeIds to {@code /preview}; unmeasured
+     * topics are listed separately as honest coverage gaps, never claimed weak.
+     */
+    @GetMapping("/weakness-options")
+    public TestBuilderService.WeaknessOptionsView weaknessOptions(@RequestParam UUID rootId) {
+        return builder.weaknessOptions(rootId);
+    }
 }

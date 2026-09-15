@@ -34,6 +34,24 @@ public class TutorEngagementReader
         return counts;
     }
 
+    /**
+     * Sprint-2 §9: the per-topic signal-type mix behind the ask counts —
+     * what KIND of asks the learner made (doubt, clarification, explanation,
+     * misconception-related, prerequisite help), not just how many. Consumers
+     * state the mix as evidence; they never re-derive mastery from it.
+     */
+    @Override
+    public Map<UUID, Map<String, Long>> signalCountsSince(UUID learnerId, Instant since) {
+        Map<UUID, Map<String, Long>> mix = new HashMap<>();
+        for (Object[] row : engagements.countByLearnerSinceGroupedByNodeAndSignal(
+                learnerId, since)) {
+            mix.computeIfAbsent((UUID) row[0], k -> new HashMap<>())
+                    .merge(row[1] == null ? "TOPIC_ENGAGEMENT" : (String) row[1],
+                            (Long) row[2], Long::sum);
+        }
+        return mix;
+    }
+
     /** grouped engagement summary for the learner-state view (asks, last ask, any refusal) */
     public List<com.syllabai.learner.dto.LearnerStateView.TutorEngagementView> groupEngagementSummary(
             List<TutorTopicEngagement> recent, int limit,

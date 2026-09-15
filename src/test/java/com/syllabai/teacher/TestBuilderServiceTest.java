@@ -15,6 +15,9 @@ import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.recommendation.RecommendationProperties;
+import com.syllabai.teacher.ClassAnalyticsService.ClassOverviewView;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,8 +37,10 @@ class TestBuilderServiceTest {
     private final KnowledgeGraphService knowledgeGraph = mock(KnowledgeGraphService.class);
     private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
+    private final ClassAnalyticsService classAnalytics = mock(ClassAnalyticsService.class);
     private final TestBuilderService service = new TestBuilderService(
-            servableQuestions, knowledgeGraph, questionVersions, markSchemes);
+            servableQuestions, knowledgeGraph, questionVersions, markSchemes,
+            classAnalytics, new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0));
 
     private final UUID root = UUID.randomUUID();
     private final UUID topicA = UUID.randomUUID();
@@ -216,5 +221,99 @@ class TestBuilderServiceTest {
         var view = service.preview(root, List.of(topicA), 2, 100, false);
         assertThat(view.questions()).hasSize(2);   // cap wins over the marks target
         assertThat(view.totalMarks()).isEqualTo(4);
+    }
+
+    // ── sprint-2 §10: class-weakness targeting options ──────────────────
+
+    private ClassAnalyticsService.TopicAggregateView topicAgg(UUID id, String code,
+                                                               int measured, Double mean,
+                                                               String band, int miscoLearners,
+                                                               int attempts, int servable) {
+        return new ClassAnalyticsService.TopicAggregateView(id, code, "title " + code,
+                null, null, measured, mean, band, attempts, miscoLearners,
+                Math.max(0, miscoLearners), 0, 0, servable);
+    }
+
+    private ClassOverviewView overviewWith(List<ClassAnalyticsService.TopicAggregateView> topics,
+                                            List<ClassAnalyticsService.WeakPrerequisiteView> weakPrereqs) {
+        return new ClassOverviewView(root, "4CH1", ClassAnalyticsService.POLICY,
+                30, 12, 5, topics.size(), (int) topics.stream()
+                        .filter(t -> t.learnersMeasured() > 0).count(),
+                topics, weakPrereqs,
+                new ClassAnalyticsService.RecentActivityView(20, 5, 8, 3, Instant.now()));
+    }
+
+    @Test
+    @DisplayName("weakness options: transparent reasons, no synthetic score, honest coverage gaps")
+    void weaknessOptionsDeriveExplicitReasons() {
+        UUID weakMastery = UUID.randomUUID();
+        UUID miscoOnly = UUID.randomUUID();
+        UUID blocked = UUID.randomUUID();
+        UUID strong = UUID.randomUUID();
+        UUID gap = UUID.randomUUID();
+        UUID silentGap = UUID.randomUUID();
+        when(classAnalytics.overview(root)).thenReturn(overviewWith(List.of(
+                topicAgg(weakMastery, "4CH1-S1-a", 4, 0.30, "LOW", 0, 9, 6),
+                topicAgg(miscoOnly, "4CH1-S2-b", 0, null, "UNMEASURED", 2, 0, 4),
+                topicAgg(blocked, "4CH1-S3-a", 3, 0.55, "DEVELOPING", 0, 7, 3),
+                topicAgg(strong, "4CH1-S4-a", 5, 0.82, "SECURE", 0, 12, 5),
+                topicAgg(gap, "4CH1-S5-a", 0, null, "UNMEASURED", 0, 4, 5),
+                topicAgg(silentGap, "4CH1-S6-a", 0, null, "UNMEASURED", 0, 0, 2)),
+                List.of(new ClassAnalyticsService.WeakPrerequisiteView(
+                        weakMastery, "4CH1-S1-a", "title 4CH1-S1-a", 4, 0.30, "LOW",
+                        List.of(new ClassAnalyticsService.DependentView(
+                                blocked, "4CH1-S3-a", "title 4CH1-S3-a", 0.55))))));
+
+        var view = service.weaknessOptions(root);
+
+        assertThat(view.policy()).isEqualTo("test-builder-weakness/v1");
+        assertThat(view.weakTopics()).extracting("code")
+                .containsExactly("4CH1-S1-a", "4CH1-S3-a", "4CH1-S2-b");
+        // most-weak first (mean asc, nulls last); the blocked dependent carries its blocker code
+        var first = view.weakTopics().get(0);
+        assertThat(first.reasons()).containsExactly("LOW_MEAN_MASTERY");
+        assertThat(first.meanMastery()).isEqualTo(0.30);
+        var blockedOption = view.weakTopics().get(1);
+        assertThat(blockedOption.reasons()).containsExactly("BLOCKED_BY_WEAK_PREREQUISITE");
+        assertThat(blockedOption.blockedByPrerequisiteCodes()).containsExactly("4CH1-S1-a");
+        var miscoOption = view.weakTopics().get(2);
+        assertThat(miscoOption.reasons()).containsExactly("ACTIVE_MISCONCEPTION_PRESENT");
+        assertThat(miscoOption.learnersWithActiveMisconception()).isEqualTo(2);
+        // the strong topic is not offered; the silent unmeasured topic (no activity) is not a gap
+        assertThat(view.weakTopics()).noneMatch(o -> o.topicNodeId().equals(strong));
+        assertThat(view.coverageGaps()).extracting("topicNodeId")
+                .containsExactly(gap);   // activity + servable but unmeasured — honest gap, never weak
+        assertThat(view.selectionHint()).contains("preview");
+    }
+
+    @Test
+    @DisplayName("weakness options: deterministic ordering across equal means")
+    void weaknessOptionsOrderDeterministically() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        UUID c = UUID.randomUUID();
+        when(classAnalytics.overview(root)).thenReturn(overviewWith(List.of(
+                topicAgg(c, "4CH1-S2-a", 2, 0.35, "LOW", 1, 5, 4),
+                topicAgg(a, "4CH1-S1-a", 2, 0.35, "LOW", 3, 5, 4),
+                topicAgg(b, "4CH1-S3-a", 2, 0.20, "LOW", 0, 5, 4)),
+                List.of()));
+
+        var view = service.weaknessOptions(root);
+
+        // mean asc (b first); equal means order by misconception learners DESC (a before c)
+        assertThat(view.weakTopics()).extracting("code")
+                .containsExactly("4CH1-S3-a", "4CH1-S1-a", "4CH1-S2-a");
+    }
+
+    @Test
+    @DisplayName("weakness options: an empty class evidence base yields empty options, honestly")
+    void weaknessOptionsEmptyStateIsHonest() {
+        when(classAnalytics.overview(root)).thenReturn(overviewWith(List.of(), List.of()));
+
+        var view = service.weaknessOptions(root);
+
+        assertThat(view.weakTopics()).isEmpty();
+        assertThat(view.coverageGaps()).isEmpty();
+        assertThat(view.selectionHint()).contains("preview");
     }
 }

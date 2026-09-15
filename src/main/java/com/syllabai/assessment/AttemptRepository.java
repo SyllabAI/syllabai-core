@@ -21,6 +21,19 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
      */
     boolean existsByLearnerIdAndQuestionId(UUID learnerId, UUID questionId);
 
+    /**
+     * Sprint-2 §8 (Smart Lesson repeated-exposure avoidance): the question ids
+     * inside a topic's servable set the learner has ALREADY attempted. One
+     * batched query per recommendation — the caller passes the candidate
+     * question ids of the single target topic.
+     */
+    @Query("""
+            select distinct a.question.id from Attempt a
+            where a.learner.id = :learnerId and a.question.id in :questionIds
+            """)
+    List<UUID> findAttemptedQuestionIds(@Param("learnerId") UUID learnerId,
+                                        @Param("questionIds") Collection<UUID> questionIds);
+
     long countByLearnerId(UUID learnerId);
 
     /**

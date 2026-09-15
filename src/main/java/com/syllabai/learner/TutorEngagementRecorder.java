@@ -80,36 +80,57 @@ public class TutorEngagementRecorder {
         for (UUID nodeId : nodeIds) {
             rows.add(new TutorTopicEngagement(learnerId, nodeId, occurredAt,
                     evidenceCount, refused, answerModel, signal,
-                    surface, responseMode, contextKind, contextReference));
+                    surface, responseMode, contextKind, contextReference,
+                    SIGNAL_POLICY_VERSION));
         }
         engagements.saveAll(rows);
-        log.debug("recorded {} {} engagement row(s) for learner {} (refused={}, signal={}, model={})",
-                rows.size(), surface, learnerId, refused, signal, answerModel);
+        log.debug("recorded {} {} engagement row(s) for learner {} (refused={}, signal={}, model={}, policy={})",
+                rows.size(), surface, learnerId, refused, signal, answerModel,
+                SIGNAL_POLICY_VERSION);
     }
 
     /**
-     * V23 deterministic signal classification, one per row, precedence-ordered.
-     * Sources (all deterministic, none LLM-derived):
+     * V25 deterministic signal classification (sprint-2 §9), one per row,
+     * precedence-ordered. Sources (all deterministic, none LLM-derived):
      * <ol>
      *   <li>MISCONCEPTION_RELATED — the tutor policy intervened on an active
      *       BDT misconception on a matched topic (the intervention plan is a
      *       rule output over measured learner state);</li>
+     *   <li>PREREQUISITE_HELP — the tutor policy's deterministic plan chose
+     *       PREREQUISITE_REVIEW for the ask (measured struggle/BDT state says
+     *       the learner needs the foundation first);</li>
      *   <li>DOUBT_SIGNAL — the question contains an explicit confusion phrase
      *       (the learner's own words, classified by fixed substring list);</li>
+     *   <li>CLARIFICATION_REQUEST — the question asks to re-state or clarify
+     *       a previous explanation (fixed phrase list). Checked before the
+     *       explanation patterns so "what do you mean" is a clarification,
+     *       not a fresh explanation request;</li>
      *   <li>EXPLANATION_REQUEST — explanation command words (the same command
      *       vocabulary the intent matcher's stop list defines);</li>
      *   <li>TOPIC_ENGAGEMENT — the topic-match fact alone (default).</li>
      * </ol>
      * The raw question is read here and discarded: only the TYPE is recorded.
+     * Signals that would need multi-row context (repeated explanation
+     * request, post-explanation engagement, unresolved question) are NOT
+     * row types — consumers derive them over the windowed rows; the refused
+     * flag stays the honest "unresolved interaction" fact.
      */
     static String classify(String question, String interventionType) {
         if ("MISCONCEPTION_REMEDIATION".equals(interventionType)) {
             return "MISCONCEPTION_RELATED";
         }
+        if ("PREREQUISITE_REVIEW".equals(interventionType)) {
+            return "PREREQUISITE_HELP";
+        }
         String q = question == null ? "" : question.toLowerCase(java.util.Locale.ROOT);
         for (String pattern : DOUBT_PATTERNS) {
             if (q.contains(pattern)) {
                 return "DOUBT_SIGNAL";
+            }
+        }
+        for (String pattern : CLARIFICATION_PATTERNS) {
+            if (q.contains(pattern)) {
+                return "CLARIFICATION_REQUEST";
             }
         }
         for (String pattern : EXPLANATION_PATTERNS) {
@@ -120,11 +141,21 @@ public class TutorEngagementRecorder {
         return "TOPIC_ENGAGEMENT";
     }
 
+    /** the deterministic classifier version stamped on every row (V25 provenance) */
+    static final String SIGNAL_POLICY_VERSION = "tutor-signals/v2";
+
     /** explicit self-reported confusion (fixed list, substring, case-insensitive) */
     private static final List<String> DOUBT_PATTERNS = List.of(
             "don't understand", "dont understand", "do not understand",
             "confused", "not sure", "don't get", "dont get", "don't see", "dont see",
             "struggling", "stuck on", "no idea", "lost on");
+
+    /** requests to re-state / clarify a previous explanation (V25, §9) */
+    private static final List<String> CLARIFICATION_PATTERNS = List.of(
+            "clarify", "clarification", "what do you mean", "what did you mean",
+            "you mean", "say that again", "say it again", "repeat that",
+            "didn't catch that", "did not catch that", "rephrase", "more precisely",
+            "be more specific");
 
     /** explanation command vocabulary (mirrors the intent matcher's) */
     private static final List<String> EXPLANATION_PATTERNS = List.of(

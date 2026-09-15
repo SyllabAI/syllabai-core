@@ -80,6 +80,15 @@ public class TutorTopicEngagement {
     @Column(name = "context_reference")
     private UUID contextReference;
 
+    /**
+     * V25 (sprint-2 §9): the deterministic classifier/policy version that
+     * produced this row's signal type. Legacy rows are 'tutor-signals/v1'
+     * (the V23 classifier); rows written by the v2 classifier carry
+     * 'tutor-signals/v2'. Provenance for "which policy decided this signal".
+     */
+    @Column(name = "classifier_version", nullable = false, length = 48)
+    private String classifierVersion = "tutor-signals/v1";
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -105,6 +114,17 @@ public class TutorTopicEngagement {
                                 int evidenceCount, boolean refused, String answerModel,
                                 String signalType, String surface, String responseMode,
                                 String contextKind, UUID contextReference) {
+        this(learnerId, nodeId, occurredAt, evidenceCount, refused, answerModel,
+                signalType, surface, responseMode, contextKind, contextReference,
+                "tutor-signals/v1");
+    }
+
+    /** V25 (sprint-2 §9): full provenance + the classifier policy version. */
+    public TutorTopicEngagement(UUID learnerId, UUID nodeId, Instant occurredAt,
+                                int evidenceCount, boolean refused, String answerModel,
+                                String signalType, String surface, String responseMode,
+                                String contextKind, UUID contextReference,
+                                String classifierVersion) {
         this.learnerId = learnerId;
         this.nodeId = nodeId;
         this.occurredAt = occurredAt;
@@ -116,6 +136,8 @@ public class TutorTopicEngagement {
         this.responseMode = responseMode;
         this.contextKind = contextKind;
         this.contextReference = contextReference;
+        this.classifierVersion = classifierVersion == null || classifierVersion.isBlank()
+                ? "tutor-signals/v1" : classifierVersion;
     }
 
     @PrePersist
@@ -136,5 +158,6 @@ public class TutorTopicEngagement {
     public String responseMode() { return responseMode; }
     public String contextKind() { return contextKind; }
     public UUID contextReference() { return contextReference; }
+    public String classifierVersion() { return classifierVersion; }
     public Instant createdAt() { return createdAt; }
 }

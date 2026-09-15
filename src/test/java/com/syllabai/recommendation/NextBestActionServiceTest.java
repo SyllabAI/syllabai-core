@@ -188,7 +188,7 @@ class NextBestActionServiceTest {
         assertThat(view.actions().get(1).targetNodeId()).isEqualTo(TOPIC_B);
         assertThat(view.actions().stream().map(a -> a.targetNodeId()))
                 .doesNotContain(OUTSIDE);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.3");
         assertThat(view.actions().get(0).rank()).isEqualTo(1);
         assertThat(view.actions().get(1).rank()).isEqualTo(2);
     }
@@ -897,7 +897,46 @@ class NextBestActionServiceTest {
         assertThat(view.actions().get(0).servableQuestionCount()).isEqualTo(4);
         assertThat(view.actions().get(0).reasonDetail()).contains("3 time(s)");
         assertThat(view.actions().get(1).reasonCode()).isEqualTo(ReasonCode.UNCOVERED_TOPIC);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.3");
+    }
+
+    @Test
+    @DisplayName("§9: T7a detail states the per-topic signal mix as evidence (v1.3)")
+    void tutorEngagedDetailCarriesSignalMix() {
+        givenTree();
+        givenNoEvidence();
+        when(servableQuestions.countServableByTopic(TOPIC_C)).thenReturn(4);
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, 3L));
+        when(engagementReader.signalCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, Map.of("DOUBT_SIGNAL", 2L, "CLARIFICATION_REQUEST", 1L)));
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        // the mix is stated as evidence — counts only, deterministic order (by type name)
+        assertThat(view.actions().get(0).reasonCode()).isEqualTo(ReasonCode.TUTOR_ENGAGED);
+        assertThat(view.actions().get(0).reasonDetail())
+                .contains("(1 CLARIFICATION_REQUEST, 2 DOUBT_SIGNAL)");
+    }
+
+    @Test
+    @DisplayName("§9: T7a without a signal mix stays the honest count-only detail")
+    void tutorEngagedWithoutMixHasNoEmptyParentheses() {
+        givenTree();
+        givenNoEvidence();
+        when(servableQuestions.countServableByTopic(TOPIC_C)).thenReturn(4);
+        when(engagementReader.askCountsSince(Mockito.any(UUID.class), Mockito.any(Instant.class)))
+                .thenReturn(Map.of(TOPIC_C, 3L));
+        // signalCountsSince left unstubbed (mock default: empty) — no mix claimed
+
+        NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
+
+        assertThat(view.actions().get(0).reasonDetail()).contains("3 time(s)");
+        // no mix claimed when the reader provides none — no signal types stated
+        assertThat(view.actions().get(0).reasonDetail())
+                .doesNotContain("DOUBT_SIGNAL")
+                .doesNotContain("CLARIFICATION_REQUEST")
+                .doesNotContain("EXPLANATION_REQUEST");
     }
 
     @Test

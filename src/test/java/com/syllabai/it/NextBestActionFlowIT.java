@@ -186,7 +186,7 @@ class NextBestActionFlowIT {
         // 3. scoped to question A's anchor: the validated question becomes a retry
         UUID rootA = questionA.primaryTopicNodeId();
         NextBestActionsView view = nextBestActions.actionsFor(learner, rootA);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.3");
         assertThat(view.actions()).isNotEmpty();
         assertThat(view.actions().stream()
                 .filter(a -> a.actionType() == ActionType.RETRY_PROBLEM_QUESTION))

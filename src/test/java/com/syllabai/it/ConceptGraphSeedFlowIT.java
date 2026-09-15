@@ -149,7 +149,7 @@ class ConceptGraphSeedFlowIT {
         misconceptionStates.save(active);
 
         NextBestActionsView actions = nextBestActions.actionsFor(learner, first.rootNodeId());
-        assertThat(actions.policy()).isEqualTo("nba-rules/v1.2");
+        assertThat(actions.policy()).isEqualTo("nba-rules/v1.3");
         assertThat(actions.actions()).anySatisfy(a -> {
             assertThat(a.actionType()).isEqualTo(ActionType.REVIEW_PREREQUISITE);
             assertThat(a.reasonCode()).isEqualTo(ReasonCode.VALIDATED_PREREQUISITE_CHAIN);

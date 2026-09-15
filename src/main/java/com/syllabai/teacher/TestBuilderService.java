@@ -7,6 +7,7 @@ import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.ServableQuestionService;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.knowledge.KnowledgeGraphService;
+import com.syllabai.recommendation.RecommendationProperties;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -40,19 +41,28 @@ public class TestBuilderService {
     private static final int HARD_MAX = 50;
     private static final int HARD_MAX_MARKS = 200;
 
+    /** sprint-2 §10: class-weakness selection policy id */
+    public static final String WEAKNESS_POLICY = "test-builder-weakness/v1";
+
     private final ServableQuestionService servableQuestions;
     private final KnowledgeGraphService knowledgeGraph;
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
+    private final ClassAnalyticsService classAnalytics;
+    private final RecommendationProperties properties;
 
     public TestBuilderService(ServableQuestionService servableQuestions,
                               KnowledgeGraphService knowledgeGraph,
                               QuestionVersionRepository questionVersions,
-                              MarkSchemeRepository markSchemes) {
+                              MarkSchemeRepository markSchemes,
+                              ClassAnalyticsService classAnalytics,
+                              RecommendationProperties properties) {
         this.servableQuestions = servableQuestions;
         this.knowledgeGraph = knowledgeGraph;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
+        this.classAnalytics = classAnalytics;
+        this.properties = properties;
     }
 
     /**
@@ -151,6 +161,82 @@ public class TestBuilderService {
     }
 
     /**
+     * Sprint-2 §10: class-weakness targeting options — the class-evidence
+     * topics a teacher can hand straight to {@link #preview} as selection
+     * constraints.
+     *
+     * <p>No synthetic weakness score: every option carries ONLY the measured
+     * aggregates it was derived from plus a list of explicit reasons —
+     * LOW_MEAN_MASTERY (class mean below the weak ceiling with at least one
+     * measured learner), ACTIVE_MISCONCEPTION_PRESENT (at least one learner
+     * with an active BDT misconception on the topic), BLOCKED_BY_WEAK_PREREQUISITE
+     * (the class-analytics weak-prerequisite view names this topic as a
+     * dependent). Unmeasured topics are NEVER claimed weak — they are listed
+     * separately as coverage gaps ("insufficient coverage") for the teacher's
+     * own judgment.</p>
+     *
+     * <p>Deterministic ordering: meanMastery ascending (nulls last), then
+     * learners-with-active-misconception descending, then code ascending.
+     * Everything comes from one {@link ClassAnalyticsService#overview} call
+     * (already batched — one query per evidence table).</p>
+     */
+    public WeaknessOptionsView weaknessOptions(UUID rootId) {
+        ClassAnalyticsService.ClassOverviewView overview = classAnalytics.overview(rootId);
+
+        // weak prerequisites (class-level): dependent topic -> weak prerequisite codes
+        Map<UUID, List<String>> blockedBy = new HashMap<>();
+        for (ClassAnalyticsService.WeakPrerequisiteView wp : overview.weakPrerequisites()) {
+            for (ClassAnalyticsService.DependentView d : wp.dependents()) {
+                blockedBy.computeIfAbsent(d.nodeId(), k -> new ArrayList<>())
+                        .add(wp.prerequisiteCode());
+            }
+        }
+
+        List<WeakTopicOption> weak = new ArrayList<>();
+        List<CoverageGapView> gaps = new ArrayList<>();
+        for (ClassAnalyticsService.TopicAggregateView t : overview.topics()) {
+            List<String> reasons = new ArrayList<>();
+            if (t.learnersMeasured() > 0 && t.meanMastery() != null
+                    && t.meanMastery() < properties.weakMasteryCeiling()) {
+                reasons.add("LOW_MEAN_MASTERY");
+            }
+            if (t.learnersWithActiveMisconception() > 0) {
+                reasons.add("ACTIVE_MISCONCEPTION_PRESENT");
+            }
+            if (blockedBy.containsKey(t.nodeId())) {
+                reasons.add("BLOCKED_BY_WEAK_PREREQUISITE");
+            }
+            if (!reasons.isEmpty()) {
+                weak.add(new WeakTopicOption(t.nodeId(), t.code(), t.title(), reasons,
+                        t.learnersMeasured(), t.meanMastery(), t.masteryBand(),
+                        t.learnersWithActiveMisconception(), t.activeMisconceptionSignals(),
+                        t.evidenceBackedAttempts(), t.tutorEngagements(), t.dueReviews(),
+                        t.servableQuestions(),
+                        List.copyOf(blockedBy.getOrDefault(t.nodeId(), List.of()))));
+            } else if (t.learnersMeasured() == 0 && t.servableQuestions() > 0
+                    && (t.evidenceBackedAttempts() > 0 || t.tutorEngagements() > 0)) {
+                // unmeasured but with some class activity worth noticing — an
+                // honest coverage gap, never claimed weak
+                gaps.add(new CoverageGapView(t.nodeId(), t.code(), t.title(),
+                        t.servableQuestions(), t.evidenceBackedAttempts(),
+                        t.tutorEngagements()));
+            }
+        }
+        weak.sort(Comparator
+                .comparing(WeakTopicOption::meanMastery,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(Comparator.comparingInt(WeakTopicOption::learnersWithActiveMisconception)
+                        .reversed())
+                .thenComparing(WeakTopicOption::code));
+
+        return new WeaknessOptionsView(rootId, WEAKNESS_POLICY,
+                overview.enrolledLearners(), overview.learnersWithEvidence(),
+                List.copyOf(weak), List.copyOf(gaps),
+                "Pass weakTopics[].topicNodeId values as topicNodeIds to GET /api/v1/teacher/tests/preview"
+                        + " — assembly stays VALIDATED-only, marks-targeted and deterministic.");
+    }
+
+    /**
      * Deterministic marks-aware selection:
      * <ol>
      *   <li>no target — the P9 behaviour: first {@code cap} questions in
@@ -226,5 +312,40 @@ public class TestBuilderService {
     /** one mark point of the answer key (teacher-only) */
     public record TestAnswerView(String partLabel, String ref, String text, int marks,
                                  List<String> acceptanceCriteria) {
+    }
+
+    // ══ sprint-2 §10: class-weakness targeting (read-only options) ══════════
+
+    /** class-weakness options derived transparently from the class evidence */
+    public record WeaknessOptionsView(
+            UUID rootId,
+            String policy,
+            int enrolledLearners,
+            int learnersWithEvidence,
+            List<WeakTopicOption> weakTopics,
+            List<CoverageGapView> coverageGaps,
+            String selectionHint) {
+    }
+
+    /**
+     * One weak class area with the EXPLICIT reasons it is considered weak and
+     * the raw aggregates behind them — no composite score. Ordering key:
+     * meanMastery asc (nulls last) → active-misconception learners desc → code.
+     */
+    public record WeakTopicOption(
+            UUID topicNodeId, String code, String title, List<String> reasons,
+            int learnersMeasured, Double meanMastery, String masteryBand,
+            int learnersWithActiveMisconception, int activeMisconceptionSignals,
+            int evidenceBackedAttempts, int tutorEngagements, int dueReviews,
+            int servableQuestions, List<String> blockedByPrerequisiteCodes) {
+    }
+
+    /**
+     * An unmeasured topic with servable content — an honest "insufficient
+     * coverage" candidate for the teacher's judgment, never claimed weak.
+     */
+    public record CoverageGapView(
+            UUID topicNodeId, String code, String title, int servableQuestions,
+            int evidenceBackedAttempts, int tutorEngagements) {
     }
 }

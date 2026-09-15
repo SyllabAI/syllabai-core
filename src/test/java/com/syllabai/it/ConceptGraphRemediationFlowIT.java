@@ -119,7 +119,7 @@ class ConceptGraphRemediationFlowIT {
 
         // 3. the graph-informed loop: prerequisite chain + corrective concept
         NextBestActionsView view = nextBestActions.actionsFor(learner, root);
-        assertThat(view.policy()).isEqualTo("nba-rules/v1.2");
+        assertThat(view.policy()).isEqualTo("nba-rules/v1.3");
         assertThat(view.actions()).hasSize(3);
         assertThat(view.actions().get(0).actionType()).isEqualTo(ActionType.REVIEW_PREREQUISITE);
         assertThat(view.actions().get(0).reasonCode()).isEqualTo(ReasonCode.VALIDATED_PREREQUISITE_CHAIN);

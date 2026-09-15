@@ -115,6 +115,62 @@ class TutorEngagementRecorderTest {
                 .isEqualTo("TOPIC_ENGAGEMENT");
     }
 
+    // -- V25 (sprint-2 §9): classifier v2 — PREREQUISITE_HELP + CLARIFICATION_REQUEST
+
+    @Test
+    @DisplayName("§9: a PREREQUISITE_REVIEW intervention plan classifies PREREQUISITE_HELP")
+    void prerequisiteReviewPlanClassifiesPrerequisiteHelp() {
+        assertThat(TutorEngagementRecorder.classify(
+                "how do I balance this equation?", "PREREQUISITE_REVIEW"))
+                .isEqualTo("PREREQUISITE_HELP");
+    }
+
+    @Test
+    @DisplayName("§9: clarification phrases classify CLARIFICATION_REQUEST, before explanation patterns")
+    void clarificationPhrasesClassifyBeforeExplanation() {
+        assertThat(TutorEngagementRecorder.classify(
+                "can you clarify what a mole is?", null))
+                .isEqualTo("CLARIFICATION_REQUEST");
+        // "what do you mean" would match the "what do" explanation pattern —
+        // the clarification list is checked FIRST, so it stays a clarification
+        assertThat(TutorEngagementRecorder.classify(
+                "what do you mean by empirical formula?", null))
+                .isEqualTo("CLARIFICATION_REQUEST");
+        assertThat(TutorEngagementRecorder.classify(
+                "sorry, say that again please", null))
+                .isEqualTo("CLARIFICATION_REQUEST");
+    }
+
+    @Test
+    @DisplayName("§9: a doubt phrase still outranks a clarification phrase")
+    void doubtOutranksClarification() {
+        assertThat(TutorEngagementRecorder.classify(
+                "I'm confused — can you clarify?", null))
+                .isEqualTo("DOUBT_SIGNAL");
+    }
+
+    @Test
+    @DisplayName("§9: new rows carry the classifier policy version; legacy default is v1")
+    void rowsCarryClassifierVersion() {
+        when(engagements.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        recorder.onTutorAnswered(new TutorAnsweredEvent(
+                UUID.randomUUID(), "explain moles", List.of(UUID.randomUUID()),
+                3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1",
+                100.0, Instant.now(), "EXPLANATION"));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TutorTopicEngagement>> captor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(engagements).saveAll(captor.capture());
+        assertThat(captor.getValue().get(0).classifierVersion())
+                .isEqualTo("tutor-signals/v2");
+        // the legacy constructors (pre-V25 callers, fixtures) default to v1
+        assertThat(new TutorTopicEngagement(UUID.randomUUID(), UUID.randomUUID(),
+                Instant.now(), 1, false, "m").classifierVersion())
+                .isEqualTo("tutor-signals/v1");
+    }
+
     @Test
     @DisplayName("engagement rows carry the classified signal type (never the raw text)")
     void rowsCarrySignalType() {

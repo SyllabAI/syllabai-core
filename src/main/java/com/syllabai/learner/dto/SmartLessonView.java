@@ -32,7 +32,14 @@ public record SmartLessonView(
         List<MisconceptionStatusView> misconceptions,
         List<EvidenceFactView> evidence) {
 
-    public static final String POLICY_ID = "smart-lesson/v1";
+    /**
+     * v2 (sprint-2 §8): evidence-aware advance/consolidation — confusion
+     * recency, due-review awareness, prerequisite readiness of advance
+     * candidates, misconception-evidence freshness, stalest-topic
+     * consolidation, and unattempted starter-question rotation. Same ladder
+     * shape, same thresholds, no new learner state.
+     */
+    public static final String POLICY_ID = "smart-lesson/v2";
 
     /** What the learner should do next on (or before) this topic. */
     public enum ActionType {

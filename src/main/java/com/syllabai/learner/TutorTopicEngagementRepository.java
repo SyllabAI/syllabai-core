@@ -30,4 +30,18 @@ public interface TutorTopicEngagementRepository extends JpaRepository<TutorTopic
             """)
     List<Object[]> countByLearnerSinceGroupedByNode(@Param("learnerId") UUID learnerId,
                                                     @Param("since") Instant since);
+
+    /**
+     * Per-topic × per-signal-type engagement counts inside the window
+     * (sprint-2 §9): the structured mix behind the T7a ask counts. One batched
+     * query; rows: [nodeId(UUID), signalType(String), count(Long)].
+     */
+    @Query("""
+            select e.nodeId, e.signalType, count(e)
+            from TutorTopicEngagement e
+            where e.learnerId = :learnerId and e.occurredAt >= :since
+            group by e.nodeId, e.signalType
+            """)
+    List<Object[]> countByLearnerSinceGroupedByNodeAndSignal(@Param("learnerId") UUID learnerId,
+                                                            @Param("since") Instant since);
 }
