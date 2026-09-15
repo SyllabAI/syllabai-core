@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-09-15 — completed task contract.** T-C02 invariants (all honored at merge). Historical references to `docs/t-c02-bridge-contract.md` now resolve to this archive copy.
+
 # T-C02 GLM-OCR → Core Bridge Contract
 
 Status: implementation contract; no corpus-wide ingestion.

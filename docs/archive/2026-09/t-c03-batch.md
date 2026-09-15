@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-09-15 — completed task contract.** T-C03 was implemented and merged (PR #5, issue #4); the batch proof and human-review tranches completed 2026-09-06..14 (see TODO.md T-C03/T-C04 rows in the main pack).
+
 # T-C03 — one controlled real-corpus batch + bridge audit
 
 **Status:** implemented on branch `codex/t-c03-batch` (PR #5, issue #4); merge is a

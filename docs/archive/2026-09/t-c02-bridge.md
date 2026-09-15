@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-09-15 — completed task contract.** T-C02 was implemented and merged (branch `codex/t-c02-bridge`, PR #3 -> main `7c6f122`). Historical references to `docs/t-c02-bridge*.md` now resolve to this archive copy.
+
 # T-C02 — GLM-OCR Bridge: Implementation Record
 
 Status: **implemented on `codex/t-c02-glmocr-bridge`** (issue `SyllabAI/syllabai-core#2`).
