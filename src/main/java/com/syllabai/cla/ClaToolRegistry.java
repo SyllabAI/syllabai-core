@@ -93,16 +93,15 @@ public class ClaToolRegistry {
     }
 
     /**
-     * Enablement by (context kind, mode) pair (contract §4.1). Step 1: all
-     * three tools are enabled for KG_TOPIC with EXPLAIN/SUMMARIZE; any other
-     * combination is rejected — the registry, not the caller, decides.
+     * Enablement by (context kind, mode) pair (contract §4.1). Steps 1–2:
+     * all three tools are enabled for KG_TOPIC and PAST_PAPER_QUESTION with
+     * every served mode; any other kind is rejected — the registry, not the
+     * caller, decides.
      */
     public List<Tool> enabledFor(ResourceContext.Kind kind, ResponseMode mode) {
-        if (kind != ResourceContext.Kind.KG_TOPIC) {
+        if (kind != ResourceContext.Kind.KG_TOPIC
+                && kind != ResourceContext.Kind.PAST_PAPER_QUESTION) {
             throw new BadRequestException("context kind not supported by this runtime step: " + kind);
-        }
-        if (mode != ResponseMode.EXPLAIN && mode != ResponseMode.SUMMARIZE) {
-            throw new BadRequestException("response mode not supported by this runtime step: " + mode);
         }
         return List.of(Tool.values());
     }
