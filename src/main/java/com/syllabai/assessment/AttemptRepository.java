@@ -29,7 +29,7 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
      */
     @Query("""
             select distinct a.question.id from Attempt a
-            where a.learner.id = :learnerId and a.question.id in :questionIds
+            where a.learnerId = :learnerId and a.question.id in :questionIds
             """)
     List<UUID> findAttemptedQuestionIds(@Param("learnerId") UUID learnerId,
                                         @Param("questionIds") Collection<UUID> questionIds);
