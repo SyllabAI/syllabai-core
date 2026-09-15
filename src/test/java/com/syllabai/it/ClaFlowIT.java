@@ -413,7 +413,10 @@ class ClaFlowIT {
         assertThat(answer.context().topicCode()).isEqualTo("WCH11-T1.1");
         assertThat(answer.context().attempted()).isFalse();
         assertThat(answer.context().questionMarks()).isGreaterThan(0);
-        assertThat(answer.context().paperCode()).isNotBlank();
+        // the V7 seed MCQ is a paper-less (SEED_DEMO) question — the subject
+        // resolves by subtree containment of its primary topic; paperCode is
+        // honestly null rather than fabricated
+        assertThat(answer.context().paperCode()).isNull();
 
         // THE INVARIANT: no mark-scheme source anywhere in the evidence
         assertThat(answer.citations())

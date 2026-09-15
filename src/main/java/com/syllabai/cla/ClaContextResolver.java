@@ -148,14 +148,30 @@ public class ClaContextResolver {
             // from unresolvable — no serving-state oracle (contract §7.1/§1.2)
             throw new NotFoundException("servable question", questionId);
         }
-        ExamPaper paper = examPapers.findById(question.examPaperId())
-                .orElseThrow(() -> new NotFoundException("exam paper", question.examPaperId()));
-        Subject subject = subjects.findById(paper.subjectId())
-                .orElseThrow(() -> new NotFoundException("subject", paper.subjectId()));
+        // paper identity may be absent for paper-less (SEED_DEMO) questions —
+        // a legitimate servable anchor; the subject then resolves by
+        // deterministic subtree containment of the primary topic instead of
+        // the paper's subject FK
+        ExamPaper paper = question.examPaperId() == null ? null
+                : examPapers.findById(question.examPaperId())
+                        .orElseThrow(() -> new NotFoundException(
+                                "exam paper", question.examPaperId()));
+        UUID topicNodeId = question.primaryTopicNodeId();
+        if (topicNodeId == null) {
+            throw new NotFoundException("question topic anchor", questionId);
+        }
+        Subject subject = paper != null
+                ? subjects.findById(paper.subjectId())
+                        .orElseThrow(() -> new NotFoundException("subject", paper.subjectId()))
+                : subjects.findAllByOrderByCode().stream()
+                        .filter(s -> s.knowledgeNodeId() != null
+                                && graph.subtreeIds(s.knowledgeNodeId()).contains(topicNodeId))
+                        .findFirst()
+                        .orElseThrow(() -> new NotFoundException(
+                                "subject for question", questionId));
 
         UUID rootId = subject.knowledgeNodeId();
-        UUID topicNodeId = question.primaryTopicNodeId();
-        if (topicNodeId == null || rootId == null) {
+        if (rootId == null) {
             throw new NotFoundException("question topic anchor", questionId);
         }
 
@@ -201,7 +217,7 @@ public class ClaContextResolver {
                 currentVersion.commandWord() != null ? currentVersion.commandWord()
                         : question.commandWord(),
                 currentVersion.marks(),
-                paper.paperCode(),
+                paper != null ? paper.paperCode() : null,
                 attempted);
     }
 
