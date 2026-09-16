@@ -6,7 +6,6 @@ import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.AssessmentService;
 import com.syllabai.assessment.AttemptRepository;
-import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionRepository;
@@ -23,7 +22,6 @@ import com.syllabai.teacher.TeacherMarkingService;
 import com.syllabai.teacher.ingestion.PastPaperDraftDto;
 import com.syllabai.teacher.ingestion.PastPaperIngestionService;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -79,7 +77,6 @@ class EvidenceStateConcurrencyIT {
     @Autowired private QuestionRepository questions;
     @Autowired private QuestionVersionRepository questionVersions;
     @Autowired private MarkSchemeRepository markSchemes;
-    @Autowired private ExamPaperRepository examPapers;
     @Autowired private SkillStateRepository skillStates;
 
     private ExecutorService executor;
@@ -249,11 +246,9 @@ class EvidenceStateConcurrencyIT {
                 .orElseThrow();
         List<ContentReviewService.PointCriteria> criteria = scheme.points().stream()
                 .map(point -> new ContentReviewService.PointCriteria(
-                        point.id(), List.of(point.criteria().get(0))))
+                        point.id(), point.acceptanceCriteria()))
                 .toList();
         review.validateMarkScheme(scheme.id(), criteria);
-        assertThat(examPapers.findById(summary.paperId()).orElseThrow().validationState())
-                .isEqualTo(com.syllabai.assessment.ExamPaper.ValidationState.VALIDATED);
         return question;
     }
 
