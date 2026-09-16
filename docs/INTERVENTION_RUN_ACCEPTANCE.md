@@ -93,22 +93,46 @@ REPORTED | UNVERIFIED | REJECTED.
 
 ## Honest remainders
 
-- `InterventionRunFlowIT` has now EXECUTED once in real Docker CI (runs
-  `35075687695`/`35077858230`/`35078454055`, 2026-09-16): both flows are RED
-  on fixture defects (above), so the IT is NOT claimed as passing. Until the
-  two fixtures are corrected, core-ci remains RED and — per the CI-recovery
-  runbook's own rule ("real-failure = stop, no r3") — this blocks the
-  pilot-readiness pipeline (r3/t0/T-032). Fixing the two fixtures (assert the
-  deterministic NBA action the policy actually produces, and root the fixture
-  paper on a curriculum-ingested subject with a KG root) is the smallest
-  safe, contract-defined engineering task on core.
+- `InterventionRunFlowIT` executed once in real Docker CI (runs
+  `35075687695`/`35077858230`/`35078454055`, 2026-09-16): both flows were RED
+  on the two fixture defects (above). The fixtures are now CORRECTED (2026-09-17,
+  local — see below); until one green core-ci run executes on the fixed tree,
+  the IT stays `UNVERIFIED — ACTIONS MINUTES EXHAUSTED` and is NOT claimed as
+  passing. Fixture corrections (test-only commit; zero product changes, zero
+  gate changes):
+  1. the NBA assertion assumed `PRACTISE_QUESTIONS/LOW_MASTERY`, but the
+     zero-mark fixture deterministically produces `RETRY_PROBLEM_QUESTION`
+     (the problem-question pass claims the node first — one action per topic);
+     the fixture now marks two attempts 3/4 (above the 0.5 problem ratio, below
+     full marks — conservative BKT incorrectness), so measured weakness yields
+     the LOW_MASTERY practice action the §11 scenario requires;
+  2. the ingestion-created subject has no KG root, so the fail-closed
+     subject-anchoring gate correctly refused scenario creation; the fixture
+     now anchors the subject on its own paper island (the same subject↔root
+     link the teacher curriculum flow creates) — the product gate is unchanged
+     and still proven by the negative tests.
+  Local verification of the fix: `mvn -B -ntp verify` on JDK 25 (CI-parity
+  toolchain) = BUILD SUCCESS; surefire 540/540 green; failsafe 68/68 ITs
+  discovered and Docker-skipped (`disabledWithoutDocker`) — IT execution
+  itself remains CI-authoritative. Evidence:
+  `evidence/local-verify-20260917-pre-ci-fixes.txt` (central repo) and the
+  CI failure log retained from run `35078454055`.
+  Per the CI-recovery runbook's own rule ("real-failure = stop, no r3"), the
+  RED core-ci blocked the pilot-readiness pipeline (r3/t0/T-032); the corrected
+  fixtures (assert the deterministic NBA action the policy actually produces,
+  and root the fixture paper's subject on its ingestion island) remove that
+  blocker the moment one authoritative run executes on this tree.
 - The prototype stays **PROPOSED → (pending) ACCEPTED**: the contract §14 gate
   requires the acceptance criteria above PLUS an understanding of
   persistence/query cost before promotion. §14 audit (2026-09-17
   reconciliation): criterion claims 1–10 are demonstrated (unit 540 green in
-  CI + live 10/10 on production), but **no artifact yet documents the
-  persistence/query-cost analysis** (row growth, query patterns,
-  normalization trigger from contract §10), and the IT fixtures above are
-  red — therefore **E2 is NOT ready for ACCEPTED promotion**; promotion
-  remains the operator's decision and is NOT claimed.
+  CI + live 10/10 on production). The §14 cost precondition is now CLOSED:
+  `INTERVENTION_RUN_PERSISTENCE_QUERY_COST.md` (2026-09-17, local analysis —
+  no CI consumed) documents the full storage inventory, the exhaustive query
+  surface (all run-PK-scoped, both child finders index-covered), the growth
+  model (≈0.75 MB/month worst case at pilot scale), and the §10 normalization
+  verdict (trigger NOT fired; `evidence_refs` jsonb identified as vestigial —
+  recorded for a future migration, not changed now). **E2 promotion therefore
+  has exactly ONE remaining precondition: one green core-ci run on the fixed
+  tree.** Promotion itself remains the operator's decision and is NOT claimed.
 - Live verification is read-mostly: run creation/lifecycle is exercised on production with a fresh test learner (append-only rows, zero learner-state impact by the proven boundary).

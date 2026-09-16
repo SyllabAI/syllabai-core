@@ -16,6 +16,9 @@ import com.syllabai.content.ContentIngestionService;
 import com.syllabai.content.Document;
 import com.syllabai.content.DocumentEmbeddingService;
 import com.syllabai.content.EmbeddingProvider;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.dto.LoginRequest;
@@ -174,6 +177,8 @@ class ClaFlowIT {
     private com.syllabai.assessment.QuestionPartRepository questionParts;
     @Autowired
     private com.syllabai.teacher.ContentReviewService contentReview;
+    @Autowired
+    private ExamPaperRepository examPapers;
 
     @LocalServerPort
     private int port;
@@ -631,12 +636,38 @@ class ClaFlowIT {
         assertThat(ok.body()).contains("\"kind\":\"SPECIFICATION_POINT\"");
         assertThat(ok.body()).contains("IALCHEM2018-U1-T3");
 
-        // unknown code → 404 (no oracle); foreign subject's code → 404 too
+        // unknown code → 404 (no oracle)
         HttpResponse<String> unknown = post("/api/v1/learners/me/cla/ask", token,
                 specBody(rootId, "IALCHEM2018-U1-T99", "EXPLAIN", "explain"));
         assertThat(unknown.statusCode()).isEqualTo(404);
-        HttpResponse<String> foreign = post("/api/v1/learners/me/cla/ask", token,
+
+        // a code from the V6 seed looks like a different board's curriculum but
+        // sits INSIDE this subject's seeded tree — the resolver serves it (the
+        // gate is subtree membership, never the code prefix)
+        HttpResponse<String> inSubtree = post("/api/v1/learners/me/cla/ask", token,
                 specBody(rootId, "WCH11-T1.1", "EXPLAIN", "explain"));
+        assertThat(inSubtree.statusCode()).isEqualTo(200);
+
+        // a genuinely FOREIGN subject's root code → 404 (subject isolation):
+        // the fixture creates its own VALIDATED KG root + subject row so the
+        // foreign code exists but lives outside this root's subtree
+        String foreignCode = "ITFRN" + UUID.randomUUID().toString().substring(0, 6);
+        UUID foreignNodeId = UUID.randomUUID();
+        jdbc.update("""
+                insert into knowledge_nodes (id, code, node_type, title, description,
+                    validation_status, provenance, created_by, created_at)
+                values (?, ?, 'SUBJECT', 'IT fixture foreign subject',
+                    'cla-flow-it foreign-subject fixture', 'VALIDATED', 'it-fixture',
+                    'cla-flow-it', now())
+                """, foreignNodeId, foreignCode);
+        jdbc.update("""
+                insert into subjects (id, curriculum_version_id, code, name,
+                    knowledge_node_id, created_at)
+                values (?, (select curriculum_version_id from subjects where code = 'CHM'),
+                    ?, 'IT fixture foreign subject', ?, now())
+                """, UUID.randomUUID(), foreignCode, foreignNodeId);
+        HttpResponse<String> foreign = post("/api/v1/learners/me/cla/ask", token,
+                specBody(rootId, foreignCode, "EXPLAIN", "explain"));
         assertThat(foreign.statusCode()).isEqualTo(404);
 
         // missing code for the declared kind → 400
@@ -699,6 +730,17 @@ class ClaFlowIT {
         // the ingestion anchor KG node (the question's primary topic) must pass
         // the §1.2 curriculum gate — validate it exactly like a teacher would
         review.validateNode(question.primaryTopicNodeId());
+        // Anchor the paper's ingestion-created subject on its own paper island
+        // (the anchor topic becomes the subject's KG root — the same link the
+        // teacher curriculum flow creates on placement). Ingestion never guesses
+        // curriculum placement, so the imported subject starts with
+        // knowledgeNodeId = null and every CLA question-anchor resolution
+        // fail-closes on the subject gate ("question topic anchor … not found")
+        // — correct product behaviour the fixture must satisfy, not bypass.
+        ExamPaper paper = examPapers.findById(question.examPaperId()).orElseThrow();
+        Subject paperSubject = subjects.findById(paper.subjectId()).orElseThrow();
+        paperSubject.linkKnowledgeNode(question.primaryTopicNodeId());
+        subjects.save(paperSubject);
         partQuestionId = question.id();
         partAId = version.parts().stream()
                 .filter(p -> "a".equals(p.label())).findFirst().orElseThrow().id();

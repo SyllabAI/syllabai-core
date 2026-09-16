@@ -16,6 +16,11 @@ on:
       - "mvnw"
       - "mvnw.cmd"
       - ".github/workflows/ci.yml"
+  # Quota-recovery enablement (CI-RECOVERY-RUNBOOK addendum 2026-09-17):
+  # lets the operator fire EXACTLY ONE authoritative run on a prepared main
+  # when the Actions minutes window opens, without a filler src/ push. The
+  # build job itself is unchanged.
+  workflow_dispatch:
 
 concurrency:
   group: core-ci-${{ github.ref }}

@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.AssessmentService;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.assessment.MarkSchemeRepository;
 import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionRepository;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.assessment.dto.PartAnswerRequest;
 import com.syllabai.assessment.dto.StructuredSubmitRequest;
+import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.dto.RegisterRequest;
@@ -74,6 +77,8 @@ class InterventionRunFlowIT {
     @Autowired
     private PastPaperIngestionService ingestion;
     @Autowired
+    private ExamPaperRepository examPapers;
+    @Autowired
     private ContentReviewService review;
     @Autowired
     private AssessmentService assessment;
@@ -100,6 +105,18 @@ class InterventionRunFlowIT {
     @Autowired
     private InterventionRunController controller;
 
+    /**
+     * Fixture paper: ONE 4-mark structured part carrying TWO 2-mark scheme
+     * points (both ref "1-a"). The 4-mark part is deliberate: the E2 scenario
+     * needs a LOW_MASTERY practice action, and the NBA's problem-question pass
+     * (T3) claims any topic whose latest graded answers sit at/below the 0.5
+     * mark ratio — the old 2-mark/one-point zero-mark fixture deterministically
+     * produced RETRY_PROBLEM_QUESTION, which outranks practice for the node
+     * (one action per topic). 3/4 marks keeps the answer ABOVE the retry
+     * threshold while staying below full marks, which the evidence rule treats
+     * as incorrect (conservative BKT correctness) — measured weakness without
+     * a problem-question claim.
+     */
     private static PastPaperDraftDto draft(String paperCode) {
         return new PastPaperDraftDto(
                 "1.0",
@@ -107,14 +124,33 @@ class InterventionRunFlowIT {
                         "Paper 2C", "June 2013-" + UUID.randomUUID().toString().substring(0, 6),
                         paperCode, "it-qp-doc", "it-ms-doc"),
                 List.of(new PastPaperDraftDto.QuestionDraft("q1", "1", "Question 1 stem",
-                        "Explain", 2, "STRUCTURED", 1, 0.6,
+                        "Explain", 4, "STRUCTURED", 1, 0.6,
                         List.of(new PastPaperDraftDto.PartDraft("a", "Part a prompt",
-                                "State", 2, 0.6)))),
+                                "State", 4, 0.6)))),
                 new PastPaperDraftDto.MarkSchemeDraft("1", "it-ms-doc", List.of(
                         new PastPaperDraftDto.MarkPointDraft("1-a", 1, "the correct content", 2,
+                                List.of(), 0.6),
+                        new PastPaperDraftDto.MarkPointDraft("1-a", 2, "the supporting statement", 2,
                                 List.of(), 0.6))),
                 "it-test-method",
                 true);
+    }
+
+    /**
+     * Anchors the ingestion-created subject on its own paper island (the
+     * paper's ingestion-anchor topic becomes the subject's KG root — the same
+     * subject↔root link the teacher curriculum flow creates when a subject is
+     * placed). Paper ingestion never guesses curriculum placement, so an
+     * unanchored import has {@code knowledgeNodeId = null}; every downstream
+     * fail-closed subject-resolution gate (NBA scenario creation, CLA question
+     * anchors) then correctly refuses — which is product behaviour the fixture
+     * must satisfy, not bypass.
+     */
+    private void anchorSubjectOnQuestionIsland(Question question) {
+        ExamPaper paper = examPapers.findById(question.examPaperId()).orElseThrow();
+        Subject subject = subjects.findById(paper.subjectId()).orElseThrow();
+        subject.linkKnowledgeNode(question.primaryTopicNodeId());
+        subjects.save(subject);
     }
 
     private UUID newLearner() {
@@ -129,33 +165,52 @@ class InterventionRunFlowIT {
         review.validateQuestionVersion(version.id());
         var scheme = markSchemes
                 .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()).orElseThrow();
-        review.validateMarkScheme(scheme.id(), List.of(new ContentReviewService.PointCriteria(
-                scheme.points().get(0).id(), List.of("the correct content"))));
+        // every point gets its own criteria (same pattern as ClaFlowIT's part
+        // fixture — a partially-validated scheme is not a fixture shortcut)
+        review.validateMarkScheme(scheme.id(), scheme.points().stream()
+                .map(pt -> new ContentReviewService.PointCriteria(
+                        pt.id(), List.of(pt.text())))
+                .toList());
     }
 
-    /** one wrong, human-marked-zero attempt on the question's first part */
-    private UUID wrongAttempt(UUID learner, Question question) {
+    /**
+     * One weak, human-marked attempt on the question's first part: 3 of 4
+     * marks (first point full, last point one short). Partial credit keeps the
+     * BKT correctness conservative (only full marks are mastery evidence), so
+     * repeated attempts measure genuine weakness; the 0.75 mark ratio stays
+     * above the problem-question threshold, so the anchor topic keeps the
+     * LOW_MASTERY practice action instead of a RETRY_PROBLEM_QUESTION claim.
+     */
+    private UUID weakAttempt(UUID learner, Question question) {
         var version = questionVersions
                 .findByQuestionIdOrderByVersionDesc(question.id()).get(0);
         UUID partId = version.parts().get(0).id();
         var result = assessment.submitStructured(learner,
                 new StructuredSubmitRequest(question.id(),
-                        List.of(new PartAnswerRequest(partId, "a wrong answer")),
+                        List.of(new PartAnswerRequest(partId, "a partially correct answer")),
                         30000L, 4, false, true));
         UUID answerId = answers.findByAttemptIdOrderByQuestionPartId(
                 result.attemptId()).get(0).id();
         var scheme = markSchemes
                 .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()).orElseThrow();
-        Map<String, Integer> zero = new LinkedHashMap<>();
-        zero.put(scheme.points().get(0).id().toString(), 0);
-        teacherMarkingService.recordHumanMark(answerId, UUID.randomUUID(), 0, zero, "no marks");
+        Map<String, Integer> perPoint = new LinkedHashMap<>();
+        var points = scheme.points();
+        for (int i = 0; i < points.size(); i++) {
+            int awarded = (i == points.size() - 1)
+                    ? points.get(i).marks() - 1
+                    : points.get(i).marks();
+            perPoint.put(points.get(i).id().toString(), awarded);
+        }
+        int total = points.stream().mapToInt(pt -> pt.marks()).sum() - 1;
+        teacherMarkingService.recordHumanMark(answerId, UUID.randomUUID(), total,
+                perPoint, "partial — never fully correct");
         return result.attemptId();
     }
 
     @Test
     @DisplayName("E2 §11 scenario: NBA practice run → steps → evidence by reference → terminal → reconstruct; run ops never mutate learner state")
     void recommendationToRunToTerminalReconstruction() {
-        // 1. real validated content + measured weakness (two zero-mark attempts)
+        // 1. real validated content + measured weakness (two 3/4-marked attempts)
         PastPaperIngestionService.IngestionSummary summary =
                 ingestion.ingest(draft("RUNA"), UUID.randomUUID());
         Question question = questions.findAllByOrderByDifficultyAsc().stream()
@@ -164,10 +219,13 @@ class InterventionRunFlowIT {
         validateCurrentVersion(question);
         UUID learner = newLearner();
         UUID rootId = question.primaryTopicNodeId();
-        UUID attempt1 = wrongAttempt(learner, question);
-        wrongAttempt(learner, question);
+        anchorSubjectOnQuestionIsland(question);
+        UUID attempt1 = weakAttempt(learner, question);
+        weakAttempt(learner, question);
 
-        // the deterministic NBA PRACTICE action exists (measured weakness)
+        // the deterministic NBA PRACTICE action exists (measured weakness over
+        // two partially-marked attempts — the problem-question pass never
+        // claims the node because both answers sit above its mark ratio)
         NextBestActionsView nba = nextBestActions.actionsFor(learner, rootId);
         assertThat(nba.actions())
                 .anySatisfy(a -> {
@@ -261,6 +319,7 @@ class InterventionRunFlowIT {
         validateCurrentVersion(question);
         UUID learner = newLearner();
         UUID rootId = question.primaryTopicNodeId();
+        anchorSubjectOnQuestionIsland(question);
 
         NextBestActionsView cold = nextBestActions.actionsFor(learner, rootId);
         assertThat(cold.actions().get(0).reasonCode()).isEqualTo(ReasonCode.UNCOVERED_TOPIC);
