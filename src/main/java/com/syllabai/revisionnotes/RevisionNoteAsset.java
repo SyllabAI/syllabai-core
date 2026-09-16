@@ -3,9 +3,10 @@ package com.syllabai.revisionnotes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Binary asset (diagram PNG) referenced by revision-note bodies. Filenames are
@@ -27,7 +28,12 @@ public class RevisionNoteAsset {
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 
-    @Lob
+    /**
+     * bytea via SqlTypes.BINARY — @Lob byte[] maps to OID/large-object on
+     * Postgres (the live-verified "expression is of type bigint" error); the
+     * explicit binary type code binds plain bytea like the jsonb pattern.
+     */
+    @JdbcTypeCode(SqlTypes.BINARY)
     @Column(name = "bytes", nullable = false, columnDefinition = "bytea")
     private byte[] bytes;
 
