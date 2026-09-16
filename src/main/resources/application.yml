@@ -94,6 +94,14 @@ syllabai:
     problem-question-cap: 2          # retry actions per response
 
 
+  assessment:
+    # Mark-scheme reveal policy for the learner surface (GET /questions/{id}/mark-scheme).
+    # VALIDATED_ONLY (default, spec-true): only teacher-VALIDATED schemes reveal;
+    # the endpoint answers 204 otherwise so the UI shows "pending teacher validation".
+    # INCLUDE_SUGGESTED (operator-authorized deviation): AI-extracted SUGGESTED
+    # schemes also reveal, labelled with their state. REJECTED/FLAGGED never reveal.
+    markscheme-reveal-policy: ${SYLLABAI_MARKSCHEME_REVEAL_POLICY:VALIDATED_ONLY}
+
   security:
     jwt-secret: ${SYLLABAI_JWT_SECRET:}          # required; blank fails fast with a clear message
     jwt-ttl: PT12H
