@@ -3,6 +3,7 @@ package com.syllabai.smartmark;
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.EvidencePublisher;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.assessment.MarkSchemeRepository;
@@ -35,6 +36,7 @@ public class SmartMarkService {
     private static final Logger log = LoggerFactory.getLogger(SmartMarkService.class);
 
     private final AnswerRepository answers;
+    private final AttemptRepository attempts;
     private final QuestionVersionRepository questionVersions;
     private final MarkSchemeRepository markSchemes;
     private final SmartMarkResultRepository smartMarkResults;
@@ -45,6 +47,7 @@ public class SmartMarkService {
     private final ApplicationEventPublisher events;
 
     public SmartMarkService(AnswerRepository answers,
+                            AttemptRepository attempts,
                             QuestionVersionRepository questionVersions,
                             MarkSchemeRepository markSchemes,
                             SmartMarkResultRepository smartMarkResults,
@@ -54,6 +57,7 @@ public class SmartMarkService {
                             SmartMarkPipeline pipeline,
                             ApplicationEventPublisher events) {
         this.answers = answers;
+        this.attempts = attempts;
         this.questionVersions = questionVersions;
         this.markSchemes = markSchemes;
         this.smartMarkResults = smartMarkResults;
@@ -71,6 +75,17 @@ public class SmartMarkService {
      */
     @Transactional
     public SmartMarkResult markAnswer(UUID answerId) {
+        // Evidence-state concurrency fix: same serialization point as human
+        // marking (TeacherMarkingService) — the attempt row lock is taken
+        // BEFORE loading attempt state, so a κ-released smart mark racing a
+        // human mark (or another smart mark) on the same attempt re-reads the
+        // winner's committed state instead of acting on a stale evidenceEmitted
+        // flag. Pre-κ (provisional) runs take the lock too: identical code
+        // path, and provisional marks still write answer/attempt state.
+        UUID attemptId = answers.findAttemptIdById(answerId)
+                .orElseThrow(() -> new NotFoundException("answer", answerId));
+        attempts.findByIdForUpdate(attemptId)
+                .orElseThrow(() -> new NotFoundException("attempt", attemptId));
         Answer answer = answers.findWithPartAndAttempt(answerId)
                 .orElseThrow(() -> new NotFoundException("answer", answerId));
         Attempt attempt = answer.attempt();

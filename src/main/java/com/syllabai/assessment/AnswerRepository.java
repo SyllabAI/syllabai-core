@@ -11,6 +11,17 @@ import org.springframework.data.repository.query.Param;
 
 public interface AnswerRepository extends JpaRepository<Answer, UUID> {
 
+    /**
+     * Id-only resolution for the marking-transaction lock order (evidence-state
+     * concurrency fix): resolves the owning attempt id WITHOUT loading entities,
+     * so the caller can take the attempt row lock (findByIdForUpdate) before any
+     * answer/attempt state enters its persistence context. FK-column path — no
+     * LAZY proxy initialization (the established QuestionVersion.questionIdColumn
+     * pattern).
+     */
+    @Query("select a.attempt.id from Answer a where a.id = :id")
+    Optional<UUID> findAttemptIdById(@Param("id") UUID id);
+
     @EntityGraph(attributePaths = {"questionPart", "attempt", "attempt.question"})
     @Query("select a from Answer a where a.id = :id")
     Optional<Answer> findWithPartAndAttempt(@Param("id") UUID id);

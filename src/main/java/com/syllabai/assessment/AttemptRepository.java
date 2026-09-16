@@ -2,14 +2,33 @@ package com.syllabai.assessment;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
+
+    /**
+     * Marking-transaction serialization point (evidence-state concurrency fix):
+     * SELECT … FOR UPDATE on the attempt row. Every authoritative marking
+     * transaction — human AND κ-released Smart Mark — acquires this lock BEFORE
+     * loading attempt state, so the load-observe-settle-emit sequence is atomic
+     * across concurrent markers of the same attempt: the loser of the race
+     * re-reads the committed post-winner state (evidence already fired →
+     * override; still-settling → its own completing-mark check sees the other
+     * parts' committed marks). Lock scope is one attempt row for one short
+     * transaction — no cross-attempt contention, no lock-order inversions
+     * (attempt is always the first lock a marking transaction takes).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from Attempt a where a.id = :id")
+    Optional<Attempt> findByIdForUpdate(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = "question")
     List<Attempt> findByLearnerIdOrderByCreatedAtDesc(UUID learnerId, Pageable pageable);

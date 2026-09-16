@@ -12,6 +12,7 @@ import com.syllabai.TestIds;
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.EvidencePublisher;
 import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkScheme;
@@ -42,6 +43,7 @@ class SmartMarkServiceTest {
     private static final UUID PAPER = UUID.randomUUID();
 
     private final AnswerRepository answers = mock(AnswerRepository.class);
+    private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final QuestionVersionRepository questionVersions = mock(QuestionVersionRepository.class);
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final SmartMarkResultRepository smartMarkResults = mock(SmartMarkResultRepository.class);
@@ -58,7 +60,7 @@ class SmartMarkServiceTest {
     private final Answer answer;
 
     private final SmartMarkService service = new SmartMarkService(
-            answers, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
+            answers, attempts, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
             questionTopics, evidencePublisher,
             new SmartMarkPipeline(
                     ctx -> new MarkingCandidate("test-model", ctx.points().stream()
@@ -97,6 +99,8 @@ class SmartMarkServiceTest {
         scheme.addPoint(pointA);
         scheme.addPoint(pointB);
 
+        when(answers.findAttemptIdById(any(UUID.class))).thenReturn(Optional.of(attempt.id()));
+        when(attempts.findByIdForUpdate(any(UUID.class))).thenReturn(Optional.of(attempt));
         when(answers.findWithPartAndAttempt(answer.id())).thenReturn(Optional.of(answer));
         when(questionVersions.findByQuestionIdOrderByVersionDesc(question.id()))
                 .thenReturn(List.of(version));
@@ -192,7 +196,7 @@ class SmartMarkServiceTest {
 
         // a pipeline that awards every in-scope point (accepted, full marks)
         SmartMarkService fullMarks = new SmartMarkService(
-                answers, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
+                answers, attempts, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
                 questionTopics, evidencePublisher,
                 new SmartMarkPipeline(
                         ctx -> new MarkingCandidate("test-model", ctx.points().stream()

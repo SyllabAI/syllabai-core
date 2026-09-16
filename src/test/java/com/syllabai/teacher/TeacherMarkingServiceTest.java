@@ -10,6 +10,7 @@ import com.syllabai.TestIds;
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.EvidencePublisher;
 import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkScheme;
@@ -47,6 +48,7 @@ class TeacherMarkingServiceTest {
     private static final UUID TOPIC = UUID.randomUUID();
 
     private final AnswerRepository answers = mock(AnswerRepository.class);
+    private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final HumanMarkRepository humanMarks = mock(HumanMarkRepository.class);
     private final SmartMarkResultRepository smartMarkResults = mock(SmartMarkResultRepository.class);
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations =
@@ -56,7 +58,7 @@ class TeacherMarkingServiceTest {
     private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add);
 
     private final TeacherMarkingService service = new TeacherMarkingService(
-            answers, humanMarks, smartMarkResults, agreementEvaluations, questionTopics,
+            answers, attempts, humanMarks, smartMarkResults, agreementEvaluations, questionTopics,
             evidencePublisher, published::add);
 
     private final Question question;
@@ -94,6 +96,8 @@ class TeacherMarkingServiceTest {
         scheme.addPoint(pointA);
         scheme.addPoint(pointB);
 
+        when(answers.findAttemptIdById(any(UUID.class))).thenReturn(Optional.of(attempt.id()));
+        when(attempts.findByIdForUpdate(any(UUID.class))).thenReturn(Optional.of(attempt));
         when(answers.findWithPartAndAttempt(answer.id())).thenReturn(Optional.of(answer));
         when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
                 .thenReturn(List.of(answer));

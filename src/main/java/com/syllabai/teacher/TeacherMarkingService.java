@@ -3,6 +3,7 @@ package com.syllabai.teacher;
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
 import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.assessment.EvidencePublisher;
 import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionTopic;
@@ -45,6 +46,7 @@ public class TeacherMarkingService {
     private static final Logger log = LoggerFactory.getLogger(TeacherMarkingService.class);
 
     private final AnswerRepository answers;
+    private final AttemptRepository attempts;
     private final HumanMarkRepository humanMarks;
     private final SmartMarkResultRepository smartMarkResults;
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations;
@@ -53,6 +55,7 @@ public class TeacherMarkingService {
     private final ApplicationEventPublisher events;
 
     public TeacherMarkingService(AnswerRepository answers,
+                                 AttemptRepository attempts,
                                  HumanMarkRepository humanMarks,
                                  SmartMarkResultRepository smartMarkResults,
                                  SmartMarkAgreementEvaluationRepository agreementEvaluations,
@@ -60,6 +63,7 @@ public class TeacherMarkingService {
                                  EvidencePublisher evidencePublisher,
                                  ApplicationEventPublisher events) {
         this.answers = answers;
+        this.attempts = attempts;
         this.humanMarks = humanMarks;
         this.smartMarkResults = smartMarkResults;
         this.agreementEvaluations = agreementEvaluations;
@@ -80,6 +84,18 @@ public class TeacherMarkingService {
     @Transactional
     public HumanMark recordHumanMark(UUID answerId, UUID markerId, int marksAwarded,
                                      Map<String, Integer> perPointDecisions, String comments) {
+        // Evidence-state concurrency fix: serialize marking transactions on the
+        // attempt row BEFORE loading any attempt state. Without this, two
+        // transactions that both load the attempt before either commits each
+        // observe evidenceEmitted=false and each fires its own evidence event —
+        // duplicate BKT/learner-state projection for one attempt (reproduced
+        // 6/6 in EvidenceStateConcurrencyIT scenario A at 78c8afc). With the
+        // lock, the loser re-reads the winner's committed state and takes the
+        // override path instead.
+        UUID attemptId = answers.findAttemptIdById(answerId)
+                .orElseThrow(() -> new NotFoundException("answer", answerId));
+        attempts.findByIdForUpdate(attemptId)
+                .orElseThrow(() -> new NotFoundException("attempt", attemptId));
         Answer answer = answers.findWithPartAndAttempt(answerId)
                 .orElseThrow(() -> new NotFoundException("answer", answerId));
         Attempt attempt = answer.attempt();
