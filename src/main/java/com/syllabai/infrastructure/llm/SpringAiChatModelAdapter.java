@@ -74,14 +74,29 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, timeoutSeconds, null);
     }
 
-    /** Full wiring incl. per-call timeout and the concrete runtime-options factory. */
+    /** Legacy wiring incl. per-call timeout and the concrete runtime-options factory. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds, int timeoutSeconds,
+                                    Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
+        this(providerName, chatModel, configured, configured, failureThreshold, cooldownSeconds,
+                timeoutSeconds, 0, null, runtimeOptionsFactory);
+    }
+
+    /**
+     * Full wiring (ADR-023): enabled/configured are exposed separately so the admin
+     * health output can distinguish "disabled by configuration" from "enabled but key
+     * missing"; {@code dailyBudget} is the configured LOCAL routing guard (not a
+     * provider-quota claim); {@code effectiveModel} is the provider default model.
+     */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean enabled,
+                                    boolean configured, int failureThreshold, int cooldownSeconds,
+                                    int timeoutSeconds, int dailyBudget, String effectiveModel,
                                     Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
-        this.health = new LlmProviderHealth(configured, failureThreshold, cooldownSeconds);
+        this.health = new LlmProviderHealth(enabled, configured, failureThreshold, cooldownSeconds,
+                dailyBudget, effectiveModel);
         this.timeoutSeconds = Math.max(1, timeoutSeconds);
         this.runtimeOptionsFactory = runtimeOptionsFactory;
     }
@@ -93,7 +108,9 @@ public class SpringAiChatModelAdapter implements LlmProvider {
 
     @Override
     public boolean available() {
-        return configured && !health.inCooldown();
+        // ADR-023: a provider that consumed its configured LOCAL daily budget is
+        // ineligible until the UTC day rolls over — same treatment as cooldown.
+        return configured && !health.inCooldown() && !health.budgetExhausted();
     }
 
     @Override
@@ -130,18 +147,22 @@ public class SpringAiChatModelAdapter implements LlmProvider {
             throw e;
         } catch (RuntimeException e) {
             long latencyMs = (System.nanoTime() - started) / 1_000_000;
+            // ADR-023: classify ONCE at the adapter boundary, from exception TYPE and
+            // HTTP status — never by parsing error strings. The SDK error text (still
+            // no credential material) stays in the message for diagnosability.
+            LlmFailureClass failureClass = LlmProviderFailureClassifier.classify(e);
             String causeSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
             // Real cause must reach BOTH the health snapshot and the log — the
             // provider-SDK exception text is what tells a 403 dead key apart from a
             // 404 retired model or a 429 quota outage (2026-09-14 outage lesson).
-            // SDK error text contains no credential material.
-            log.warn("LLM provider {} failed after {} ms: {}", providerName, latencyMs,
+            log.warn("LLM provider {} failed after {} ms ({}): {}", providerName, latencyMs,
+                    failureClass,
                     causeSummary.length() > 300 ? causeSummary.substring(0, 300) : causeSummary);
-            health.recordFailure(causeSummary);
+            health.recordFailure(causeSummary, failureClass);
             throw new LlmProviderException(providerName,
                     "generation failed (" + (causeSummary.length() > 200
                             ? causeSummary.substring(0, 200) : causeSummary) + ")",
-                    e);
+                    e, failureClass);
         }
     }
 
@@ -162,9 +183,11 @@ public class SpringAiChatModelAdapter implements LlmProvider {
             return pending.get(timeoutSeconds, TimeUnit.SECONDS);
         } catch (java.util.concurrent.TimeoutException te) {
             pending.cancel(true);
-            health.recordFailure("TimeoutException: no response within " + timeoutSeconds + "s");
+            health.recordFailure("TimeoutException: no response within " + timeoutSeconds + "s",
+                    LlmFailureClass.TIMEOUT);
             throw new LlmProviderException(providerName,
-                    "generation timed out after " + timeoutSeconds + "s", te);
+                    "generation timed out after " + timeoutSeconds + "s", te,
+                    LlmFailureClass.TIMEOUT);
         } catch (java.util.concurrent.ExecutionException ee) {
             Throwable cause = ee.getCause() == null ? ee : ee.getCause();
             if (cause instanceof RuntimeException re) {

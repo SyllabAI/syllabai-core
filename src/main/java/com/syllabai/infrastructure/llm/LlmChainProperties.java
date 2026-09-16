@@ -17,7 +17,8 @@ public record LlmChainProperties(
         Gemini gemini,
         OpenRouter openRouter,
         Chain chain,
-        Map<String, String> experimentPins) {
+        Map<String, String> experimentPins,
+        LlmMode mode) {
 
     public record Groq(boolean enabled, String apiKey, String baseUrl, String model) {
         public Groq {
@@ -55,6 +56,7 @@ public record LlmChainProperties(
         if (openRouter == null) openRouter = new OpenRouter(false, null, null, null);
         if (chain == null) chain = new Chain(30, 60, 3, 1000);
         if (experimentPins == null) experimentPins = Map.of();
+        if (mode == null) mode = LlmMode.PRODUCTION;
     }
 
     /** Chain order per §26.1: Groq → Gemini → OpenRouter. */

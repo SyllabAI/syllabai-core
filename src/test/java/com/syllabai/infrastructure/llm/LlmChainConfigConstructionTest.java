@@ -26,7 +26,8 @@ class LlmChainConfigConstructionTest {
                 new LlmChainProperties.Gemini(geminiKey != null, geminiKey, null),
                 new LlmChainProperties.OpenRouter(openRouterKey != null, openRouterKey, null, null),
                 new LlmChainProperties.Chain(30, 60, 3, 1000),
-                java.util.Map.of());
+                java.util.Map.of(),
+                LlmMode.PRODUCTION);
     }
 
     private static FailoverLlmChain buildChain(LlmChainProperties properties) {

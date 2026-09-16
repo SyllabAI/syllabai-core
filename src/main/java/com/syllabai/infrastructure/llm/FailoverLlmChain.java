@@ -80,7 +80,11 @@ public class FailoverLlmChain implements LlmProvider {
             try {
                 return provider.generate(effectiveRequest);
             } catch (LlmProviderException e) {
-                failures.add(provider.name() + ": " + e.getMessage());
+                // ADR-023: failures arrive already classified at the provider/adapter
+                // boundary — the chain never parses exception strings, it only
+                // aggregates the structured classes for the report and the throw.
+                failures.add(provider.name() + ": " + e.getMessage()
+                        + " (classified " + e.failureClass() + ")");
                 last = e;
             }
         }
@@ -95,7 +99,8 @@ public class FailoverLlmChain implements LlmProvider {
         throw new LlmProviderException("chain",
                 "all providers failed, last error: " + (last == null ? "unknown" : last.getMessage())
                         + " [" + detail + "]",
-                last);
+                last,
+                last == null ? LlmFailureClass.UNKNOWN : last.failureClass());
     }
 
     @Override

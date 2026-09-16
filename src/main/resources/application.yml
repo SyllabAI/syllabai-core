@@ -136,6 +136,18 @@ syllabai:
       timeout-seconds: 60
       cooldown-seconds: 60
       failure-threshold: 3
+      # ADR-023: configured LOCAL daily budget per provider — a routing guard
+      # against runaway spend on the free tier, NOT a claim about the provider's
+      # official quota. requestsToday >= daily-budget ⇒ provider ineligible until
+      # the UTC day rolls over; the chain fails over to the next provider. Both
+      # successful and failed attempts count.
+      daily-budget-per-provider: ${SYLLABAI_LLM_DAILY_BUDGET:1000}
+    # ADR-023 routing mode: production (default) = real providers per config;
+    # test = FAIL-CLOSED, real provider adapters are never constructed regardless
+    # of which keys are present — generation fails loudly instead of silently
+    # spending quota; live = real providers for explicit live-verification runs
+    # (any real-provider test must additionally set LIVE_LLM_TESTS=explicit).
+    mode: ${SYLLABAI_LLM_MODE:production}
     # Research provenance (§26.1): a request carrying an experiment id must find a pin
     # here (value "provider" or "provider:model") or in the experiments registry
     # (status RUNNING + pinned provider) — otherwise generation fails loudly.

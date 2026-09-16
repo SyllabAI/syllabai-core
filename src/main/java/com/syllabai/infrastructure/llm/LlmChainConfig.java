@@ -46,30 +46,30 @@ public class LlmChainConfig {
         int threshold = chainCfg == null ? 3 : Math.max(1, chainCfg.failureThreshold());
         int cooldown = chainCfg == null ? 60 : Math.max(1, chainCfg.cooldownSeconds());
         int timeout = chainCfg == null ? 30 : Math.max(1, chainCfg.timeoutSeconds());
+        // ADR-023: configured LOCAL daily budget per provider (routing guard — not a
+        // provider-quota claim). Enforced through LlmProviderHealth.budgetExhausted().
+        int dailyBudget = chainCfg == null ? 1000 : Math.max(1, chainCfg.dailyBudgetPerProvider());
+        LlmMode mode = properties.mode() == null ? LlmMode.PRODUCTION : properties.mode();
+        // ADR-023 fail-closed: in TEST mode real ChatModels are never constructed —
+        // keys present in the environment are ignored, so no code path can silently
+        // spend Groq/Gemini/OpenRouter quota. Tests wire deterministic fakes instead.
+        boolean testMode = mode == LlmMode.TEST;
 
-        if (properties.groq().enabled() && hasKey(properties.groq().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("groq", groqChatModel(), true, threshold, cooldown, timeout,
-                    request -> openAiRuntimeOptions(request, properties.groq().model())));
-            log.info("LLM provider registered: groq (model {})", properties.groq().model());
-        } else {
-            providers.add(new SpringAiChatModelAdapter("groq", null, false, threshold, cooldown, timeout));
-        }
-
-        if (properties.gemini().enabled() && hasKey(properties.gemini().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("gemini", geminiChatModel(), true, threshold, cooldown, timeout,
-                    request -> genAiRuntimeOptions(request, properties.gemini().model())));
-            log.info("LLM provider registered: gemini (model {})", properties.gemini().model());
-        } else {
-            providers.add(new SpringAiChatModelAdapter("gemini", null, false, threshold, cooldown, timeout));
-        }
-
-        if (properties.openRouter().enabled() && hasKey(properties.openRouter().apiKey())) {
-            providers.add(new SpringAiChatModelAdapter("openrouter", openRouterChatModel(), true, threshold, cooldown, timeout,
-                    request -> openAiRuntimeOptions(request, properties.openRouter().model())));
-            log.info("LLM provider registered: openrouter (model {})", properties.openRouter().model());
-        } else {
-            providers.add(new SpringAiChatModelAdapter("openrouter", null, false, threshold, cooldown, timeout));
-        }
+        registerProvider(providers, "groq", testMode, properties.groq().enabled(),
+                properties.groq().apiKey(), properties.groq().model(),
+                this::groqChatModel,
+                request -> openAiRuntimeOptions(request, properties.groq().model()),
+                threshold, cooldown, timeout, dailyBudget);
+        registerProvider(providers, "gemini", testMode, properties.gemini().enabled(),
+                properties.gemini().apiKey(), properties.gemini().model(),
+                this::geminiChatModel,
+                request -> genAiRuntimeOptions(request, properties.gemini().model()),
+                threshold, cooldown, timeout, dailyBudget);
+        registerProvider(providers, "openrouter", testMode, properties.openRouter().enabled(),
+                properties.openRouter().apiKey(), properties.openRouter().model(),
+                this::openRouterChatModel,
+                request -> openAiRuntimeOptions(request, properties.openRouter().model()),
+                threshold, cooldown, timeout, dailyBudget);
 
         // Pin resolution order (§26.1): deployment configuration first, then the
         // experiments research registry (JpaExperimentPinResolver bean, if present).
@@ -79,6 +79,32 @@ public class LlmChainConfig {
             resolvers.addAll(registryResolvers);
         }
         return new FailoverLlmChain(providers, new CompositeExperimentPinResolver(resolvers));
+    }
+
+    /**
+     * Registers one chain member. Real adapters are constructed only when the mode
+     * allows it AND the provider is enabled AND its key is present; otherwise the
+     * member registers unconfigured (still visible in the chain report with the
+     * model it WOULD use — the enabled/configured distinction is the drift signal).
+     */
+    private void registerProvider(List<LlmProvider> providers, String name, boolean testMode,
+                                  boolean enabled, String apiKey, String defaultModel,
+                                  java.util.function.Supplier<ChatModel> chatModelFactory,
+                                  Function<LlmRequest, ChatOptions> runtimeOptionsFactory,
+                                  int threshold, int cooldown, int timeout, int dailyBudget) {
+        if (!testMode && enabled && hasKey(apiKey)) {
+            providers.add(new SpringAiChatModelAdapter(name, chatModelFactory.get(), enabled, true,
+                    threshold, cooldown, timeout, dailyBudget, defaultModel, runtimeOptionsFactory));
+            log.info("LLM provider registered: {} (model {})", name, defaultModel);
+        } else {
+            if (testMode && enabled && hasKey(apiKey)) {
+                log.warn("LLM mode=test: provider '{}' has an API key in the environment but it is "
+                        + "IGNORED — real providers are never constructed in test mode "
+                        + "(fail-closed, ADR-023)", name);
+            }
+            providers.add(new SpringAiChatModelAdapter(name, null, enabled, false,
+                    threshold, cooldown, timeout, dailyBudget, defaultModel, runtimeOptionsFactory));
+        }
     }
 
     // ── ChatModel construction (provider specifics stay below this line) ──
