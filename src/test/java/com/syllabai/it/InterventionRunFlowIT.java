@@ -277,10 +277,14 @@ class InterventionRunFlowIT {
         controller.pause(learner, run.runId());
         String version = run.interventionVersion();
         String wrongHash = "0".repeat(64);
+        // the NAMED mismatch reaches the boundary unchanged (the controller's
+        // state-conflict wrapper must not swallow the subclass into a generic
+        // ConflictException — live-found via the production probe)
         assertThatThrownBy(() -> controller.resume(learner, run.runId(),
                 new com.syllabai.intervention.dto.InterventionRunViews.ResumeRequest(
                         version, wrongHash)))
-                .isInstanceOf(InterventionVersionMismatchException.class);
+                .isInstanceOf(InterventionVersionMismatchException.class)
+                .isNotInstanceOf(com.syllabai.shared.ConflictException.class);
         controller.resume(learner, run.runId(),
                 new com.syllabai.intervention.dto.InterventionRunViews.ResumeRequest(
                         version, run.interventionHash()));

@@ -156,11 +156,16 @@ public class InterventionRunController {
     /**
      * The E2 status machine (terminal runs, transitions from the wrong state)
      * is a CLIENT conflict (409), not a server error — the aggregate signals it
-     * with IllegalStateException; this boundary translates it honestly.
+     * with IllegalStateException; this boundary translates it honestly. The
+     * version-mismatch subclass passes through UNCHANGED so its NAMED 409 body
+     * (intervention_version_mismatch — the client must start a new run, not
+     * retry) reaches the client (GlobalExceptionHandler).
      */
     private RunView inStateConflictTerms(RunCall call) {
         try {
             return call.run();
+        } catch (InterventionVersionMismatchException e) {
+            throw e;
         } catch (IllegalStateException e) {
             throw new ConflictException(e.getMessage());
         }
