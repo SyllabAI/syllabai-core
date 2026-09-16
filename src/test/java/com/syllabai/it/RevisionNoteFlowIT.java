@@ -25,10 +25,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.Testcontainers;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration test: the revision-notes pilot corpus boundary over a real
@@ -44,7 +45,7 @@ import org.testcontainers.junit.jupiter.Container;
 class RevisionNoteFlowIT {
 
     @Container
-    @org.springframework.boot.test.autoconfigure.jdbc.ServiceConnection
+    @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("pgvector/pgvector:pg17")
                     .withDatabaseName("syllabai")
