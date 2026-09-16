@@ -14,12 +14,16 @@ creation (scenario), the learner API boundary, terminal-evidence freeze, the
 flow IT and this record. Nothing the lane built was rewritten or discarded.
 
 **Verification:** unit suite **540 green / 0 failures / 0 errors / 1 known
-pre-existing skip** (`DatabaseIsolationGuardTest`) at core `d75a0e3`;
-`InterventionRunFlowIT` (2 flows, real Postgres/HTTP binding) written and
-CI-mandatory — executes when Actions restores (fresh probe run `35070697220`
-on 2026-09-16 still failed with the zero-step BlobNotFound infrastructure
-signature; sentinel window 2026-09-27); live verification on production
-(recorded in `evidence/intervention_run_live_verification_d75a0e3.log`).
+pre-existing skip** (`DatabaseIsolationGuardTest`) at core `02643ed`;
+`InterventionRunFlowIT` (2 flows, real Postgres/HTTP binding, includes the
+named-mismatch pin) written and CI-mandatory — executes when Actions restores
+(fresh probe run `35070697220` on 2026-09-16 still failed with the zero-step
+BlobNotFound infrastructure signature; sentinel window 2026-09-27); **live
+verification 10/10 PASS on production** at core `02643ed`
+(`evidence/intervention/intervention_run_live_verification_02643ed.log`: auth
+gate, deterministic NBA cold-start PRACTICE, run-from-recommendation snapshot
+identity, lifecycle + reconstruction, mutation boundary with zero skill rows,
+terminal-immutability 409s, NAMED resume-mismatch 409, ownership 404).
 
 Status vocabulary: PROPOSED | ACCEPTED | IMPLEMENTED | VERIFIED | INFERRED |
 REPORTED | UNVERIFIED | REJECTED.
@@ -47,6 +51,27 @@ REPORTED | UNVERIFIED | REJECTED.
 - No second learner model — zero learner-model code touched.
 - No curriculum/KG mutation — run rows reference nodes/subjects only.
 - No generated-question dependency — the scenario attaches existing validated-question attempt evidence.
+
+## Live-found defects (both fixed honestly, zero gates weakened)
+
+1. **PRODUCT DEFECT — jsonb columns rejected every write on real Postgres**
+   (`d75a0e3` live probe: create-from-recommendation → 500). The four jsonb
+   columns carried only `columnDefinition="jsonb"` with plain String fields;
+   Hibernate sent varchar parameters and PostgreSQL rejected the INSERT. The
+   concurrent lane's persistence tests were mock-based and the Testcontainers
+   IT had never executed, so the defect was invisible until the first
+   production write. Fix `d330a3a`: `@JdbcTypeCode(SqlTypes.JSON)` on all four
+   fields (the `DocumentChunk.element_ids` house pattern), verified against a
+   REAL user-space Postgres (embedded pgserver loaded with the actual Flyway
+   V1..V26 migrations): create → activate → step → evidence → complete →
+   read-back → resume gate all green.
+2. **PRODUCT DEFECT (minor, boundary fidelity) — the named resume-mismatch 409
+   was swallowed** (`d75a0e3` live probe G9: wrong identity returned generic
+   `conflict` instead of `intervention_version_mismatch`): the controller's
+   state-conflict wrapper caught the mismatch subclass and rethrew
+   `ConflictException` before the named handler could fire. Fix `02643ed`: the
+   subclass passes through unchanged; the IT now pins the named mismatch
+   explicitly.
 
 ## Honest remainders
 
