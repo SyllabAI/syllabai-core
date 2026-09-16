@@ -110,7 +110,7 @@ public class RevisionNoteIngestService {
         }
         RevisionNote any = notes.findAll().get(0);
         return new RevisionNoteDtos.RevisionNoteStatusView(true,
-                noteCount, assets.count(), any.ingestedAt(), any.corpusVersion());
+                (int) noteCount, (int) assets.count(), any.ingestedAt(), any.corpusVersion());
     }
 
     private record ParsedPackage(RevisionNoteDtos.RevisionNotePackage pkg,
