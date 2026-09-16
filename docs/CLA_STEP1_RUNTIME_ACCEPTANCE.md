@@ -169,10 +169,10 @@ missing learner-work evidence for CHECK feedback.
 
 ## Step-6 addendum: SMART_LESSON context kind (the lesson surface as a CLA anchor)
 
-**Status: IMPLEMENTED / LIVE-VERIFIED (core `50dfa59`, deployed and fingerprint-confirmed
-live). Evaluation S-H: PARTIAL — UNVERIFIED (external provider limit; resumable
-harness committed, completion pending the provider's daily-token reset). No gate
-was weakened anywhere.**
+**Status: IMPLEMENTED / VERIFIED (core `50dfa59`, deployed and fingerprint-confirmed
+live; S-H evaluation **33/33 GREEN — VERIFIED**, completed across provider-quota
+windows — the resumable harness landed every probe without a single gate
+change).**
 
 The Smart Lesson surface is a deterministic projection over (subject root, topic
 node, learner) — there is no separate lesson entity, so the lesson anchor IS the
@@ -200,9 +200,10 @@ canonical spec anchor stays the resolved topic).
 | no canonical KG / mastery mutation | ACCEPTED (implemented) | live G8b (zero skill rows on a fresh learner after SMART_LESSON asks) + `ClaFlowIT.smartLessonFlow` DB-level assertion |
 | closed-loop substrate parity | ACCEPTED (implemented) | live G5 + S-H per-topic parity probes: the Smart Lesson surface renders a valid ladder decision for the same (root, topic, learner); the CLA ask itself feeds LIM engagement rows the ladder consumes (surface reason flipped INSUFFICIENT_COVERAGE → TUTOR_ENGAGED after the ask — the loop is live) |
 | web panel (SAME Assistant panel) | ACCEPTED (implemented) | web `4c3326a`: "Smart lesson" kind in the existing selector, topic-anchored references via `isTopicKind`, lesson next-action in the meta row; tsc/eslint/next build clean. In-browser verification PENDING (SHIPPED, not yet VERIFIED in-browser) |
-| evaluation bundle coverage | PARTIAL — UNVERIFIED | S-H harness committed (`cla_smart_lesson_eval_sh.py`, resumable slices); first live runs: 8/8 S1-a..S1-c fully green + the complete fail-closed matrix green (incl. real foreign-topic 404) before the provider's daily-token ceiling started returning 503s mid-run; classification EXTERNAL PROVIDER LIMIT — the service fail-safed correctly (no invented content), no gate weakened; completion pending quota reset |
+| evaluation bundle coverage | ACCEPTED (implemented) | S-H set: **33/33 GREEN — VERIFIED** live over real validated 4CH1 material (`cla_eval_smartlesson_sh.json`): 8/8 topics EXPLAIN grounded+anchored+ladder-valid, 8/8 substrate parity with the Smart Lesson surface, 8/8 HINT+SUMMARIZE modes correct, grounded precision 100% (topics=8/8), complete fail-closed matrix green (unknown 404 / missing-ref 400 / unknown-mode 400 / blank 400 / REAL foreign 404), out-of-domain probe declines honestly (zero fabricated markers), learner evidence signals + zero skill rows. The provider's daily-token ceiling stretched the run across quota windows; the resumable harness landed every probe without double-counting and without a single gate change (EXTERNAL PROVIDER LIMIT absorbed by execution pacing, never by thresholds) |
 
 Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — SUBSTRATE-BLOCKED /
-architecture decision required. S-H corpus completion is operator-independent
-but provider-quota-gated; the harness resumes without double-counting or losing
-completed probes.
+architecture decision required. Web panel: SHIPPED (`4c3326a`), in-browser
+verification pending. CI: run 35045617136 (50dfa59) executed and failed with the
+documented zero-step BlobNotFound infrastructure signature — ITs remain
+CI-pending (Docker-capable runner), operator-gated; not a product failure.

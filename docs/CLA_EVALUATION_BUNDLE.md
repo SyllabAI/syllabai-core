@@ -233,7 +233,7 @@ Deploys were verified through GitHub deployment statuses (cd7c586 success →
 
 ---
 
-## S-H extension: SMART_LESSON gate (core `50dfa59` lineage — IN PROGRESS)
+## S-H extension: SMART_LESSON gate (core `50dfa59` lineage — VERIFIED)
 
 The sixth context kind inherits the §10.4 discipline: the harness gained an
 S-H set exercising the lesson-anchored kind over real validated 4CH1 material
@@ -243,7 +243,7 @@ fail-closed authorization, grounded precision, citation correctness,
 unsupported-claim behavior, mode correctness, substrate-parity context
 anchoring, learner evidence capture).
 
-State at this commit: **PARTIAL — UNVERIFIED (external provider limit).**
+Final state: **S-H 33/33 CHECKS GREEN — VERIFIED** (complete corpus + tail; record `.syllabai/evidence/cla/cla_eval_smartlesson_sh.json`, verdict green=true). The provider's daily-token ceiling stretched execution across quota windows — the resumable harness absorbed the EXTERNAL PROVIDER LIMIT by pacing and per-probe persistence, never by weakening a threshold.
 
 - Live verification (separate, completed first): **15/15 PASS** on production
   (`cla_smart_lesson_live_verification_50dfa59.log`): new-build fingerprint,
