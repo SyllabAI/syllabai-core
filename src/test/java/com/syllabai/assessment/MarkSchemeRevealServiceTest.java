@@ -74,8 +74,12 @@ class MarkSchemeRevealServiceTest {
 
     private void stubServable() {
         when(servableQuestions.findById(QUESTION_ID)).thenReturn(Optional.of(question()));
+        // build the child mock BEFORE the outer when(...) — Mockito forbids
+        // stubbing one mock inside another's unfinished when(...) (house rule,
+        // see AssessmentServiceTest)
+        QuestionVersion version = version();
         when(questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID))
-                .thenReturn(List.of(version()));
+                .thenReturn(List.of(version));
     }
 
     @Test
