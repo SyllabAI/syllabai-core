@@ -71,7 +71,7 @@ class Bm25RetrieverTest {
     void hitsMapToCandidates() {
         ChunkHit hit = new ChunkHit(CHUNK_ID, DOC_ROW_ID, "doc-1", "QUESTION_PAPER", 3,
                 "molten lead bromide conducts", 2, 2, List.of(), null, 1.75);
-        when(lexical.search("electrolysis", Set.of(), CV_ID, 5)).thenReturn(List.of(hit));
+        when(lexical.searchServingEligible("electrolysis", Set.of(), CV_ID, 5)).thenReturn(List.of(hit));
         when(documents.findById(DOC_ROW_ID)).thenReturn(Optional.empty());
 
         List<RetrievalCandidate> candidates =
@@ -98,7 +98,7 @@ class Bm25RetrieverTest {
     @Test
     @DisplayName("kinds and limit pass through; document version resolved from the repository")
     void passthroughAndVersionResolution() {
-        when(lexical.search(anyString(), anySet(), any(UUID.class), any(Integer.class)))
+        when(lexical.searchServingEligible(anyString(), anySet(), any(UUID.class), any(Integer.class)))
                 .thenReturn(List.of());
         Set<Document.Kind> kinds = Set.of(Document.Kind.MARK_SCHEME);
 
@@ -107,7 +107,7 @@ class Bm25RetrieverTest {
 
         ArgumentCaptor<Set<Document.Kind>> kindsCaptor =
                 ArgumentCaptor.forClass(Set.class);
-        verify(lexical).search(org.mockito.ArgumentMatchers.eq("titration"),
+        verify(lexical).searchServingEligible(org.mockito.ArgumentMatchers.eq("titration"),
                 kindsCaptor.capture(), org.mockito.ArgumentMatchers.eq(CV_ID),
                 org.mockito.ArgumentMatchers.eq(7));
         assertThat(kindsCaptor.getValue()).isEqualTo(kinds);

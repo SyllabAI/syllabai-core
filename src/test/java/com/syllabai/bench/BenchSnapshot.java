@@ -32,7 +32,8 @@ import java.util.zip.GZIPInputStream;
  */
 public final class BenchSnapshot {
 
-    public record ChunkRef(String reference, String content, String paperState, String kind) {
+    public record ChunkRef(String reference, String content, String paperState, String kind,
+                           String paperCode) {
     }
 
     public record Edge(String relation, String source, String target) {
@@ -65,7 +66,11 @@ public final class BenchSnapshot {
         JsonNode chunks = readGzipJson(dir.resolve("chunks.jsonl.gz"), mapper);
         for (JsonNode c : chunks) {
             ChunkRef chunk = new ChunkRef(c.path("chunk_ref").asText(), c.path("content").asText(""),
-                    c.path("paper_state").asText("UNKNOWN"), c.path("document_kind").asText("UNKNOWN"));
+                    c.path("paper_state").asText("UNKNOWN"),
+                    // snap-001 records the kind under "kind" (the "document_kind" key never
+                    // existed in the snapshot; nothing consumed kind before T-C14's loader)
+                    c.path("kind").asText(c.path("document_kind").asText("UNKNOWN")),
+                    c.path("paper_code").asText(null));
             chunksByRef.put(chunk.reference(), chunk);
         }
         if (declaredChunks >= 0 && chunksByRef.size() != declaredChunks) {

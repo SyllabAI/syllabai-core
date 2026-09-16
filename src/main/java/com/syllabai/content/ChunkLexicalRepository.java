@@ -90,6 +90,58 @@ public class ChunkLexicalRepository {
                 normalizedQuery, curriculumVersionId, limit);
     }
 
+    /**
+     * Serving-eligible lexical search (T-C05 boundary): identical to
+     * {@link #search(String, Set, UUID, int)} except the scope EXISTS predicate
+     * additionally requires the owning paper to be {@code VALIDATED} — a
+     * SUGGESTED, FLAGGED or REJECTED paper's chunks are never returned,
+     * regardless of lexical match strength.
+     *
+     * <p>Why this overload exists beside the neutral {@code search}: the fabric
+     * invariant records boundary exclusion as enforced once, centrally, never
+     * per-provider — but the central serving-side enforcer does not exist yet
+     * (serving wiring is untouched at T-C14), and the benchmark arm B must be
+     * compliant by construction rather than by later intention (the T-C13
+     * harness scores any surfaced SUGGESTED-only chunk as a hard
+     * VALIDATION_BOUNDARY_VIOLATION). Arm B (Bm25Retriever) therefore calls THIS
+     * method; the neutral {@code search} remains for the future central
+     * enforcer to build on. Additive and reversible: nothing about the existing
+     * search contract changes.</p>
+     */
+    public List<ChunkHit> searchServingEligible(String normalizedQuery, Set<Document.Kind> kinds,
+                                                UUID curriculumVersionId, int limit) {
+        if (curriculumVersionId == null) {
+            throw new IllegalArgumentException(
+                    "curriculumVersionId is mandatory — chunk search never runs unscoped (T-C07)");
+        }
+        if (normalizedQuery == null || normalizedQuery.isBlank()) {
+            return List.of();
+        }
+        String kindFilter = kindFilter(kinds);
+        String sql = """
+                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                       c.content, c.page_start, c.page_end, c.element_ids,
+                       null as embedding_model, ts_rank_cd(c.content_tsv, q.tsq) as score
+                from document_chunks c
+                join documents d on d.id = c.document_row_id
+                cross join (select websearch_to_tsquery('english', ?) as tsq) q
+                where c.content_tsv @@ q.tsq
+                  and exists (
+                        select 1 from exam_papers p
+                        join subjects s on s.id = p.subject_id
+                        where s.curriculum_version_id = ?
+                          and p.validation_state = 'VALIDATED'
+                          and (p.question_paper_document_id = d.document_id
+                            or p.mark_scheme_document_id = d.document_id))
+                """ + kindFilter + """
+                order by ts_rank_cd(c.content_tsv, q.tsq) desc, c.id
+                limit ?
+                """;
+        return jdbc.query(sql,
+                (rs, i) -> mapHit(rs),
+                normalizedQuery, curriculumVersionId, limit);
+    }
+
     /** Code-controlled enum names folded into SQL text (never user input). */
     private static String kindFilter(Set<Document.Kind> kinds) {
         if (kinds == null || kinds.isEmpty()) {

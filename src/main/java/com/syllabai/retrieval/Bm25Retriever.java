@@ -22,6 +22,15 @@ import org.springframework.stereotype.Component;
  * Fusion, when arm C promotes it, reuses the existing
  * {@code ReciprocalRankFusion} (k=60) — no new fusion code.</p>
  *
+ * <p>Boundary note (T-C05, operator directive): the arm searches through
+ * {@link ChunkLexicalRepository#searchServingEligible} — the owning paper must
+ * be {@code VALIDATED}, so a SUGGESTED/FLAGGED/REJECTED paper's chunks are
+ * unreachable by BM25 even before any central enforcement exists. The fabric's
+ * "enforced once, centrally" invariant governs the future serving wiring and
+ * supersedes (never weakens) this arm-level guard; until that enforcer lands,
+ * the benchmark arm is compliant by construction and the T-C13 harness scores
+ * any surfaced SUGGESTED-only chunk as a hard violation.</p>
+ *
  * <p>Honest scope notes: {@link #available()} is {@code true} — the provider's
  * only dependency (the V28 column) is owned by flyway and applied before app
  * startup in every environment running this code; a database lacking it fails
@@ -61,7 +70,7 @@ public class Bm25Retriever implements RetrievalProvider {
         if (query.normalizedQuery() == null || query.normalizedQuery().isBlank()) {
             return List.of();
         }
-        List<ChunkHit> hits = lexical.search(query.normalizedQuery(), query.resourceKinds(),
+        List<ChunkHit> hits = lexical.searchServingEligible(query.normalizedQuery(), query.resourceKinds(),
                 query.curriculumVersionId(), query.limit());
         return hits.stream()
                 .map(this::toCandidate)
