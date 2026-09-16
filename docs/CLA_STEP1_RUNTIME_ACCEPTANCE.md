@@ -164,3 +164,45 @@ non-transactional service — fixed via scalar projection + read-only scalar FK
 columns + eager entity graph), a derived JPQL query that failed named-query
 validation at boot (fixed as native SQL over the stable FK columns), and the
 missing learner-work evidence for CHECK feedback.
+
+---
+
+## Step-6 addendum: SMART_LESSON context kind (the lesson surface as a CLA anchor)
+
+**Status: IMPLEMENTED / LIVE-VERIFIED (core `50dfa59`, deployed and fingerprint-confirmed
+live). Evaluation S-H: PARTIAL — UNVERIFIED (external provider limit; resumable
+harness committed, completion pending the provider's daily-token reset). No gate
+was weakened anywhere.**
+
+The Smart Lesson surface is a deterministic projection over (subject root, topic
+node, learner) — there is no separate lesson entity, so the lesson anchor IS the
+resolved topic: `resolveSmartLesson` reuses the KG_TOPIC spine unchanged
+(subject-root registry → subtree containment → VALIDATED gate; unknown /
+foreign / non-VALIDATED are indistinguishable 404s; missing topicNodeId is the
+established 400) and attaches the learner's OWN deterministic lesson decision
+from the existing `smart-lesson/v2` ladder — no new learner state, no LLM, no
+new source of educational truth. The lesson action is framing state (§2.3):
+honest action/reason labels in the learner brief, never an evidence source,
+never quoted as fact, never re-anchoring (a ladder redirect is named, but the
+canonical spec anchor stays the resolved topic).
+
+| Claim | Status | Evidence |
+|---|---|---|
+| §1.1 canonical resolution (lesson identity = root + topic + learner) | ACCEPTED (implemented) | `ClaContextResolver.resolveSmartLesson` — same spine as KG_TOPIC, ladder consumed on the SAME resolved anchor (`resolvesSmartLessonWithDeterministicAction` pins `lessonFor(LEARNER, ROOT, TOPIC)`) |
+| unknown / foreign / non-VALIDATED topic → indistinguishable 404; gate ordering | ACCEPTED (implemented) | `smartLessonUnknownTopicFailsClosed` + `smartLessonForeignTopicFailsClosed` + `smartLessonUnvalidatedTopicFailsClosed` + `smartLessonUnknownRootFailsClosed`; the ladder NEVER runs for an unresolvable anchor (`verify(never())` gate-ordering pin); live G7a/G7b (404 both, real foreign topic from the second subject) |
+| missing topicNodeId → 400 (closed-enum request shape) | ACCEPTED (implemented) | `smartLessonMissingTopicNodeIdIs400` (unit) + `smartLessonRequiresRootAndTopic` (service) + live G2a (the deployed-build fingerprint IS this 400 message) |
+| deterministic lesson action rides on the context (framing only) | ACCEPTED (implemented) | `ResourceContext.LessonActionInfo` + `withLessonAction`; enum names as strings (no learner-DTO coupling); `ClaService.lessonActionBrief` — honest labels + the ladder's own reason detail; pinned in `ClaServiceTest.smartLessonAnchorsPipeline` (brief contains the action; NO lesson pseudo-source in evidence) |
+| ladder redirect is carried, never re-anchoring | ACCEPTED (implemented) | `smartLessonCarriesRedirectTarget` — anchor stays the SELECTED topic, target named in the brief and the view |
+| no §7 boundary of its own / no invented marking semantics | ACCEPTED (implemented) | `ClaLeakagePolicyTest.smartLessonHasNoAttemptBoundary` (CHECK admitted in every mode — the lesson is not assessment content) + `smartLessonTutorParityEvidence` (mark-scheme chunks eligible at tutor parity; no scheme-point unlock) + `isTopicContext()` pin |
+| modes grounded on the lesson context | ACCEPTED (implemented) | EXPLAIN/SUMMARIZE/HINT live 200 grounded (G4b/G6, real openai/gpt-oss-120b); `smartLessonSummarizePlan` pins the SUMMARIZE plan naming the anchored Smart Lesson with unchanged scope constraints |
+| bounded read-only tools | ACCEPTED (implemented) | `ClaToolRegistry.enabledFor` extended to SMART_LESSON; the fixed 3-tool composition is inherited unchanged |
+| LIM evidence carries the lesson identity | ACCEPTED (implemented) | `contextKind=SMART_LESSON`, `contextReference=topicId`, `nodeId`=topic — live G8a + `ClaFlowIT.smartLessonFlow` row assertions |
+| no canonical KG / mastery mutation | ACCEPTED (implemented) | live G8b (zero skill rows on a fresh learner after SMART_LESSON asks) + `ClaFlowIT.smartLessonFlow` DB-level assertion |
+| closed-loop substrate parity | ACCEPTED (implemented) | live G5 + S-H per-topic parity probes: the Smart Lesson surface renders a valid ladder decision for the same (root, topic, learner); the CLA ask itself feeds LIM engagement rows the ladder consumes (surface reason flipped INSUFFICIENT_COVERAGE → TUTOR_ENGAGED after the ask — the loop is live) |
+| web panel (SAME Assistant panel) | ACCEPTED (implemented) | web `4c3326a`: "Smart lesson" kind in the existing selector, topic-anchored references via `isTopicKind`, lesson next-action in the meta row; tsc/eslint/next build clean. In-browser verification PENDING (SHIPPED, not yet VERIFIED in-browser) |
+| evaluation bundle coverage | PARTIAL — UNVERIFIED | S-H harness committed (`cla_smart_lesson_eval_sh.py`, resumable slices); first live runs: 8/8 S1-a..S1-c fully green + the complete fail-closed matrix green (incl. real foreign-topic 404) before the provider's daily-token ceiling started returning 503s mid-run; classification EXTERNAL PROVIDER LIMIT — the service fail-safed correctly (no invented content), no gate weakened; completion pending quota reset |
+
+Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — SUBSTRATE-BLOCKED /
+architecture decision required. S-H corpus completion is operator-independent
+but provider-quota-gated; the harness resumes without double-counting or losing
+completed probes.

@@ -230,3 +230,49 @@ sandbox runner has no Docker), so the ITs remain pending on a
 Docker-capable runner. Local verification is green throughout (523 unit).
 Deploys were verified through GitHub deployment statuses (cd7c586 success →
 3f3be78 FAILURE → 4e4be8b success → d0dc00a success).
+
+---
+
+## S-H extension: SMART_LESSON gate (core `50dfa59` lineage — IN PROGRESS)
+
+The sixth context kind inherits the §10.4 discipline: the harness gained an
+S-H set exercising the lesson-anchored kind over real validated 4CH1 material
+(`scripts` → committed as `.syllabai/evidence/cla/harness/cla_smart_lesson_eval_sh.py`
+in the central repo; same gate shape as S-G — resolution correctness,
+fail-closed authorization, grounded precision, citation correctness,
+unsupported-claim behavior, mode correctness, substrate-parity context
+anchoring, learner evidence capture).
+
+State at this commit: **PARTIAL — UNVERIFIED (external provider limit).**
+
+- Live verification (separate, completed first): **15/15 PASS** on production
+  (`cla_smart_lesson_live_verification_50dfa59.log`): new-build fingerprint,
+  fresh learner, real validated 4CH1 topic, EXPLAIN grounded (5 evidence / 5
+  citations / openai/gpt-oss-120b), lesson action on the context
+  (PRACTISE_QUESTIONS / INSUFFICIENT_COVERAGE), surface parity (the ladder's
+  decision visible on both surfaces — and the closed loop observed live: after
+  the CLA ask the surface's reason became TUTOR_ENGAGED), HINT + SUMMARIZE
+  modes 200, unknown topic 404, REAL foreign-subject topic 404, LIM
+  EXPLANATION_REQUEST + TOPIC_ENGAGEMENT signals, zero skill rows.
+- S-H first runs: 4CH1-S1-a..S1-c fully green (EXPLAIN grounded+anchored +
+  ladder-valid, substrate parity, HINT+SUMMARIZE modes) and the complete
+  fail-closed matrix green (unknown 404 / missing-ref 400 / unknown-mode 400 /
+  blank 400 / real foreign 404) before the provider's daily-token ceiling
+  began returning 503s mid-run.
+- Defects found and fixed during the extension (both in harnesses, zero in
+  product code, zero gate changes): the S-G-era shared-registry foreign-topic
+  selection could pick a non-corpus 4CH1 topic as "foreign" (false FAIL —
+  fixed by an exclusive per-subject tree walk cross-checked against the full
+  4CH1 topic id set), and the live-verification G2 fingerprint probed
+  unauthenticated (the route 401s by design before kind validation — fixed by
+  an authenticated probe).
+- The provider limit is EXTERNAL PROVIDER LIMIT: the service fail-safed
+  correctly (503, no invented content, no partial answers). The S-H harness is
+  resumable (incremental store, per-probe granularity, never double-counts,
+  never locks in a 503 as failure) — completion resumes after the provider's
+  daily reset without gate changes.
+- Corpus limitation (documented, not manufactured): the Smart Lesson surface
+  is a deterministic projection over every validated topic — the lesson corpus
+  IS the validated topic corpus (8 topics, single subject 4CH1). No Smart
+  Lesson production content exists to fabricate coverage from; the gate
+  measures the lesson-anchored behavior over exactly the material that exists.
