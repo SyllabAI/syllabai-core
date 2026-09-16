@@ -57,6 +57,12 @@ public class ClaController {
      *                    version → question → paper → subject → topic through
      *                    the canonical FKs; rootId optionally checked as the
      *                    subject scope)
+     * @param topicNodeId SMART_LESSON: the anchored lesson topic — the Smart
+     *                    Lesson surface is a deterministic projection over
+     *                    (rootId, topicNodeId, learner), so the lesson anchor
+     *                    IS the resolved topic; the server attaches the
+     *                    learner's OWN deterministic lesson action to the
+     *                    context (framing state, not educational truth)
      * @param specCode    SPECIFICATION_POINT: the spec-point code the learner is
      *                    reading (e.g. "4CH1-1.18") — resolved server-side,
      *                    subject-isolated, VALIDATED-only

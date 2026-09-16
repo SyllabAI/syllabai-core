@@ -31,7 +31,7 @@ class ClaLeakagePolicyTest {
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "Calculate the mass of 0.25 mol CaCO3", "Calculate", 2, "4CH0/1C",
-                attempted, null);
+                attempted, null, null);
     }
 
     private ResourceContext topicContext() {
@@ -41,7 +41,20 @@ class ClaLeakagePolicyTest {
                 new ResourceContext.CurriculumVersionInfo("IAL-CHEM-2018", "Edexcel", "IAL",
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null, null);
+                null, null, 0, null, null, null, null);
+    }
+
+    /** a SMART_LESSON context: topic-anchored, never assessment content */
+    private ResourceContext smartLessonContext() {
+        return new ResourceContext(ResourceContext.Kind.SMART_LESSON,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and Structure",
+                new ResourceContext.CurriculumVersionInfo("IAL-CHEM-2018", "Edexcel", "IAL",
+                        "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                null, null, 0, null, null, null,
+                new ResourceContext.LessonActionInfo("REVIEW_TOPIC", "DUE_REVIEW",
+                        null, null, null, "review due", 3));
     }
 
     private EvidenceItem documentMarkSchemeChunk() {
@@ -138,7 +151,7 @@ class ClaLeakagePolicyTest {
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "State why ionic compounds conduct when molten.", "State", 2, "4CH0/1C",
-                attempted, "a");
+                attempted, "a", null);
     }
 
     @Test
@@ -173,5 +186,33 @@ class ClaLeakagePolicyTest {
                 partContext(true), ResponseMode.HINT)).isFalse();
         assertThat(ClaLeakagePolicy.schemePointEvidenceAllowed(
                 partContext(true), ResponseMode.CHECK)).isTrue();
+    }
+
+    // ── SMART_LESSON: topic-anchored, NOT a question context for the gate ──
+
+    @Test
+    @DisplayName("SMART_LESSON: no attempt/assessment boundary of its own — CHECK is admitted like KG_TOPIC")
+    void smartLessonHasNoAttemptBoundary() {
+        // no invented marking semantics: the lesson context never 409s and never
+        // carries the question-context attempt gate
+        for (ResponseMode mode : ResponseMode.values()) {
+            assertThatCode(() -> ClaLeakagePolicy.checkModeAdmission(
+                    smartLessonContext(), mode)).doesNotThrowAnyException();
+        }
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON: tutor-parity evidence — mark-scheme chunks stay eligible, no scheme-point evidence")
+    void smartLessonTutorParityEvidence() {
+        for (ResponseMode mode : ResponseMode.values()) {
+            assertThat(ClaLeakagePolicy.evidenceEligible(
+                    smartLessonContext(), mode, documentMarkSchemeChunk()))
+                    .as("mode=%s", mode).isTrue();
+            // the lesson context has no OWN scheme points to unlock (no marking)
+            assertThat(ClaLeakagePolicy.schemePointEvidenceAllowed(
+                    smartLessonContext(), mode)).isFalse();
+        }
+        assertThat(smartLessonContext().isQuestionContext()).isFalse();
+        assertThat(smartLessonContext().isTopicContext()).isTrue();
     }
 }

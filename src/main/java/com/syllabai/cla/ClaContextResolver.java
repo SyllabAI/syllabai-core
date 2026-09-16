@@ -17,6 +17,8 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.learner.SmartLessonService;
+import com.syllabai.learner.dto.SmartLessonView;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
@@ -60,6 +62,7 @@ public class ClaContextResolver {
     private final QuestionPartRepository questionParts;
     private final ServableQuestionService servableQuestions;
     private final AttemptRepository attempts;
+    private final SmartLessonService smartLessons;
 
     public ClaContextResolver(KnowledgeGraphService graph,
                               KnowledgeNodeRepository nodes,
@@ -69,7 +72,8 @@ public class ClaContextResolver {
                               QuestionVersionRepository questionVersions,
                               QuestionPartRepository questionParts,
                               ServableQuestionService servableQuestions,
-                              AttemptRepository attempts) {
+                              AttemptRepository attempts,
+                              SmartLessonService smartLessons) {
         this.graph = graph;
         this.nodes = nodes;
         this.subjects = subjects;
@@ -79,6 +83,7 @@ public class ClaContextResolver {
         this.questionParts = questionParts;
         this.servableQuestions = servableQuestions;
         this.attempts = attempts;
+        this.smartLessons = smartLessons;
     }
 
     /**
@@ -174,7 +179,52 @@ public class ClaContextResolver {
                 node.validationStatus().name(),
                 learnerId,
                 Instant.now(),
-                null, null, 0, null, null, null);
+                null, null, 0, null, null, null, null);
+    }
+
+    /**
+     * Resolve a SMART_LESSON context (contract §1 closed enum). The Smart
+     * Lesson surface is a deterministic projection over (subject root,
+     * topic node, learner) — there is no separate lesson entity, so the
+     * lesson identity IS the resolved topic anchor plus the requesting
+     * learner. Resolution reuses the KG_TOPIC spine unchanged, then
+     * enriches the context with the learner's OWN deterministic Smart
+     * Lesson decision (the existing smart-lesson/v2 ladder — no new learner
+     * state, no LLM): the lesson's next action is RELEVANT LEARNER STATE
+     * for framing (§2.3), never a source of educational truth and never an
+     * anchor of its own — the canonical spec anchor stays the resolved
+     * topic.
+     * <p>Fail-closed discipline is exactly KG_TOPIC's: unknown root,
+     * foreign-subject topic and non-VALIDATED topic are all an
+     * indistinguishable 404 (no existence or validation-state oracle beyond
+     * what KG_TOPIC already exposes); a missing topicNodeId is the
+     * established 400.</p>
+     */
+    @Transactional(readOnly = true)
+    public ResourceContext resolveSmartLesson(UUID rootId, UUID topicNodeId,
+                                              UUID learnerId) {
+        if (topicNodeId == null) {
+            throw new BadRequestException("SMART_LESSON context requires topicNodeId");
+        }
+        ResourceContext base = resolveCurriculumNode(rootId, topicNodeId, learnerId,
+                ResourceContext.Kind.SMART_LESSON, "smart lesson topic");
+        // deterministic lesson decision for THIS learner on the anchored topic
+        // (same ladder, same evidence the Smart Lesson surface renders — the
+        // lesson does not become a new source of truth, it informs framing)
+        SmartLessonView lesson = smartLessons.lessonFor(learnerId, rootId, topicNodeId);
+        return base.withLessonAction(lessonActionOf(lesson));
+    }
+
+    /** CLA-facing projection of the ladder's action (enum names as strings) */
+    private static ResourceContext.LessonActionInfo lessonActionOf(SmartLessonView lesson) {
+        SmartLessonView.LessonActionView action = lesson == null ? null : lesson.action();
+        if (action == null) {
+            return null;
+        }
+        return new ResourceContext.LessonActionInfo(
+                action.actionType().name(), action.reasonCode().name(),
+                action.targetNodeId(), action.targetCode(), action.targetTitle(),
+                action.reasonDetail(), action.servableQuestionCount());
     }
 
     /**
@@ -366,7 +416,8 @@ public class ClaContextResolver {
                 partMarks != null ? partMarks : anchor.currentVersion().marks(),
                 anchor.paper() != null ? anchor.paper().paperCode() : null,
                 attempted,
-                partLabel);
+                partLabel,
+                null);
     }
 
     /** resolved question-anchor spine shared by the two assessment kinds */

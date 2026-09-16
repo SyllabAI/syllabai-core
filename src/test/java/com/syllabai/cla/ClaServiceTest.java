@@ -105,7 +105,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null, null);
+                null, null, 0, null, null, null, null);
 
         when(resolver.resolveKgTopic(ROOT, TOPIC, LEARNER)).thenReturn(context);
         when(graph.tree(ROOT)).thenReturn(tree());
@@ -358,7 +358,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3.1", "understand how ions are formed",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null, null);
+                null, null, 0, null, null, null, null);
         when(resolver.resolveSpecificationPoint(ROOT, "IALCHEM2018-U1-T3.1", LEARNER))
                 .thenReturn(specContext);
         // the tools are context-keyed: stub the SPECIFICATION_POINT context too
@@ -412,7 +412,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass of 0.25 mol of CaCO3", "Calculate", 2, "4CH0/1C", false, null);
+                "Calculate the mass of 0.25 mol of CaCO3", "Calculate", 2, "4CH0/1C", false, null, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.HINT))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -455,7 +455,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass", "Calculate", 2, "4CH0/1C", false, null);
+                "Calculate the mass", "Calculate", 2, "4CH0/1C", false, null, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -478,7 +478,7 @@ class ClaServiceTest {
                 "IALCHEM2018-U1-T3", "Bonding and structure",
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                "Calculate the mass", "Calculate", 2, "4CH0/1C", true, null);
+                "Calculate the mass", "Calculate", 2, "4CH0/1C", true, null, null);
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -568,7 +568,7 @@ class ClaServiceTest {
                 new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "State why ionic compounds conduct when molten.", "State", 2, "4CH0/1C",
-                true, "a");
+                true, "a", null);
         when(resolver.resolveQuestionPart(partId, null, LEARNER)).thenReturn(partContext);
         when(tools.enabledFor(ResourceContext.Kind.QUESTION_PART, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
@@ -677,12 +677,12 @@ class ClaServiceTest {
                 ResourceContext.Kind.QUESTION_PART, partId, TOPIC, ROOT, "4CH1",
                 "code", "title",
                 new ResourceContext.CurriculumVersionInfo("v", "b", "q", "ACTIVE"),
-                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, "a");
+                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, "a", null);
         ResourceContext question = new ResourceContext(
                 ResourceContext.Kind.PAST_PAPER_QUESTION, UUID.randomUUID(), TOPIC, ROOT, "4CH1",
                 "code", "title",
                 new ResourceContext.CurriculumVersionInfo("v", "b", "q", "ACTIVE"),
-                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, null);
+                "VALIDATED", LEARNER, Instant.now(), null, null, 0, null, true, null, null);
         MarkPoint own = org.mockito.Mockito.mock(MarkPoint.class);
         when(own.questionPartId()).thenReturn(partId);
         MarkPoint other = org.mockito.Mockito.mock(MarkPoint.class);
@@ -697,5 +697,98 @@ class ClaServiceTest {
         assertThat(ClaService.partAllowsPoint(question, own)).isTrue();
         assertThat(ClaService.partAllowsPoint(question, other)).isTrue();
         assertThat(ClaService.partAllowsPoint(question, whole)).isTrue();
+    }
+
+    // ── SMART_LESSON: topic-anchored lesson context + deterministic framing ──
+
+    @Test
+    @DisplayName("SMART_LESSON anchors the same grounded pipeline and frames with the learner's own lesson action")
+    void smartLessonAnchorsPipeline() {
+        ResourceContext.LessonActionInfo action = new ResourceContext.LessonActionInfo(
+                "PRACTISE_QUESTIONS", "INSUFFICIENT_COVERAGE", TOPIC, "IALCHEM2018-U1-T3",
+                "Bonding and structure", "No attempt evidence on this topic yet — start it.", 3);
+        ResourceContext lessonContext = new ResourceContext(
+                ResourceContext.Kind.SMART_LESSON, TOPIC, TOPIC, ROOT, "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and structure",
+                new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                null, null, 0, null, null, null, action);
+        when(resolver.resolveSmartLesson(ROOT, TOPIC, LEARNER)).thenReturn(lessonContext);
+        when(tools.enabledFor(ResourceContext.Kind.SMART_LESSON, ResponseMode.EXPLAIN))
+                .thenReturn(List.of(ClaToolRegistry.Tool.values()));
+        when(tools.specificationContext(eq(lessonContext), any())).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_SPECIFICATION_CONTEXT, "args",
+                        List.of(new SpecAnchor(ROOT, "IALCHEM2018", "SUBJECT", "IAL Chemistry", 0),
+                                new SpecAnchor(TOPIC, "IALCHEM2018-U1-T3", "TOPIC",
+                                        "Bonding and structure", 2))));
+        when(tools.relatedConcepts(lessonContext)).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_RELATED_CONCEPTS, "args",
+                        new RelatedConcepts(List.of(), List.of())));
+        vectorReturns(chunkEvidence("validated chunk on states of matter"));
+
+        ClaAnswerView answer = service.contextualAsk(LEARNER,
+                ResourceContext.Kind.SMART_LESSON, ROOT, TOPIC, null, null, null,
+                ResponseMode.EXPLAIN, "help me with this lesson");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().kind()).isEqualTo("SMART_LESSON");
+        assertThat(answer.context().reference()).isEqualTo(TOPIC);
+        assertThat(answer.topics()).hasSize(1);
+        assertThat(answer.topics().get(0).code()).isEqualTo("IALCHEM2018-U1-T3");
+        assertThat(answer.context().lessonAction()).isNotNull();
+        assertThat(answer.context().lessonAction().actionType()).isEqualTo("PRACTISE_QUESTIONS");
+        // the deterministic lesson decision is FRAMING input (§2.3): honest labels
+        ArgumentCaptor<ContextAssembler.TutorContext> seen =
+                ArgumentCaptor.forClass(ContextAssembler.TutorContext.class);
+        verify(generator).generate(any(), seen.capture());
+        assertThat(seen.getValue().learnerBrief())
+                .contains("Smart Lesson next action")
+                .contains("PRACTISE_QUESTIONS")
+                .contains("No attempt evidence");
+        // the lesson did NOT become an evidence source of its own: sources stay
+        // the curriculum spine + validated chunks (no LEARNER_STATE pseudo-source)
+        assertThat(seen.getValue().evidence()).allSatisfy(item ->
+                assertThat(item.source()).isNotEqualTo(EvidenceItem.EvidenceSource.LEARNER_WORK));
+        // provenance: the LIM row keys the LESSON kind and the topic reference
+        ArgumentCaptor<ClaInteractionEvent> eventCaptor =
+                ArgumentCaptor.forClass(ClaInteractionEvent.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().contextKind()).isEqualTo("SMART_LESSON");
+        assertThat(eventCaptor.getValue().contextReference()).isEqualTo(TOPIC);
+        assertThat(eventCaptor.getValue().matchedTopicIds()).containsExactly(TOPIC);
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON request shape: missing rootId or topicNodeId is the established 400")
+    void smartLessonRequiresRootAndTopic() {
+        assertThatThrownBy(() -> service.contextualAsk(LEARNER,
+                ResourceContext.Kind.SMART_LESSON, null, TOPIC, null, null, null,
+                ResponseMode.EXPLAIN, "help"))
+                .isInstanceOf(com.syllabai.shared.BadRequestException.class);
+        assertThatThrownBy(() -> service.contextualAsk(LEARNER,
+                ResourceContext.Kind.SMART_LESSON, ROOT, null, null, null, null,
+                ResponseMode.EXPLAIN, "help"))
+                .isInstanceOf(com.syllabai.shared.BadRequestException.class);
+        verify(generator, never()).generate(any(), any());
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON SUMMARIZE: mode plan names the anchored Smart Lesson, scope unchanged")
+    void smartLessonSummarizePlan() {
+        ResourceContext lessonContext = new ResourceContext(
+                ResourceContext.Kind.SMART_LESSON, TOPIC, TOPIC, ROOT, "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and structure",
+                new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                null, null, 0, null, null, null, null);
+        var plan = ClaService.modePlan(ResponseMode.SUMMARIZE, lessonContext,
+                new TutorPolicyService.InterventionPlan(
+                        TutorPolicyService.InterventionType.EXPLANATION, "no signal",
+                        List.of("base")));
+        assertThat(plan.rationale()).contains("CLA SUMMARIZE mode")
+                .contains("anchored Smart Lesson on topic IALCHEM2018-U1-T3");
+        // scope-faithful: the SUMMARIZE constraints are the topic ones, unchanged
+        assertThat(plan.actions()).anySatisfy(a ->
+                assertThat(a).contains("Summarize the anchored topic"));
     }
 }

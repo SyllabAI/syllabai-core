@@ -848,4 +848,88 @@ class ClaFlowIT {
         assertThat(ok.statusCode()).isEqualTo(200);
         assertThat(ok.body()).contains("QUESTION_PART").contains("\"partLabel\":\"a\"");
     }
+
+    // ── SMART_LESSON: topic-anchored lesson context + deterministic action ───
+
+    @Test
+    @Order(16)
+    @DisplayName("SMART_LESSON: the lesson anchors the grounded pipeline and carries the learner's deterministic action")
+    void smartLessonFlow() throws Exception {
+        seed();
+        UUID learner = freshLearner();
+
+        ClaAnswerView answer = cla.contextualAsk(learner,
+                ResourceContext.Kind.SMART_LESSON, rootId, topicId, null, null, null ,
+                ResponseMode.EXPLAIN, "help me with this lesson");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.context().kind()).isEqualTo("SMART_LESSON");
+        assertThat(answer.context().reference()).isEqualTo(topicId);
+        assertThat(answer.context().topicCode()).isEqualTo("IALCHEM2018-U1-T3");
+        assertThat(answer.context().validationState()).isEqualTo("VALIDATED");
+        // the deterministic lesson decision rides on the resolved context —
+        // a fresh learner's honest next action on this topic (never invented)
+        assertThat(answer.context().lessonAction()).isNotNull();
+        assertThat(answer.context().lessonAction().actionType()).isNotBlank();
+        assertThat(answer.context().lessonAction().reasonCode()).isNotBlank();
+        // grounding is the SAME curriculum spine (anchor + spec structure), and
+        // the ladder's decision entered the brief as framing only
+        assertThat(answer.evidenceCount()).isGreaterThanOrEqualTo(1);
+        assertThat(answer.citations()).isNotEmpty();
+        assertThat(generator.lastContext.learnerBrief()).contains("Smart Lesson next action");
+        assertThat(generator.lastContext.interventionPlan().rationale())
+                .contains("CLA EXPLAIN mode").contains("anchored Smart Lesson");
+
+        // LIM provenance: contextKind=SMART_LESSON, topic anchor as reference
+        List<TutorTopicEngagement> rows = engagements
+                .findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
+                        learner, java.time.Instant.now().minusSeconds(3600));
+        assertThat(rows).anySatisfy(row -> {
+            assertThat(row.surface()).isEqualTo("CONTEXTUAL_ASSISTANT");
+            assertThat(row.contextKind()).isEqualTo("SMART_LESSON");
+            assertThat(row.contextReference()).isEqualTo(topicId);
+            assertThat(row.nodeId()).isEqualTo(topicId);
+            assertThat(row.responseMode()).isEqualTo("EXPLAIN");
+        });
+
+        // the exchange did not mutate the learner model (no mastery write from chat)
+        Integer skillsAfter = jdbc.queryForObject(
+                "select count(*) from skill_states where learner_id = ?",
+                Integer.class, learner);
+        assertThat(skillsAfter).isZero();
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("SMART_LESSON fail-closed over HTTP: missing topicNodeId 400, unknown/foreign topic 404")
+    void smartLessonHttpFailSafe() throws Exception {
+        seed();
+        String email = "cla-http5-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test";
+        authService.register(new RegisterRequest(email, "ItLearner123!", "Http Learner 5"));
+        String token = authService.login(new LoginRequest(email, "ItLearner123!")).accessToken();
+
+        // missing topicNodeId for the declared kind → 400
+        HttpResponse<String> missingRef = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "SMART_LESSON", "rootId": "%s", "mode": "EXPLAIN", "question": "help"}
+                """.formatted(rootId));
+        assertThat(missingRef.statusCode()).isEqualTo(400);
+
+        // unknown topic → 404, same shape as a foreign one (no existence oracle)
+        HttpResponse<String> unknown = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "SMART_LESSON", "rootId": "%s", "topicNodeId": "%s",
+                 "mode": "EXPLAIN", "question": "help"}
+                """.formatted(rootId, UUID.randomUUID()));
+        assertThat(unknown.statusCode()).isEqualTo(404);
+
+        // control: the real lesson IS served (the negatives are not vacuous)
+        HttpResponse<String> ok = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "SMART_LESSON", "rootId": "%s", "topicNodeId": "%s",
+                 "mode": "EXPLAIN", "question": "help me with this lesson"}
+                """.formatted(rootId, topicId));
+        assertThat(ok.statusCode()).isEqualTo(200);
+        assertThat(ok.body()).contains("SMART_LESSON").contains("lessonAction");
+    }
 }

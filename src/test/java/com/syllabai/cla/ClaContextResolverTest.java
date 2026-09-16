@@ -18,7 +18,11 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.learner.SmartLessonService;
+import com.syllabai.learner.dto.SmartLessonView;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,9 +54,11 @@ class ClaContextResolverTest {
     private final ServableQuestionService servableQuestions = mock(ServableQuestionService.class);
     private final QuestionPartRepository questionParts = mock(QuestionPartRepository.class);
     private final AttemptRepository attempts = mock(AttemptRepository.class);
+    private final SmartLessonService smartLessons = mock(SmartLessonService.class);
 
     private final ClaContextResolver resolver = new ClaContextResolver(graph, nodes, subjects,
-            questions, examPapers, questionVersions, questionParts, servableQuestions, attempts);
+            questions, examPapers, questionVersions, questionParts, servableQuestions, attempts,
+            smartLessons);
 
     private CurriculumVersion version;
 
@@ -386,5 +392,131 @@ class ClaContextResolverTest {
         assertThatThrownBy(() -> resolver.resolveQuestionPart(partId, unknownRoot, LEARNER))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("subject root");
+    }
+
+    // -- SMART_LESSON: the KG_TOPIC spine + the deterministic lesson action ---
+
+    /** stubs the learner's deterministic Smart Lesson decision for (ROOT, TOPIC) */
+    private void stubLesson(SmartLessonView.ActionType actionType,
+                            SmartLessonView.ReasonCode reason,
+                            UUID targetNodeId, String targetCode, String targetTitle) {
+        SmartLessonView view = new SmartLessonView(
+                LEARNER, ROOT, TOPIC, "IALCHEM2018-U1-T3", "Bonding and structure",
+                Instant.now(), SmartLessonView.POLICY_ID,
+                new SmartLessonView.LessonActionView(actionType, reason, targetNodeId,
+                        targetCode, targetTitle, null, 3,
+                        "No attempt evidence on this topic yet — start it."),
+                new SmartLessonView.TopicStatusView("UNMEASURED", 0, null, null, false,
+                        null, null, 0, 3),
+                List.of(), List.of(),
+                List.of(new SmartLessonView.EvidenceFactView(
+                        "topic", "IALCHEM2018-U1-T3 — Bonding and structure")));
+        when(smartLessons.lessonFor(LEARNER, ROOT, TOPIC)).thenReturn(view);
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON resolves the topic spine and carries the learner's deterministic lesson action")
+    void resolvesSmartLessonWithDeterministicAction() {
+        stubLesson(SmartLessonView.ActionType.PRACTISE_QUESTIONS,
+                SmartLessonView.ReasonCode.INSUFFICIENT_COVERAGE,
+                TOPIC, "IALCHEM2018-U1-T3", "Bonding and structure");
+
+        ResourceContext context = resolver.resolveSmartLesson(ROOT, TOPIC, LEARNER);
+
+        assertThat(context.kind()).isEqualTo(ResourceContext.Kind.SMART_LESSON);
+        // the lesson anchor IS the resolved topic (no separate lesson entity):
+        // same fail-closed spine, same spec anchor, server-side curriculum identity
+        assertThat(context.reference()).isEqualTo(TOPIC);
+        assertThat(context.topicNodeId()).isEqualTo(TOPIC);
+        assertThat(context.rootId()).isEqualTo(ROOT);
+        assertThat(context.subjectCode()).isEqualTo("4CH1");
+        assertThat(context.topicCode()).isEqualTo("IALCHEM2018-U1-T3");
+        assertThat(context.validationState()).isEqualTo("VALIDATED");
+        assertThat(context.curriculumVersion().code()).isEqualTo("IALCHEM2018");
+        assertThat(context.curriculumVersion().board()).isEqualTo("Edexcel");
+        // the learner's OWN deterministic decision rides on the context (framing
+        // state, §2.3) — honest labels, ladder audit reason, reason detail intact
+        assertThat(context.lessonAction()).isNotNull();
+        assertThat(context.lessonAction().actionType()).isEqualTo("PRACTISE_QUESTIONS");
+        assertThat(context.lessonAction().reasonCode()).isEqualTo("INSUFFICIENT_COVERAGE");
+        assertThat(context.lessonAction().reasonDetail())
+                .contains("No attempt evidence");
+        assertThat(context.lessonAction().servableQuestionCount()).isEqualTo(3);
+        // other kinds' enrichment stays null: no invented part/attempt semantics
+        assertThat(context.partLabel()).isNull();
+        assertThat(context.attempted()).isNull();
+        // the ladder consumed the SAME resolved anchor (never a model guess)
+        org.mockito.Mockito.verify(smartLessons).lessonFor(LEARNER, ROOT, TOPIC);
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON carries the ladder's honest redirect target when it has one")
+    void smartLessonCarriesRedirectTarget() {
+        UUID prereqId = UUID.randomUUID();
+        stubLesson(SmartLessonView.ActionType.REMEDIATE_PREREQUISITE,
+                SmartLessonView.ReasonCode.PREREQUISITE_WEAK,
+                prereqId, "IALCHEM2018-U1-T1", "Mole Calculations");
+
+        ResourceContext context = resolver.resolveSmartLesson(ROOT, TOPIC, LEARNER);
+
+        assertThat(context.lessonAction().actionType()).isEqualTo("REMEDIATE_PREREQUISITE");
+        // the anchor stays the SELECTED topic even when the ladder redirects —
+        // the redirect is learner state, not a re-anchoring
+        assertThat(context.reference()).isEqualTo(TOPIC);
+        assertThat(context.topicNodeId()).isEqualTo(TOPIC);
+        assertThat(context.lessonAction().targetCode()).isEqualTo("IALCHEM2018-U1-T1");
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON fail-closed: unknown topic is a 404 before the ladder runs")
+    void smartLessonUnknownTopicFailsClosed() {
+        UUID outside = UUID.randomUUID();
+        assertThatThrownBy(() -> resolver.resolveSmartLesson(ROOT, outside, LEARNER))
+                .isInstanceOf(NotFoundException.class);
+        // gate ordering: no lesson decision is computed for an unresolvable anchor
+        org.mockito.Mockito.verify(smartLessons, org.mockito.Mockito.never())
+                .lessonFor(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON fail-closed: a topic outside the subject subtree is a 404")
+    void smartLessonForeignTopicFailsClosed() {
+        UUID foreign = UUID.randomUUID();
+        assertThatThrownBy(() -> resolver.resolveSmartLesson(ROOT, foreign, LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON fail-closed: a non-VALIDATED topic is an indistinguishable 404")
+    void smartLessonUnvalidatedTopicFailsClosed() {
+        KnowledgeNode suggestedNode = org.mockito.Mockito.mock(KnowledgeNode.class);
+        when(suggestedNode.validationStatus())
+                .thenReturn(KnowledgeNode.ValidationStatus.SUGGESTED);
+        when(nodes.findById(TOPIC)).thenReturn(Optional.of(suggestedNode));
+
+        assertThatThrownBy(() -> resolver.resolveSmartLesson(ROOT, TOPIC, LEARNER))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("validated");
+        org.mockito.Mockito.verify(smartLessons, org.mockito.Mockito.never())
+                .lessonFor(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON fail-closed: an unknown subject root is a 404")
+    void smartLessonUnknownRootFailsClosed() {
+        UUID unknownRoot = UUID.randomUUID();
+        when(subjects.findByKnowledgeNodeId(unknownRoot)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> resolver.resolveSmartLesson(unknownRoot, TOPIC, LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("SMART_LESSON request shape: a missing topicNodeId is the established 400")
+    void smartLessonMissingTopicNodeIdIs400() {
+        assertThatThrownBy(() -> resolver.resolveSmartLesson(ROOT, null, LEARNER))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("topicNodeId");
     }
 }

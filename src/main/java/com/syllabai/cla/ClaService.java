@@ -201,6 +201,13 @@ public class ClaService {
                 }
                 yield resolver.resolveSpecificationPoint(rootId, specCode, learnerId);
             }
+            case SMART_LESSON -> {
+                if (rootId == null || topicNodeId == null) {
+                    throw new BadRequestException(
+                            "SMART_LESSON context requires rootId and topicNodeId");
+                }
+                yield resolver.resolveSmartLesson(rootId, topicNodeId, learnerId);
+            }
             case PAST_PAPER_QUESTION -> {
                 if (questionId == null) {
                     throw new BadRequestException(
@@ -354,7 +361,9 @@ public class ClaService {
                         + context.topicCode()
                 : context.isQuestionContext()
                         ? "anchored question on topic " + context.topicCode()
-                        : "anchored topic " + context.topicCode();
+                        : context.kind() == ResourceContext.Kind.SMART_LESSON
+                                ? "anchored Smart Lesson on topic " + context.topicCode()
+                                : "anchored topic " + context.topicCode();
         return switch (mode) {
             case EXPLAIN -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
@@ -398,8 +407,10 @@ public class ClaService {
 
     /** honest learner brief from the GET_LEARNER_STATE tool result (§2.3) */
     private String learnerBrief(ClaToolRegistry.OwnLearnerState state, ResourceContext context) {
+        String lessonLine = lessonActionBrief(context);
+        String none = "Learner state: no prior measured evidence on " + context.topicCode() + ".";
         if (state.isEmpty()) {
-            return "Learner state: no prior measured evidence on " + context.topicCode() + ".";
+            return lessonLine == null ? none : none + "\n" + lessonLine;
         }
         StringBuilder sb = new StringBuilder("Learner state for the anchored topic:\n");
         state.skills().stream()
@@ -412,9 +423,38 @@ public class ClaService {
                 .forEach(m -> sb.append("- active misconception flagged on this topic (instructional "
                         + "strategy selected from evidence)\n"));
         if (sb.indexOf("- ") < 0) {
-            return "Learner state: no prior measured evidence on " + context.topicCode() + ".";
+            return lessonLine == null ? none : none + "\n" + lessonLine;
+        }
+        if (lessonLine != null) {
+            sb.append(lessonLine);
         }
         return sb.toString().strip();
+    }
+
+    /**
+     * SMART_LESSON framing line (§2.3): the learner's OWN deterministic Smart
+     * Lesson decision — honest labels only (action + audit reason + the
+     * ladder's own reason detail), personalizes FRAMING and selection, never
+     * quoted back as fact and never treated as curriculum truth. The action's
+     * redirect target (a prerequisite/corrective node) is named so the
+     * response can honestly acknowledge where the lesson is steering.
+     */
+    private String lessonActionBrief(ResourceContext context) {
+        if (context.kind() != ResourceContext.Kind.SMART_LESSON
+                || context.lessonAction() == null) {
+            return null;
+        }
+        ResourceContext.LessonActionInfo a = context.lessonAction();
+        StringBuilder sb = new StringBuilder("- the learner's deterministic Smart Lesson next "
+                + "action on this topic: ").append(a.actionType())
+                .append(" (").append(a.reasonCode()).append(')');
+        if (a.targetCode() != null && !a.targetCode().equals(context.topicCode())) {
+            sb.append(" — the ladder redirects to ").append(a.targetCode());
+        }
+        if (a.reasonDetail() != null && !a.reasonDetail().isBlank()) {
+            sb.append(": ").append(a.reasonDetail());
+        }
+        return sb.toString();
     }
 
     /** knowledge brief: spec chain + prerequisites + misconceptions */

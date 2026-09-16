@@ -47,7 +47,8 @@ public record ClaAnswerView(
             int questionMarks,
             String paperCode,
             Boolean attempted,
-            String partLabel) {
+            String partLabel,
+            LessonActionView lessonAction) {
 
         public static ContextView of(ResourceContext context, ResponseMode mode) {
             return new ContextView(
@@ -59,8 +60,29 @@ public record ClaAnswerView(
                     context.validationState(), mode,
                     context.questionStem(), context.questionCommandWord(),
                     context.questionMarks(), context.paperCode(), context.attempted(),
-                    context.partLabel());
+                    context.partLabel(), lessonActionOf(context.lessonAction()));
         }
+
+        private static LessonActionView lessonActionOf(ResourceContext.LessonActionInfo a) {
+            return a == null ? null : new LessonActionView(a.actionType(), a.reasonCode(),
+                    a.targetNodeId(), a.targetCode(), a.targetTitle(), a.reasonDetail(),
+                    a.servableQuestionCount());
+        }
+    }
+
+    /**
+     * SMART_LESSON contexts: the learner's OWN deterministic Smart Lesson
+     * next action (the smart-lesson/v2 ladder's honest decision — same shape
+     * the Smart Lesson surface renders; framing/provenance only, never a
+     * source of educational truth). Null on every other kind.
+     */
+    public record LessonActionView(String actionType,
+                                   String reasonCode,
+                                   java.util.UUID targetNodeId,
+                                   String targetCode,
+                                   String targetTitle,
+                                   String reasonDetail,
+                                   int servableQuestionCount) {
     }
 
     /** the deterministic topic anchor(s) — exactly the resolved context in step 1 */

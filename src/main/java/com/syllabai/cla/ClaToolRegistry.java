@@ -94,16 +94,17 @@ public class ClaToolRegistry {
 
     /**
      * Enablement by (context kind, mode) pair (contract §4.1). Steps 1–2 +
-     * the part-level kind: all three tools are enabled for KG_TOPIC,
-     * SPECIFICATION_POINT, PAST_PAPER_QUESTION and QUESTION_PART with every
-     * served mode; any other kind is rejected — the registry, not the
-     * caller, decides.
+     * the part-level and smart-lesson kinds: all three tools are enabled for
+     * KG_TOPIC, SPECIFICATION_POINT, PAST_PAPER_QUESTION, QUESTION_PART and
+     * SMART_LESSON with every served mode; any other kind is rejected — the
+     * registry, not the caller, decides.
      */
     public List<Tool> enabledFor(ResourceContext.Kind kind, ResponseMode mode) {
         if (kind != ResourceContext.Kind.KG_TOPIC
                 && kind != ResourceContext.Kind.SPECIFICATION_POINT
                 && kind != ResourceContext.Kind.PAST_PAPER_QUESTION
-                && kind != ResourceContext.Kind.QUESTION_PART) {
+                && kind != ResourceContext.Kind.QUESTION_PART
+                && kind != ResourceContext.Kind.SMART_LESSON) {
             throw new BadRequestException("context kind not supported by this runtime step: " + kind);
         }
         return List.of(Tool.values());

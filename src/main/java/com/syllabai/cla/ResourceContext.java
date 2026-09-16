@@ -44,6 +44,12 @@ import java.util.UUID;
  * @param partLabel         QUESTION_PART contexts: the anchored part's label
  *                          ("a", "b-ii", …) on the question's CURRENT validated
  *                          version; null on every other kind
+ * @param lessonAction      SMART_LESSON contexts: the learner's OWN deterministic
+ *                          Smart Lesson decision for the anchored topic (the
+ *                          existing smart-lesson/v2 ladder — action type, reason
+ *                          code, redirect target, honest reason detail). Relevant
+ *                          learner state for FRAMING (contract §2.3), never a
+ *                          source of educational truth; null on every other kind
  */
 public record ResourceContext(
         Kind kind,
@@ -62,14 +68,46 @@ public record ResourceContext(
         int questionMarks,
         String paperCode,
         Boolean attempted,
-        String partLabel) {
+        String partLabel,
+        LessonActionInfo lessonAction) {
+
+    /**
+     * The learner's OWN deterministic Smart Lesson decision carried on a
+     * SMART_LESSON context (computed by the existing smart-lesson/v2 ladder
+     * over the SAME learner model the Smart Lesson surface consumes — no new
+     * learner state, no LLM, no probabilities beyond what the ladder already
+     * publishes honestly). Strings for the action/reason enums keep the CLA
+     * decoupled from the learner DTO's enum identity, mirroring how
+     * {@code partLabel} carries the assessment label.
+     *
+     * @param actionType     the ladder's chosen ActionType name (e.g.
+     *                       PRACTISE_QUESTIONS, REVIEW_TOPIC, REMEDIATE_PREREQUISITE)
+     * @param reasonCode     the ladder's audit ReasonCode name (e.g.
+     *                       INSUFFICIENT_COVERAGE, DUE_REVIEW)
+     * @param targetNodeId   the action's target node (may be a prerequisite or
+     *                       corrective concept the ladder honestly redirects to;
+     *                       nullable)
+     * @param targetCode     the target's canonical KG code (nullable)
+     * @param targetTitle    the target's canonical title (nullable)
+     * @param reasonDetail   the ladder's own human-readable, auditable reason
+     * @param servableQuestionCount   servable questions on the action's target topic
+     */
+    public record LessonActionInfo(String actionType,
+                                   String reasonCode,
+                                   UUID targetNodeId,
+                                   String targetCode,
+                                   String targetTitle,
+                                   String reasonDetail,
+                                   int servableQuestionCount) {
+    }
 
     /**
      * Closed enum (contract §1) — SPECIFICATION_POINT | KG_TOPIC |
      * NOTE_SECTION | QUESTION_PART | SMART_LESSON | PAST_PAPER_QUESTION,
      * extensible by decision only. Runtime serves KG_TOPIC,
-     * SPECIFICATION_POINT, PAST_PAPER_QUESTION and QUESTION_PART; the other
-     * values name the contract's closed set so extensions are explicit.
+     * SPECIFICATION_POINT, PAST_PAPER_QUESTION, QUESTION_PART and
+     * SMART_LESSON; the other values name the contract's closed set so
+     * extensions are explicit.
      */
     public enum Kind {
         SPECIFICATION_POINT,
@@ -102,5 +140,28 @@ public record ResourceContext(
     /** part-level anchor predicate (part-scoped scheme evidence selection) */
     public boolean isQuestionPartContext() {
         return kind == Kind.QUESTION_PART;
+    }
+
+    /**
+     * topic-anchored (non-assessment) predicate: KG_TOPIC and SMART_LESSON
+     * share the identical curriculum spine and the identical tutor-parity
+     * evidence rules — a Smart Lesson is a topic-anchored learning context,
+     * NOT assessment content (no §7 leakage boundary of its own, no invented
+     * marking semantics).
+     */
+    public boolean isTopicContext() {
+        return kind == Kind.KG_TOPIC || kind == Kind.SMART_LESSON;
+    }
+
+    /**
+     * Copy of this context with the lesson action attached (resolver-internal:
+     * the base spine resolves first, then the deterministic lesson decision
+     * enriches it without re-running the gates).
+     */
+    public ResourceContext withLessonAction(LessonActionInfo lessonAction) {
+        return new ResourceContext(kind, reference, topicNodeId, rootId, subjectCode,
+                topicCode, topicTitle, curriculumVersion, validationState, learnerId,
+                resolvedAt, questionStem, questionCommandWord, questionMarks,
+                paperCode, attempted, partLabel, lessonAction);
     }
 }
