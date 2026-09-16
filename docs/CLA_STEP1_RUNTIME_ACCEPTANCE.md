@@ -199,16 +199,27 @@ canonical spec anchor stays the resolved topic).
 | LIM evidence carries the lesson identity | ACCEPTED (implemented) | `contextKind=SMART_LESSON`, `contextReference=topicId`, `nodeId`=topic — live G8a + `ClaFlowIT.smartLessonFlow` row assertions |
 | no canonical KG / mastery mutation | ACCEPTED (implemented) | live G8b (zero skill rows on a fresh learner after SMART_LESSON asks) + `ClaFlowIT.smartLessonFlow` DB-level assertion |
 | closed-loop substrate parity | ACCEPTED (implemented) | live G5 + S-H per-topic parity probes: the Smart Lesson surface renders a valid ladder decision for the same (root, topic, learner); the CLA ask itself feeds LIM engagement rows the ladder consumes (surface reason flipped INSUFFICIENT_COVERAGE → TUTOR_ENGAGED after the ask — the loop is live) |
-| web panel (SAME Assistant panel) | ACCEPTED (implemented) | web `4c3326a`: "Smart lesson" kind in the existing selector, topic-anchored references via `isTopicKind`, lesson next-action in the meta row; tsc/eslint/next build clean. **In-browser VERIFIED (2026-09-16, main-lineage production build × production backend)**: full §4.1 checklist — selector contains "Smart lesson"; lesson-anchored topic label; EXPLAIN grounded 5ev/5cits with `next action: practise questions` meta row; HINT scaffolding-only with ZERO mark-scheme sources; SUMMARIZE compressed spec scope; citation [1] deep link = the exact anchored topic node id; unknown 404 / real foreign 404; zero skill rows before/after (sanctioned LIM signals only); KG_TOPIC + QUESTION_PART re-verified on BOTH the deployed build and main — no regression, no second assistant surface (`cla_smartlesson_browser_verification_4c3326a.log`). Production Vercel deployment of `4c3326a`: UNVERIFIED — DEPLOYMENT BLOCKED (deployed panel chunk predates the commit — chunk-level proof; Vercel redeploy is dashboard-triggered, no repo-side deploy hook — operator-gated, not a product defect) |
+| web panel (SAME Assistant panel) | ACCEPTED (implemented) | web `4c3326a`: "Smart lesson" kind in the existing selector, topic-anchored references via `isTopicKind`, lesson next-action in the meta row; tsc/eslint/next build clean. **In-browser VERIFIED (2026-09-16, main-lineage production build × production backend)**: full §4.1 checklist — selector contains "Smart lesson"; lesson-anchored topic label; EXPLAIN grounded 5ev/5cits with `next action: practise questions` meta row; HINT scaffolding-only with ZERO mark-scheme sources; SUMMARIZE compressed spec scope; citation [1] deep link = the exact anchored topic node id; unknown 404 / real foreign 404; zero skill rows before/after (sanctioned LIM signals only); KG_TOPIC + QUESTION_PART re-verified on BOTH the deployed build and main — no regression, no second assistant surface (`cla_smartlesson_browser_verification_4c3326a.log`). Production Vercel deployment of `4c3326a`: **REDEPLOYED — VERIFIED (2026-09-17)**: the deployed panel chunk is now `cf73528213c5da17.js` — the EXACT content-hash of the `4c3326a` main-lineage build recorded 2026-09-16 (previously `3f2aa9baa470e1ea.js`, pre-SMART_LESSON) — and the DEPLOYED build was re-verified in-browser with a fresh UI-registered learner: "Smart lesson" present in the same selector (4 kinds), Smart Lesson tab in the app shell, anchored-topic label, and a live grounded EXPLAIN with inline citations and real spec-structure sources (4CH1-1.2/4CH1-1.4) served through the production backend (`cla_smartlesson_deployment_verification_20260917.log`) |
 | evaluation bundle coverage | ACCEPTED (implemented) | S-H set: **33/33 GREEN — VERIFIED** live over real validated 4CH1 material (`cla_eval_smartlesson_sh.json`): 8/8 topics EXPLAIN grounded+anchored+ladder-valid, 8/8 substrate parity with the Smart Lesson surface, 8/8 HINT+SUMMARIZE modes correct, grounded precision 100% (topics=8/8), complete fail-closed matrix green (unknown 404 / missing-ref 400 / unknown-mode 400 / blank 400 / REAL foreign 404), out-of-domain probe declines honestly (zero fabricated markers), learner evidence signals + zero skill rows. The provider's daily-token ceiling stretched the run across quota windows; the resumable harness landed every probe without double-counting and without a single gate change (EXTERNAL PROVIDER LIMIT absorbed by execution pacing, never by thresholds) |
 
 Honest remainder: NOTE_SECTION remains NOT IMPLEMENTED — SUBSTRATE-BLOCKED /
 architecture decision required. Web panel: VERIFIED in-browser on the
 main-lineage build against the production backend (2026-09-16, full §4.1
-checklist, zero defects); production Vercel deployment of `4c3326a` lags main
-(chunk-level proof in `cla_smartlesson_browser_verification_4c3326a.log`) and
-needs the operator's dashboard redeploy — no repo-side deploy hook. CI: fresh
-actions-health probe run 35070697220 (2026-09-16) reproduced the zero-step
-BlobNotFound infrastructure signature — Actions remains blocked (sentinel
-window 2026-09-27); local unit (535/535), live (15/15) and S-H (33/33)
-evidence stands unchanged.
+checklist, zero defects); production Vercel deployment of `4c3326a`
+**REDEPLOYED and VERIFIED 2026-09-17** (chunk-hash match + in-browser
+selector/label/grounded-EXPLAIN confirmation on the deployed build;
+`cla_smartlesson_deployment_verification_20260917.log`). CI: the 2026-09-17
+reconciliation found the Actions quota RECOVERED on 2026-09-16 (~08:47Z — the
+zero-step signature ended mid-day) and the first real Docker-backed core-ci
+execution since the blackout ran on the E2 lineage (runs `35075687695`,
+`35077858230`, `35078454055`): unit 540 green CONFIRMED in CI, all
+SMART_LESSON-era product ITs green (`SmartLessonFlowIT` 5/5), but 4
+ClaFlowIT tests (SPECIFICATION_POINT foreign-code fixture + 3
+QUESTION_PART fixtures) failed on FIRST-ever execution — all four classified
+HARNESS (fixture) defects, zero product defects, zero gates weakened (the
+"foreign" code `WCH11-T1.1` is the V6 seed topic INSIDE the same CHM subtree;
+the part-fixture draft resolves to a subject row without a KG root, so CLA
+correctly fail-closes 404 on a subject without curriculum identity). The
+fixtures need the fix; core-ci is RED until then — recorded in
+`INTERVENTION_RUN_ACCEPTANCE.md` (same runs) and central PROGRESS; local unit
+(535/535), live (15/15) and S-H (33/33) evidence stands unchanged.
