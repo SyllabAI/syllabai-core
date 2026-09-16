@@ -40,19 +40,19 @@ public class RevisionNoteIngestService {
     private static final java.util.regex.Pattern SAFE_FILENAME =
             java.util.regex.Pattern.compile("[A-Za-z0-9][A-Za-z0-9 ._()-]{0,511}");
 
+    /** house pattern: the app context exposes no ObjectMapper bean */
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private final RevisionNoteRepository notes;
     private final RevisionNoteAssetRepository assets;
     private final RevisionNoteViewedRepository viewed;
-    private final ObjectMapper objectMapper;
 
     public RevisionNoteIngestService(RevisionNoteRepository notes,
             RevisionNoteAssetRepository assets,
-            RevisionNoteViewedRepository viewed,
-            ObjectMapper objectMapper) {
+            RevisionNoteViewedRepository viewed) {
         this.notes = notes;
         this.assets = assets;
         this.viewed = viewed;
-        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -145,7 +145,7 @@ public class RevisionNoteIngestService {
             throw new BadRequestException("revision-notes package is missing package.json");
         }
         try {
-            RevisionNoteDtos.RevisionNotePackage pkg = objectMapper.readValue(
+            RevisionNoteDtos.RevisionNotePackage pkg = JSON.readValue(
                     new String(packageJson, StandardCharsets.UTF_8),
                     RevisionNoteDtos.RevisionNotePackage.class);
             return new ParsedPackage(pkg, assetBytes);
@@ -195,7 +195,7 @@ public class RevisionNoteIngestService {
                             + n.noteId());
                     if (n.specMapJson() != null) {
                         try {
-                            objectMapper.readTree(n.specMapJson());
+                            JSON.readTree(n.specMapJson());
                         } catch (IOException e) {
                             throw new BadRequestException("note " + n.noteId()
                                     + " spec_map is not valid JSON");
