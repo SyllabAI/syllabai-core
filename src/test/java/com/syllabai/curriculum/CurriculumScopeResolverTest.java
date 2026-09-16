@@ -135,9 +135,10 @@ class CurriculumScopeResolverTest {
         Subject secondSubject = new Subject(second, "CHM", "Chemistry (IAL)");
         setId(secondSubject, "id", UUID.randomUUID());
         setId(secondSubject, "knowledgeNodeId", secondRoot);
+        CurriculumVersion first = curriculumVersions.findById(cvId).orElseThrow();
+        // build the version list BEFORE the outer when(...) — house rule
         when(curriculumVersions.findByStatusOrderByCreatedAtDesc(CurriculumVersion.Status.ACTIVE))
-                .thenReturn(List.of(
-                        curriculumVersions.findById(cvId).orElseThrow(), second));
+                .thenReturn(List.of(first, second));
         when(subjects.findByCurriculumVersionIdOrderByCode(secondCvId))
                 .thenReturn(List.of(secondSubject));
         when(knowledgeNodes.findSubtreeIds(any())).thenReturn(List.of(structureId));
