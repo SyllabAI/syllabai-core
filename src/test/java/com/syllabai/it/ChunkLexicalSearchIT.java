@@ -131,7 +131,7 @@ class ChunkLexicalSearchIT {
         assertThat(hits.get(0).embeddingModel()).isNull(); // lexical text arm
 
         // deterministic ordering: same query, same database state → identical ranking
-        List<ChunkHit> again = lexical.search("chlorine iodine astatine halogens", null,
+        List<ChunkHit> again = lexical.search("chlorine iodine astatine", null,
                 scope.curriculumVersionId(), 5);
         assertThat(again).extracting(ChunkHit::chunkId).isEqualTo(hits.stream().map(ChunkHit::chunkId).toList());
     }
