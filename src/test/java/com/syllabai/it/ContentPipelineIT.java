@@ -27,7 +27,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -50,10 +53,18 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * serves scoped chunks, the negative controls prove a foreign-curriculum scope
  * sees nothing and an unlinked document (unresolvable curriculum) is never
  * served (fail-closed).</p>
+ *
+ * <p>Container state is shared across the class's test methods: the 4CH0 mark
+ * scheme fixture is ingested by three of them, and ingestion is
+ * checksum-idempotent. {@code fullPipeline} asserts the FIRST-ingestion
+ * contract ({@code duplicate() == false}), so it is pinned to run first via
+ * {@code @Order}; the other tests resolve to the already-stored document and
+ * tolerate that.</p>
  */
 @SpringBootTest
 @ActiveProfiles("it")
 @Testcontainers(disabledWithoutDocker = true)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ContentPipelineIT {
 
     @Container
@@ -121,6 +132,7 @@ class ContentPipelineIT {
     }
 
     @Test
+    @Order(1) // must ingest the shared 4CH0 fixture first — see the state note below
     @DisplayName("full pipeline: ingest → chunk → embed → cosine search with provenance")
     void fullPipeline() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -170,6 +182,7 @@ class ContentPipelineIT {
     }
 
     @Test
+    @Order(2) // QP fixture — first ingestion here regardless of the MS tests' order
     @DisplayName("re-ingesting the same source is idempotent; kind filter excludes other kinds")
     void idempotentIngestAndKindFilter() throws Exception {
         Fixture qp = fixture("canonical-qp-4ch0-1c-jan2012.json");
@@ -200,6 +213,7 @@ class ContentPipelineIT {
     }
 
     @Test
+    @Order(3) // tolerates the MS fixture already being ingested (resolves to the same document)
     @DisplayName("T-C07 negative control: a foreign-curriculum scope never serves the corpus")
     void foreignCurriculumScopeServesNothing() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -224,6 +238,7 @@ class ContentPipelineIT {
     }
 
     @Test
+    @Order(4) // tolerates the MS fixture already being ingested (resolves to the same document)
     @DisplayName("T-C07 negative control: an unlinked document (unresolvable curriculum) is never served")
     void unlinkedDocumentNeverServed() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -244,6 +259,7 @@ class ContentPipelineIT {
     }
 
     @Test
+    @Order(5)
     @DisplayName("a tampered canonical document is rejected with the full invariant list")
     void tamperedDocumentRejected() throws Exception {
         Fixture qp = fixture("canonical-qp-4ch0-1c-jan2012.json");

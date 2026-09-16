@@ -3,11 +3,17 @@ package com.syllabai.it;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.content.ContentIngestionService;
 import com.syllabai.content.Document;
 import com.syllabai.content.DocumentEmbeddingService;
 import com.syllabai.content.EmbeddingProvider;
 import com.syllabai.content.CanonicalDocumentDto;
+import com.syllabai.curriculum.CurriculumVersion;
+import com.syllabai.curriculum.CurriculumVersionRepository;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.identity.AuthService;
 import com.syllabai.research.TelemetryEventRepository;
@@ -106,6 +112,12 @@ class KaRagFlowIT {
     @Autowired
     private TelemetryEventRepository telemetry;
     @Autowired
+    private CurriculumVersionRepository curriculumVersions;
+    @Autowired
+    private SubjectRepository subjects;
+    @Autowired
+    private ExamPaperRepository examPapers;
+    @Autowired
     private JdbcTemplate jdbc;
     @Autowired
     private RecordingGenerator generator;
@@ -135,6 +147,21 @@ class KaRagFlowIT {
         review.nodes(summary.curriculumVersionId(), null).forEach(
                 node -> review.validateNode(node.id()));
         review.validateVersion(summary.curriculumVersionId());
+
+        // T-C07 join path (MANDATORY scope on chunk serving): a document is only
+        // served when it joins through exam_papers QP/MS document_id → subjects →
+        // curriculum_versions into the RESOLVED owning scope. The 4CH0/1C mark
+        // scheme must therefore be linked as a paper of a subject inside the SAME
+        // single owning curriculum as the KG side — otherwise the chunk side is
+        // invisible (fail-closed) and no MARK_SCHEME citation can ever be cited.
+        // (Unlinked documents stay never-served; ContentPipelineIT's negative
+        // controls cover that refusal.)
+        CurriculumVersion ial = curriculumVersions
+                .findById(summary.curriculumVersionId()).orElseThrow();
+        Subject msSubject = subjects.save(new Subject(ial, "4CH0", "Chemistry (mark-scheme side)"));
+        examPapers.save(new ExamPaper(msSubject.id(), "IT paper 4CH0/1C Jan 2012", "Edexcel",
+                "IGCSE", null, null, "4CH0/1C",
+                null, result.documentId(), ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
     }
 
     @Test
