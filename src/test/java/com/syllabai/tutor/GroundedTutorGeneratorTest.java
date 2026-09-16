@@ -3,7 +3,8 @@ package com.syllabai.tutor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.syllabai.infrastructure.llm.LlmProvider;
+import com.syllabai.infrastructure.llm.FakeLlmProvider;
+import com.syllabai.infrastructure.llm.LlmResponse;
 import com.syllabai.infrastructure.llm.LlmRequest;
 import com.syllabai.infrastructure.llm.LlmResponse;
 import java.util.List;
@@ -18,7 +19,8 @@ import org.junit.jupiter.api.Test;
  */
 class GroundedTutorGeneratorTest {
 
-    private RecordingProvider provider = new RecordingProvider(true);
+    private final FakeLlmProvider provider = FakeLlmProvider.named("recording")
+            .respondsWith(new LlmResponse("stub answer", "groq", "llama-3.3-70b-versatile", 120, 100, 40));
     private final GroundedTutorGenerator generator =
             new GroundedTutorGenerator(provider, 0.2, 900);
 
@@ -38,7 +40,7 @@ class GroundedTutorGeneratorTest {
 
         generator.generate("What shapes do molecules take?", context);
 
-        String prompt = provider.lastRequest.userPrompt();
+        String prompt = provider.lastRequest().userPrompt();
         assertThat(prompt).contains("QUESTION:\nWhat shapes do molecules take?");
         assertThat(prompt).contains("LEARNER CONTEXT:\nLearner state: no prior evidence");
         assertThat(prompt).contains("topic IALCHEM2018-U1-T3: Bonding and Structure");
@@ -46,8 +48,8 @@ class GroundedTutorGeneratorTest {
         assertThat(prompt).contains("[2] (mark scheme, p6)");
         assertThat(prompt).contains("shapes of molecules determined by electron pair repulsion");
 
-        assertThat(provider.lastRequest.systemPrompt()).contains("Answer ONLY from the numbered SOURCES");
-        assertThat(provider.lastRequest.maxTokens()).isEqualTo(900);
+        assertThat(provider.lastRequest().systemPrompt()).contains("Answer ONLY from the numbered SOURCES");
+        assertThat(provider.lastRequest().maxTokens()).isEqualTo(900);
     }
 
     @Test
@@ -60,7 +62,7 @@ class GroundedTutorGeneratorTest {
                                 0, "OTHER", big, 1, 1, List.of(), "m", 0.9)));
 
         generator.generate("q", context);
-        assertThat(provider.lastRequest.userPrompt().length()).isLessThan(2000);
+        assertThat(provider.lastRequest().userPrompt().length()).isLessThan(2000);
     }
 
     @Test
@@ -78,42 +80,10 @@ class GroundedTutorGeneratorTest {
     @DisplayName("unavailable chain fails loudly — never an ungrounded answer")
     void unavailableChainFails() {
         GroundedTutorGenerator offline =
-                new GroundedTutorGenerator(new RecordingProvider(false), 0.2, 900);
+                new GroundedTutorGenerator(FakeLlmProvider.unconfigured("recording"), 0.2, 900);
         assertThatThrownBy(() -> offline.generate("q?",
                 new ContextAssembler.TutorContext("b", "k", List.of())))
                 .isInstanceOf(TutorGenerationException.class)
                 .hasMessageContaining("LLM chain unavailable");
-    }
-
-    /** deterministic fake provider recording the request */
-    private static final class RecordingProvider implements LlmProvider {
-        private final boolean available;
-        private LlmRequest lastRequest;
-
-        RecordingProvider(boolean available) {
-            this.available = available;
-        }
-
-        @Override
-        public String name() {
-            return "recording";
-        }
-
-        @Override
-        public boolean available() {
-            return available;
-        }
-
-        @Override
-        public LlmResponse generate(LlmRequest request) {
-            this.lastRequest = request;
-            return new LlmResponse("stub answer", "groq", "llama-3.3-70b-versatile",
-                    120, 100, 40);
-        }
-
-        @Override
-        public com.syllabai.infrastructure.llm.LlmProviderHealth health() {
-            return new com.syllabai.infrastructure.llm.LlmProviderHealth(available);
-        }
     }
 }

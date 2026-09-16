@@ -3,14 +3,16 @@ package com.syllabai.infrastructure.llm;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Failover chain tests with fake providers — the §26.1 behaviour contract:
- * Groq → Gemini → OpenRouter, skip unavailable, failover on error, cooldown, and
+ * Failover chain tests on the reusable {@link FakeLlmProvider} fixture (ADR-023
+ * Slice B) — the §26.1 behaviour contract: Groq → Gemini → OpenRouter, skip
+ * unavailable, failover on error, cooldown, structured failure classes, and
  * per-experiment pinning (pinned requests never drift; unpinned fail loudly).
  */
 class FailoverLlmChainTest {
@@ -21,55 +23,12 @@ class FailoverLlmChainTest {
 
     private static final ExperimentPinResolver UNPINNED = id -> Optional.empty();
 
-    /** Scripted fake provider. */
-    private static final class FakeProvider implements LlmProvider {
-        private final String name;
-        private final boolean configured;
-        private final RuntimeException failure;   // null = succeed
-        private final LlmProviderHealth health;
-        private int calls;
-        private LlmRequest lastRequest;
-
-        private FakeProvider(String name, boolean configured, RuntimeException failure) {
-            this.name = name;
-            this.configured = configured;
-            this.failure = failure;
-            this.health = new LlmProviderHealth(configured);
-        }
-
-        @Override public String name() { return name; }
-
-        @Override public boolean available() { return configured && !health.inCooldown(); }
-
-        @Override public LlmResponse generate(LlmRequest request) {
-            calls++;
-            lastRequest = request;
-            if (failure != null) {
-                health.recordFailure(failure.getMessage());
-                // mirror SpringAiChatModelAdapter's message contract: the cause
-                // class+message travel inside the LlmProviderException message so
-                // the chain's aggregate error names the real per-provider cause
-                throw new LlmProviderException(name,
-                        "generation failed (" + failure.getClass().getSimpleName() + ": "
-                                + failure.getMessage() + ")",
-                        failure);
-            }
-            health.recordSuccess();
-            return new LlmResponse("answer from " + name, name, "fake-model", 5, 10, 10);
-        }
-
-        @Override public LlmProviderHealth health() { return health; }
-
-        private int calls() { return calls; }
-        private LlmRequest lastRequest() { return lastRequest; }
-    }
-
     @Test
     @DisplayName("primary provider answers when healthy")
     void primaryWins() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, null),
-                new FakeProvider("gemini", true, null)), UNPINNED);
+                FakeLlmProvider.named("groq"),
+                FakeLlmProvider.named("gemini")), UNPINNED);
         LlmResponse response = chain.generate(REQUEST);
         assertThat(response.providerName()).isEqualTo("groq");
     }
@@ -78,9 +37,9 @@ class FailoverLlmChainTest {
     @DisplayName("primary failure fails over to the next provider")
     void failoverOnPrimaryError() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, new IllegalStateException("429 rate limited")),
-                new FakeProvider("gemini", true, null),
-                new FakeProvider("openrouter", true, null)), UNPINNED);
+                FakeLlmProvider.named("groq").alwaysFails(new IllegalStateException("429 rate limited")),
+                FakeLlmProvider.named("gemini"),
+                FakeLlmProvider.named("openrouter")), UNPINNED);
         LlmResponse response = chain.generate(REQUEST);
         assertThat(response.providerName()).isEqualTo("gemini");
     }
@@ -89,9 +48,9 @@ class FailoverLlmChainTest {
     @DisplayName("unconfigured providers are skipped silently")
     void skipsUnconfigured() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", false, null),
-                new FakeProvider("gemini", false, null),
-                new FakeProvider("openrouter", true, null)), UNPINNED);
+                FakeLlmProvider.unconfigured("groq"),
+                FakeLlmProvider.unconfigured("gemini"),
+                FakeLlmProvider.named("openrouter")), UNPINNED);
         LlmResponse response = chain.generate(REQUEST);
         assertThat(response.providerName()).isEqualTo("openrouter");
     }
@@ -100,20 +59,20 @@ class FailoverLlmChainTest {
     @DisplayName("all providers failing raises a chain exception")
     void allFailing() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, new IllegalStateException("boom")),
-                new FakeProvider("gemini", true, new IllegalStateException("boom"))), UNPINNED);
+                FakeLlmProvider.named("groq").alwaysFails(new IllegalStateException("boom")),
+                FakeLlmProvider.named("gemini").alwaysFails(new IllegalStateException("boom"))), UNPINNED);
         assertThatThrownBy(() -> chain.generate(REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("all providers failed");
     }
 
     @Test
-    @DisplayName("chain exhaustion names every failed provider and its cause (2026-09-14 outage lesson)")
+    @DisplayName("chain exhaustion names every failed provider, its cause and its class (2026-09-14 outage lesson)")
     void exhaustedChainNamesEveryProviderCause() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, new IllegalStateException("403 Forbidden")),
-                new FakeProvider("gemini", true, new IllegalStateException("model retired")),
-                new FakeProvider("openrouter", true, new IllegalStateException("429 quota"))), UNPINNED);
+                FakeLlmProvider.named("groq").alwaysFails(new IllegalStateException("403 Forbidden")),
+                FakeLlmProvider.named("gemini").alwaysFails(new IllegalStateException("model retired")),
+                FakeLlmProvider.named("openrouter").alwaysFails(LlmFailureClass.RATE_LIMITED)), UNPINNED);
         assertThatThrownBy(() -> chain.generate(REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("all providers failed")
@@ -122,15 +81,18 @@ class FailoverLlmChainTest {
                 .hasMessageContaining("gemini: ")
                 .hasMessageContaining("model retired")
                 .hasMessageContaining("openrouter: ")
-                .hasMessageContaining("429 quota");
+                .hasMessageContaining("RATE_LIMITED")
+                // ADR-023: the aggregate exception carries the last structured class
+                .extracting(e -> ((LlmProviderException) e).failureClass())
+                .isEqualTo(LlmFailureClass.RATE_LIMITED);
     }
 
     @Test
     @DisplayName("no configured provider → chain unavailable and clear error")
     void emptyChain() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", false, null),
-                new FakeProvider("gemini", false, null)), UNPINNED);
+                FakeLlmProvider.unconfigured("groq"),
+                FakeLlmProvider.unconfigured("gemini")), UNPINNED);
         assertThat(chain.available()).isFalse();
         assertThatThrownBy(() -> chain.generate(REQUEST))
                 .isInstanceOf(LlmProviderException.class)
@@ -140,9 +102,10 @@ class FailoverLlmChainTest {
     @Test
     @DisplayName("consecutive failures trip the cooldown and exclude the provider")
     void cooldownAfterRepeatedFailures() {
-        FakeProvider groq = new FakeProvider("groq", true, new IllegalStateException("boom"));
+        FakeLlmProvider groq = FakeLlmProvider.named("groq")
+                .alwaysFails(new IllegalStateException("boom"));
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                groq, new FakeProvider("gemini", true, null)), UNPINNED);
+                groq, FakeLlmProvider.named("gemini")), UNPINNED);
         for (int i = 0; i < 3; i++) {
             chain.generate(REQUEST);   // groq fails 3×, gemini answers
         }
@@ -156,10 +119,31 @@ class FailoverLlmChainTest {
     @DisplayName("memberHealth reports every provider")
     void memberHealthReport() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, null),
-                new FakeProvider("gemini", false, null)), UNPINNED);
+                FakeLlmProvider.named("groq"),
+                FakeLlmProvider.unconfigured("gemini")), UNPINNED);
         assertThat(chain.memberHealth()).containsKeys("groq", "gemini");
         assertThat(chain.memberHealth().get("gemini").configured()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the fixture records invocation count, model and cross-provider order")
+    void invocationOrderIsRecorded() {
+        List<String> order = new ArrayList<>();
+        FakeLlmProvider groq = FakeLlmProvider.named("groq")
+                .alwaysFails(LlmFailureClass.RATE_LIMITED).recordOrderInto(order);
+        FakeLlmProvider gemini = FakeLlmProvider.named("gemini").recordOrderInto(order);
+        FakeLlmProvider openrouter = FakeLlmProvider.named("openrouter").recordOrderInto(order);
+        FailoverLlmChain chain = new FailoverLlmChain(List.of(groq, gemini, openrouter), UNPINNED);
+
+        LlmResponse response = chain.generate(REQUEST);
+
+        assertThat(response.providerName()).isEqualTo("gemini");
+        assertThat(order).containsExactly("groq", "gemini");   // openrouter never tried
+        assertThat(groq.callCount()).isEqualTo(1);
+        assertThat(gemini.callCount()).isEqualTo(1);
+        assertThat(openrouter.callCount()).isZero();
+        assertThat(gemini.lastCall().providerName()).isEqualTo("gemini");
+        assertThat(groq.lastCall().experimentId()).isNull();
     }
 
     // ── experiment pinning (§26.1) ─────────────────────────────────────────────
@@ -167,33 +151,34 @@ class FailoverLlmChainTest {
     @Test
     @DisplayName("a pinned experiment is served exclusively by the pinned provider")
     void pinnedExperimentUsesPinnedProviderOnly() {
-        FakeProvider groq = new FakeProvider("groq", true, null);
-        FakeProvider gemini = new FakeProvider("gemini", true, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq");
+        FakeLlmProvider gemini = FakeLlmProvider.named("gemini");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq, gemini),
                 id -> Optional.of(new ExperimentPin(id, "groq", null)));
         LlmResponse response = chain.generate(EXPERIMENT_REQUEST);
         assertThat(response.providerName()).isEqualTo("groq");
-        assertThat(gemini.calls()).isZero();
+        assertThat(gemini.callCount()).isZero();
     }
 
     @Test
     @DisplayName("a pinned provider failure never fails over to another provider")
     void pinnedProviderFailureDoesNotFailOver() {
-        FakeProvider groq = new FakeProvider("groq", true, new IllegalStateException("429"));
-        FakeProvider gemini = new FakeProvider("gemini", true, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq")
+                .alwaysFails(new IllegalStateException("429"));
+        FakeLlmProvider gemini = FakeLlmProvider.named("gemini");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq, gemini),
                 id -> Optional.of(new ExperimentPin(id, "groq", null)));
         assertThatThrownBy(() -> chain.generate(EXPERIMENT_REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("all providers failed");
-        assertThat(gemini.calls()).isZero();
+        assertThat(gemini.callCount()).isZero();
     }
 
     @Test
     @DisplayName("an unpinned experiment id fails loudly instead of silently drifting")
     void unpinnedExperimentFailsLoud() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, null)), UNPINNED);
+                FakeLlmProvider.named("groq")), UNPINNED);
         assertThatThrownBy(() -> chain.generate(EXPERIMENT_REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("not pinned")
@@ -204,7 +189,7 @@ class FailoverLlmChainTest {
     @DisplayName("a pin naming an unknown provider fails with the registered providers")
     void pinToUnknownProviderFails() {
         FailoverLlmChain chain = new FailoverLlmChain(List.of(
-                new FakeProvider("groq", true, null)),
+                FakeLlmProvider.named("groq")),
                 id -> Optional.of(new ExperimentPin(id, "azure", null)));
         assertThatThrownBy(() -> chain.generate(EXPERIMENT_REQUEST))
                 .isInstanceOf(LlmProviderException.class)
@@ -215,21 +200,21 @@ class FailoverLlmChainTest {
     @Test
     @DisplayName("a pin to an unavailable provider fails instead of failing over")
     void pinToUnavailableProviderFails() {
-        FakeProvider groq = new FakeProvider("groq", true, null);
-        FakeProvider gemini = new FakeProvider("gemini", false, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq");
+        FakeLlmProvider gemini = FakeLlmProvider.unconfigured("gemini");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq, gemini),
                 id -> Optional.of(new ExperimentPin(id, "gemini", null)));
         assertThatThrownBy(() -> chain.generate(EXPERIMENT_REQUEST))
                 .isInstanceOf(LlmProviderException.class)
                 .hasMessageContaining("unavailable")
                 .hasMessageContaining("never fail over");
-        assertThat(groq.calls()).isZero();
+        assertThat(groq.callCount()).isZero();
     }
 
     @Test
     @DisplayName("a pinned model overrides the provider default for the pinned request")
     void pinnedModelOverridesProviderDefault() {
-        FakeProvider groq = new FakeProvider("groq", true, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
                 id -> Optional.of(new ExperimentPin(id, "groq", "llama-3.3-70b-versatile-pinned")));
         chain.generate(EXPERIMENT_REQUEST);
@@ -239,7 +224,7 @@ class FailoverLlmChainTest {
     @Test
     @DisplayName("§26.1 precedence: a caller-supplied model can NEVER override the experiment pin's model")
     void pinnedModelBeatsCallerModel() {
-        FakeProvider groq = new FakeProvider("groq", true, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
                 id -> Optional.of(new ExperimentPin(id, "groq", "pinned-model")));
         // caller tries to drift the experiment to a different model — must be ignored
@@ -252,7 +237,7 @@ class FailoverLlmChainTest {
     @Test
     @DisplayName("a pin without a model lets the caller model pass through (caller > provider default)")
     void callerModelAppliesWhenPinHasNoModel() {
-        FakeProvider groq = new FakeProvider("groq", true, null);
+        FakeLlmProvider groq = FakeLlmProvider.named("groq");
         FailoverLlmChain chain = new FailoverLlmChain(List.of(groq),
                 id -> Optional.of(new ExperimentPin(id, "groq", null)));
         chain.generate(new LlmRequest("system", "user", null, null, "caller-model", "exp-1"));
