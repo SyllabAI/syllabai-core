@@ -23,10 +23,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -48,6 +52,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SpringBootTest
 @ActiveProfiles("it")
 @Testcontainers(disabledWithoutDocker = true)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ChunkLexicalSearchIT {
 
     @Container
@@ -94,6 +99,7 @@ class ChunkLexicalSearchIT {
     }
 
     @Test
+    @Order(1)
     @DisplayName("V28 column exists; stem-verbatim query ranks its own chunk top-5; provenance survives")
     void rankingSanity() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -106,8 +112,15 @@ class ChunkLexicalSearchIT {
 
         // the MS is a real QP/MS corpus fixture — a distinctive stem phrase from
         // its own content must retrieve its own chunk inside the top-5 (the R1
-        // population shape run-001 measured at 0.95 recall@5 ALL-chunks)
-        List<ChunkHit> hits = lexical.search("chlorine iodine astatine halogens", null,
+        // population shape run-001 measured at 0.95 recall@5 ALL-chunks).
+        // Query premise is fixture-verified (run 35157930089): the Jan-2012 MS
+        // Q7a answer table (element e000026, page 16) reads "Chlorine / Cl2
+        // Iodine / I2 Astatine / At2" — all three terms co-occur in ONE element
+        // and the chunker never splits an element, so this AND-tsquery has a
+        // guaranteed in-fixture target. The earlier "… halogens" phrasing was
+        // unsatisfiable by construction: no halogen token exists anywhere in the
+        // fixture.
+        List<ChunkHit> hits = lexical.search("chlorine iodine astatine", null,
                 scope.curriculumVersionId(), 5);
         assertThat(hits).isNotEmpty();
         assertThat(hits.stream().limit(5).map(ChunkHit::content))
@@ -124,6 +137,7 @@ class ChunkLexicalSearchIT {
     }
 
     @Test
+    @Order(2)
     @DisplayName("T-C07 negative controls: foreign-curriculum scope and unlinked document see nothing")
     void curriculumNegativeControls() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -146,6 +160,7 @@ class ChunkLexicalSearchIT {
     }
 
     @Test
+    @Order(3)
     @DisplayName("blank query fails closed to empty; null scope rejected before SQL")
     void failClosedContracts() throws Exception {
         Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
@@ -154,8 +169,17 @@ class ChunkLexicalSearchIT {
 
         assertThat(lexical.search("", null, cvId, 5)).isEmpty();
         assertThat(lexical.search("   ", null, cvId, 5)).isEmpty();
+        // In this full Spring context the @Repository bean is wrapped by
+        // PersistenceExceptionTranslationInterceptor: the guard's raw
+        // IllegalArgumentException is translated — per the JPA spec's
+        // programming-error mapping (EntityManagerFactoryUtils maps IAE/ISE to
+        // InvalidDataAccessApiUsageException) — to InvalidDataAccessApiUsageException
+        // carrying the SAME message with the IAE as cause (run 35157930089
+        // evidence). The unit layer (ChunkLexicalRepositoryTest) asserts the raw
+        // type: no proxy exists there. Same guard, two observable layers.
         assertThatThrownBy(() -> lexical.search("chlorine", null, null, 5))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("never runs unscoped");
+                .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                .hasMessageContaining("never runs unscoped")
+                .getCause().isInstanceOf(IllegalArgumentException.class);
     }
 }
