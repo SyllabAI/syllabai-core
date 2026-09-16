@@ -98,8 +98,9 @@ class MarkSchemeRevealServiceTest {
     void includeSuggested_revealsWithStateAndGrouping() {
         stubServable();
         QuestionVersion version = questionVersions.findByQuestionIdOrderByVersionDesc(QUESTION_ID).get(0);
+        MarkScheme scheme = scheme(version); // build BEFORE the outer when(...) — house rule
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(VERSION_ID))
-                .thenReturn(Optional.of(scheme(version)));
+                .thenReturn(Optional.of(scheme));
 
         Optional<MarkSchemeRevealView> reveal = service("INCLUDE_SUGGESTED").reveal(QUESTION_ID);
         assertThat(reveal).isPresent();
