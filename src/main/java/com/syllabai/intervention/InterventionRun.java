@@ -41,12 +41,22 @@ public class InterventionRun {
     @Column(name = "origin", nullable = false, length = 64)
     private String origin;
 
+    /**
+     * jsonb columns carry pre-serialized JSON strings — SqlTypes.JSON makes
+     * Hibernate send a json-typed parameter (a bare varchar parameter fails
+     * against a real Postgres jsonb column; this was the live-verified 500 on
+     * the first production write — the lane's unit tests were mock-based and
+     * the IT had never executed).
+     */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "target_specification_points", nullable = false, columnDefinition = "jsonb")
     private String targetSpecificationPoints = "[]";
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "question_part_ids", nullable = false, columnDefinition = "jsonb")
     private String questionPartIds = "[]";
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "evidence_refs", nullable = false, columnDefinition = "jsonb")
     private String evidenceRefs = "[]";
 
@@ -68,6 +78,7 @@ public class InterventionRun {
     @Column(name = "intervention_hash", nullable = false, length = 128)
     private String interventionHash;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "allowed_tool_ids", nullable = false, columnDefinition = "jsonb")
     private String allowedToolIds = "[]";
 
