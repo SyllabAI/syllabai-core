@@ -4,6 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
+import com.syllabai.curriculum.CurriculumScope;
+import com.syllabai.curriculum.CurriculumVersion;
+import com.syllabai.curriculum.CurriculumVersionRepository;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.content.CanonicalDocumentDto;
 import com.syllabai.content.ContentIngestionService;
 import com.syllabai.content.ContentRetrievalService;
@@ -17,6 +24,8 @@ import com.syllabai.content.InvalidDocumentException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +43,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * canonical ingestion of the real 4CH0/1C Jan 2012 corpus (parser fixtures), verbatim
  * storage, deterministic chunking, idempotent re-ingest, deterministic fake embeddings
  * (no network in CI), cosine search with provenance, and the kind filter.
+ *
+ * <p>T-C07 (curriculum-scoped retrieval): every search now runs inside a
+ * curriculum scope resolved through the REAL join path (documents → exam_papers
+ * QP/MS document_id → subjects → curriculum_versions) — the positive control
+ * serves scoped chunks, the negative controls prove a foreign-curriculum scope
+ * sees nothing and an unlinked document (unresolvable curriculum) is never
+ * served (fail-closed).</p>
  */
 @SpringBootTest
 @ActiveProfiles("it")
@@ -68,8 +84,32 @@ class ContentPipelineIT {
     private DocumentRepository documents;
     @Autowired
     private DocumentChunkRepository chunks;
+    @Autowired
+    private CurriculumVersionRepository curriculumVersions;
+    @Autowired
+    private SubjectRepository subjects;
+    @Autowired
+    private ExamPaperRepository examPapers;
 
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /**
+     * Creates ACTIVE curriculum + subject + exam-paper rows linking
+     * {@code documentId} as the paper's QP or MS document (the real T-C07 join
+     * path), and returns the curriculum version id for scope construction.
+     */
+    private UUID linkPaper(String code, String documentId, Document.Kind kind) {
+        CurriculumVersion cv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", code, "IT fixture " + code,
+                CurriculumVersion.Status.ACTIVE));
+        Subject subject = subjects.save(new Subject(cv, code, "Chemistry (" + code + ")"));
+        examPapers.save(new ExamPaper(subject.id(), "IT paper " + code, "Edexcel", "IGCSE",
+                null, null, code + "/1C",
+                kind == Document.Kind.QUESTION_PAPER ? documentId : null,
+                kind == Document.Kind.MARK_SCHEME ? documentId : null,
+                ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
+        return cv.id();
+    }
 
     private record Fixture(CanonicalDocumentDto dto, String raw) {
     }
@@ -114,7 +154,9 @@ class ContentPipelineIT {
         assertThat(embedded.model()).isEqualTo("fake-hashing");
 
         List<com.syllabai.content.ChunkHit> hits =
-                retrieval.search("chlorine iodine astatine halogens", Document.Kind.MARK_SCHEME, 5);
+                retrieval.search("chlorine iodine astatine halogens", Document.Kind.MARK_SCHEME,
+                        new CurriculumScope(linkPaper("4CH0-IT", ms.dto().documentId(),
+                                Document.Kind.MARK_SCHEME), "4CH0-IT", Set.of()), 5);
         assertThat(hits).isNotEmpty();
         assertThat(hits.get(0).content()).containsIgnoringCase("Chlorine");
         assertThat(hits.get(0).elementIds()).isNotEmpty(); // citation provenance survives
@@ -144,15 +186,61 @@ class ContentPipelineIT {
                 .isEqualTo(first.chunks()); // no duplicate chunks
 
         embedding.embedDocument(first.id());
+        UUID cvId = linkPaper("4CH0-IT", qp.dto().documentId(), Document.Kind.QUESTION_PAPER);
+        CurriculumScope scope = new CurriculumScope(cvId, "4CH0-IT", Set.of());
         // kind filter: a MARK_SCHEME-scoped search never leaks QUESTION_PAPER chunks
         // (order-independent: vacuously true if no mark scheme is embedded yet)
-        retrieval.search("Write your name here", Document.Kind.MARK_SCHEME, 5)
+        retrieval.search("Write your name here", Document.Kind.MARK_SCHEME, scope, 5)
                 .forEach(h -> assertThat(h.kind()).isEqualTo("MARK_SCHEME"));
         // unfiltered, the top hit for QP text is the QP document itself
-        var open = retrieval.search("Write your name here", null, 5);
+        var open = retrieval.search("Write your name here", null, scope, 5);
         assertThat(open).isNotEmpty();
         assertThat(open.get(0).documentId()).isEqualTo(qp.dto().documentId());
         assertThat(open.get(0).content()).containsIgnoringCase("name");
+    }
+
+    @Test
+    @DisplayName("T-C07 negative control: a foreign-curriculum scope never serves the corpus")
+    void foreignCurriculumScopeServesNothing() throws Exception {
+        Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(ms.dto(), ms.raw(), Document.Kind.MARK_SCHEME, null);
+        embedding.embedDocument(result.id());
+
+        // the owning curriculum serves the chunks...
+        UUID owner = linkPaper("4CH0-IT", ms.dto().documentId(), Document.Kind.MARK_SCHEME);
+        assertThat(retrieval.search("chlorine", null,
+                new CurriculumScope(owner, "4CH0-IT", Set.of()), 5)).isNotEmpty();
+
+        // ...a DIFFERENT ACTIVE curriculum (own subject, no papers) serves nothing
+        UUID foreign = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "4CH1-IT", "IT fixture 4CH1",
+                CurriculumVersion.Status.ACTIVE)).id();
+        subjects.save(new Subject(curriculumVersions.findById(foreign).orElseThrow(),
+                "4CH1-IT", "Chemistry (4CH1-IT)"));
+
+        assertThat(retrieval.search("chlorine", null,
+                new CurriculumScope(foreign, "4CH1-IT", Set.of()), 50)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("T-C07 negative control: an unlinked document (unresolvable curriculum) is never served")
+    void unlinkedDocumentNeverServed() throws Exception {
+        Fixture ms = fixture("canonical-ms-4ch0-1c-jan2012.json");
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(ms.dto(), ms.raw(), Document.Kind.MARK_SCHEME, null);
+        embedding.embedDocument(result.id());
+
+        // NO exam_papers row references this document — its curriculum is
+        // unresolvable, so no scope may serve it (fail-closed, not a wildcard)
+        UUID anyCv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "4CH0-UNLINKED", "IT fixture unlinked",
+                CurriculumVersion.Status.ACTIVE)).id();
+        subjects.save(new Subject(curriculumVersions.findById(anyCv).orElseThrow(),
+                "4CH0-UNLINKED", "Chemistry (unlinked)"));
+
+        assertThat(retrieval.search("chlorine", null,
+                new CurriculumScope(anyCv, "4CH0-UNLINKED", Set.of()), 50)).isEmpty();
     }
 
     @Test

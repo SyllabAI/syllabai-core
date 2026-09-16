@@ -1,5 +1,6 @@
 package com.syllabai.bench;
 
+import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.tutor.EvidenceItem;
 import com.syllabai.tutor.GraphKnowledgeRetriever;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext;
@@ -55,16 +56,38 @@ public final class ArmA0 {
     private final ReciprocalRankFusion fusion;
     private final BenchGraph benchGraph;
     private final BenchSnapshot snapshot;
+    /**
+     * T-C07: production retrieval is curriculum-scoped, so the arm is too. The
+     * bench scope's intent surface IS the frozen snapshot surface (the
+     * snapshot's own structure-node ids, which are exactly the snap-001
+     * VALIDATED 4CH1 corpus); the identity is a deterministic UUIDv3-style
+     * name derived from the snapshot id — recorded in the run manifest, never
+     * used for SQL (the bench never touches the database).
+     */
+    private final CurriculumScope scope;
 
     public ArmA0(BenchSnapshot snapshot) {
         this.snapshot = snapshot;
         this.benchGraph = new BenchGraph(snapshot);
         this.retriever = benchGraph.retriever();
         this.fusion = new ReciprocalRankFusion(RRF_K);
+        java.util.Set<java.util.UUID> surface = new java.util.HashSet<>();
+        for (com.syllabai.knowledge.KnowledgeNode node : snapshot.structureNodes()) {
+            surface.add(node.id());
+        }
+        this.scope = new CurriculumScope(
+                java.util.UUID.nameUUIDFromBytes(
+                        ("bench-scope|" + snapshot.snapshotVersion()).getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                "bench-snap-001",
+                surface);
+    }
+
+    public CurriculumScope scope() {
+        return scope;
     }
 
     public A0Result run(String query) {
-        KnowledgeContext context = retriever.retrieve(query, MAX_TOPICS);
+        KnowledgeContext context = retriever.retrieve(query, MAX_TOPICS, scope);
 
         Map<UUID, String> codeById = new LinkedHashMap<>();
         List<EvidenceItem> candidates = new ArrayList<>();

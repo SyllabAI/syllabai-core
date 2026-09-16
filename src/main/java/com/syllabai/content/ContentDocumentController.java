@@ -1,6 +1,7 @@
 package com.syllabai.content;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.syllabai.curriculum.CurriculumScopeResolver;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.NotFoundException;
 import jakarta.validation.constraints.NotBlank;
@@ -33,15 +34,18 @@ public class ContentDocumentController {
     private final DocumentEmbeddingService embedding;
     private final ContentRetrievalService retrieval;
     private final DocumentRepository documents;
+    private final CurriculumScopeResolver curriculumScopes;
 
     public ContentDocumentController(ContentIngestionService ingestion,
                                      DocumentEmbeddingService embedding,
                                      ContentRetrievalService retrieval,
-                                     DocumentRepository documents) {
+                                     DocumentRepository documents,
+                                     CurriculumScopeResolver curriculumScopes) {
         this.ingestion = ingestion;
         this.embedding = embedding;
         this.retrieval = retrieval;
         this.documents = documents;
+        this.curriculumScopes = curriculumScopes;
     }
 
     /** ingest a syllabai-parser canonical document (schema 1.0) — chunks land un-embedded */
@@ -90,13 +94,19 @@ public class ContentDocumentController {
     /**
      * Vector search over the chunk index — content-side retrieval verification for
      * teachers/ops; the learner-facing KA-RAG surface (T-024/T-025) builds on the
-     * same service, not on this endpoint.
+     * same service, not on this endpoint. Curriculum-scoped like every serving
+     * path (T-C07): an unresolved active curriculum yields an empty result —
+     * never an unscoped search.
      */
     @GetMapping("/search")
-    public List<ChunkHitView> search(@RequestParam @NotBlank String query,
+    public List<ChunkHitView> search(@CurrentUserId UUID requesterId,
+                                     @RequestParam @NotBlank String query,
                                      @RequestParam(required = false) Document.Kind kind,
                                      @RequestParam(defaultValue = "10") int limit) {
-        return retrieval.search(query, kind, limit).stream()
+        return curriculumScopes.resolveActive(requesterId)
+                .map(scope -> retrieval.search(query, kind, scope, limit))
+                .orElse(List.of())
+                .stream()
                 .map(ChunkHitView::from)
                 .toList();
     }

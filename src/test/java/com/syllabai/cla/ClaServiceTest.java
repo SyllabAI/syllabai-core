@@ -60,6 +60,8 @@ import org.springframework.context.ApplicationEventPublisher;
  */
 class ClaServiceTest {
 
+    private static final UUID CV_ID =
+            UUID.fromString("00000000-0000-0000-0000-0000000001a1");
     private static final UUID LEARNER = UUID.randomUUID();
     private static final UUID ROOT = UUID.randomUUID();
     private static final UUID TOPIC = UUID.randomUUID();
@@ -69,6 +71,8 @@ class ClaServiceTest {
     private final ClaToolRegistry tools = mock(ClaToolRegistry.class);
     private final KnowledgeGraphService graph = mock(KnowledgeGraphService.class);
     private final KnowledgeNodeRepository knowledgeNodes = mock(KnowledgeNodeRepository.class);
+    private final com.syllabai.curriculum.SubjectRepository subjects =
+            mock(com.syllabai.curriculum.SubjectRepository.class);
     private final MarkSchemeRepository markSchemes = mock(MarkSchemeRepository.class);
     private final QuestionVersionRepository questionVersions =
             mock(QuestionVersionRepository.class);
@@ -96,7 +100,7 @@ class ClaServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ClaService(resolver, tools, graph, knowledgeNodes, markSchemes,
+        service = new ClaService(resolver, tools, graph, knowledgeNodes, subjects, markSchemes,
                 questionVersions, questionParts, attempts, answers, vectorRetriever,
                 new ReciprocalRankFusion(60), reranker, generator, citationResolver, policy,
                 events, 12, 6);
@@ -109,6 +113,16 @@ class ClaServiceTest {
 
         when(resolver.resolveKgTopic(ROOT, TOPIC, LEARNER)).thenReturn(context);
         when(graph.tree(ROOT)).thenReturn(tree());
+
+        // T-C07 scope resolution for the CLA path: owning subject -> version + subtree
+        com.syllabai.curriculum.CurriculumVersion cv =
+                mock(com.syllabai.curriculum.CurriculumVersion.class);
+        when(cv.id()).thenReturn(CV_ID);
+        when(cv.code()).thenReturn("IALCHEM2018");
+        com.syllabai.curriculum.Subject subject = mock(com.syllabai.curriculum.Subject.class);
+        when(subject.curriculumVersion()).thenReturn(cv);
+        when(subjects.findByKnowledgeNodeId(any())).thenReturn(Optional.of(subject));
+        when(knowledgeNodes.findSubtreeIds(any())).thenReturn(List.of(ROOT, TOPIC));
         when(knowledgeNodes.findById(TOPIC)).thenReturn(Optional.empty());
 
         // GET_SPECIFICATION_CONTEXT: root → unit → topic chain
@@ -171,7 +185,7 @@ class ClaServiceTest {
     }
 
     private void vectorReturns(EvidenceItem... items) {
-        when(vectorRetriever.retrieve(any(), anyInt())).thenReturn(List.of(items));
+        when(vectorRetriever.retrieve(any(), anyInt(), any())).thenReturn(List.of(items));
     }
 
     @Test
@@ -465,7 +479,7 @@ class ClaServiceTest {
                 questionContext.reference(), null, null , ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
         // deterministic refusal happened BEFORE the vector retriever or generator ran
-        verify(vectorRetriever, never()).retrieve(any(), anyInt());
+        verify(vectorRetriever, never()).retrieve(any(), anyInt(), any());
         verify(generator, never()).generate(any(), any());
         verify(events, never()).publishEvent(any());
     }
@@ -482,7 +496,7 @@ class ClaServiceTest {
         when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
         when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
-        when(vectorRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
+        when(vectorRetriever.retrieve(any(), anyInt(), any())).thenReturn(List.of());
         when(tools.specificationContext(org.mockito.ArgumentMatchers.eq(questionContext), any()))
                 .thenReturn(new ToolResultWith<>(ClaToolRegistry.Tool.GET_SPECIFICATION_CONTEXT,
                         "args", List.of(new SpecAnchor(ROOT, "IALCHEM2018", "SUBJECT",
@@ -572,7 +586,7 @@ class ClaServiceTest {
         when(resolver.resolveQuestionPart(partId, null, LEARNER)).thenReturn(partContext);
         when(tools.enabledFor(ResourceContext.Kind.QUESTION_PART, ResponseMode.CHECK))
                 .thenReturn(List.of(ClaToolRegistry.Tool.values()));
-        when(vectorRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
+        when(vectorRetriever.retrieve(any(), anyInt(), any())).thenReturn(List.of());
         when(tools.specificationContext(org.mockito.ArgumentMatchers.eq(partContext), any()))
                 .thenReturn(new ToolResultWith<>(ClaToolRegistry.Tool.GET_SPECIFICATION_CONTEXT,
                         "args", List.of(new SpecAnchor(ROOT, "IALCHEM2018", "SUBJECT",

@@ -14,12 +14,17 @@ import com.syllabai.cla.ClaToolRegistry.RelatedConcepts;
 import com.syllabai.cla.ClaToolRegistry.Tool;
 import com.syllabai.cla.ClaToolRegistry.ToolResultWith;
 import com.syllabai.cla.dto.ClaAnswerView;
+import com.syllabai.curriculum.CurriculumScope;
+import com.syllabai.curriculum.CurriculumVersion;
+import com.syllabai.curriculum.Subject;
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.shared.BadRequestException;
+import com.syllabai.shared.NotFoundException;
 import com.syllabai.shared.events.ClaInteractionEvent;
 import com.syllabai.tutor.CitationResolver;
 import com.syllabai.tutor.ContextAssembler;
@@ -102,6 +107,7 @@ public class ClaService {
     private final ClaToolRegistry tools;
     private final KnowledgeGraphService graph;
     private final KnowledgeNodeRepository knowledgeNodes;
+    private final SubjectRepository subjects;
     private final MarkSchemeRepository markSchemes;
     private final QuestionVersionRepository questionVersions;
     private final QuestionPartRepository questionParts;
@@ -122,6 +128,7 @@ public class ClaService {
                       ClaToolRegistry tools,
                       KnowledgeGraphService graph,
                       KnowledgeNodeRepository knowledgeNodes,
+                      SubjectRepository subjects,
                       MarkSchemeRepository markSchemes,
                       QuestionVersionRepository questionVersions,
                       QuestionPartRepository questionParts,
@@ -140,6 +147,7 @@ public class ClaService {
         this.tools = tools;
         this.graph = graph;
         this.knowledgeNodes = knowledgeNodes;
+        this.subjects = subjects;
         this.markSchemes = markSchemes;
         this.questionVersions = questionVersions;
         this.questionParts = questionParts;
@@ -266,7 +274,8 @@ public class ClaService {
                         "TOPIC", topic.title(), nodeDescription(context), topic.matchScore()))
                 .forEach(kgCandidates::add);
         kgCandidates.addAll(specStructureEvidence(context, subjectTree));
-        List<EvidenceItem> vectorList = vectorRetriever.retrieve(question, vectorCandidates);
+        List<EvidenceItem> vectorList = vectorRetriever.retrieve(question, vectorCandidates,
+                scopeOf(context));
         List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorList));
         List<EvidenceItem> evidence = reranker.rerank(question, fused)
                 .stream()
@@ -482,6 +491,23 @@ public class ClaService {
                     .forEach(m -> sb.append("- ").append(m.title()).append('\n'));
         }
         return sb.toString().strip();
+    }
+
+    /**
+     * The curriculum scope of a resolved CLA context (T-C07): the CLA house rule
+     * is that curriculum identity comes from the OWNING SUBJECT of the anchored
+     * resource (ClaContextResolver), so the scope is derived from that subject's
+     * version + subject-root subtree — never from the global single-owner
+     * resolution the free-text tutor uses. A resolved context whose subject
+     * root cannot be re-resolved is a server defect and fails closed here
+     * (same NotFound shape the resolver itself uses).
+     */
+    private CurriculumScope scopeOf(ResourceContext context) {
+        Subject subject = subjects.findByKnowledgeNodeId(context.rootId())
+                .orElseThrow(() -> new NotFoundException("curriculum subject root", context.rootId()));
+        CurriculumVersion version = subject.curriculumVersion();
+        return new CurriculumScope(version.id(), version.code(),
+                new java.util.HashSet<>(knowledgeNodes.findSubtreeIds(context.rootId())));
     }
 
     private String nodeDescription(ResourceContext context) {

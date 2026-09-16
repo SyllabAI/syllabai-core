@@ -1,5 +1,6 @@
 package com.syllabai.content;
 
+import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,19 @@ public class ContentRetrievalService {
         this.vectors = vectors;
     }
 
-    public List<ChunkHit> search(String query, Document.Kind kind, int limit) {
+    /**
+     * Curriculum-scoped vector search (T-C07): only chunks whose document
+     * resolves into {@code scope}'s curriculum version are eligible. Null
+     * scope is rejected before anything runs — retrieval never serves
+     * unscoped, and an unresolvable curriculum is the caller's refusal, not
+     * a wildcard here.
+     */
+    public List<ChunkHit> search(String query, Document.Kind kind, CurriculumScope scope, int limit) {
         if (query == null || query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
+        }
+        if (scope == null) {
+            throw new IllegalArgumentException("curriculum scope is mandatory — search never runs unscoped (T-C07)");
         }
         EmbeddingProvider embedding = provider.getIfAvailable();
         if (embedding == null) {
@@ -40,6 +51,6 @@ public class ContentRetrievalService {
             throw new IllegalStateException("embedding provider " + embedding.model()
                     + " returned an inconsistent query vector");
         }
-        return vectors.search(queryVector, kind, boundedLimit);
+        return vectors.search(queryVector, kind, scope.curriculumVersionId(), boundedLimit);
     }
 }

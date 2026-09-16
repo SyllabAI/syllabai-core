@@ -1,5 +1,6 @@
 package com.syllabai.tutor;
 
+import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 
 /**
@@ -14,7 +15,10 @@ public interface VectorRetriever {
     /**
      * @param query the learner's question
      * @param limit candidate bound (pre-fusion)
+     * @param scope the active curriculum scope (non-null; chunk candidacy is
+     *              restricted to documents whose paper resolves into this
+     *              curriculum version — T-C07 fail-closed scoping)
      * @return chunk-grounded evidence candidates, best-first (may be empty)
      */
-    List<EvidenceItem> retrieve(String query, int limit);
+    List<EvidenceItem> retrieve(String query, int limit, CurriculumScope scope);
 }

@@ -3,6 +3,7 @@ package com.syllabai.tutor;
 import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ContentRetrievalService;
 import com.syllabai.content.DocumentRepository;
+import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,9 +42,12 @@ public class ContentVectorRetriever implements VectorRetriever {
     }
 
     @Override
-    public List<EvidenceItem> retrieve(String query, int limit) {
+    public List<EvidenceItem> retrieve(String query, int limit, CurriculumScope scope) {
+        if (scope == null) {
+            throw new IllegalArgumentException("curriculum scope is mandatory — retrieval never runs unscoped (T-C07)");
+        }
         try {
-            List<ChunkHit> hits = retrieval.search(query, null, limit);
+            List<ChunkHit> hits = retrieval.search(query, null, scope, limit);
             return hits.stream()
                     .filter(hit -> hit.score() >= MIN_COSINE)
                     .map(hit -> EvidenceItem.fromChunk(

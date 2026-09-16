@@ -13,6 +13,9 @@ public interface ExamPaperRepository extends JpaRepository<ExamPaper, UUID> {
 
     List<ExamPaper> findAllBySubjectIdOrderByCreatedAtDesc(UUID subjectId);
 
+    /** T-C07 scope ownership: does this subject carry any exam-paper surface? */
+    boolean existsBySubjectId(UUID subjectId);
+
     Optional<ExamPaper> findByPaperCodeAndSessionLabel(String paperCode, String sessionLabel);
 
     @Query("""

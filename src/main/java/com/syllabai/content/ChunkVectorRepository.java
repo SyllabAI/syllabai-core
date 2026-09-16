@@ -40,8 +40,22 @@ public class ChunkVectorRepository {
      * (best first). NULL embeddings are never matched. The kind filter is folded
      * into the SQL text (not a nullable bind parameter) so Postgres never sees an
      * untyped NULL.
+     *
+     * <p>T-C07 (mandatory curriculum scoping): {@code curriculumVersionId} is
+     * required — an EXISTS predicate narrows candidacy to chunks whose document
+     * is a question paper or mark scheme of an exam paper whose subject belongs
+     * to this curriculum version (the DB-verified join path
+     * {@code document_chunks → documents(document_row_id) → exam_papers
+     * (question/mark_scheme_document_id = documents.document_id) → subjects
+     * (subject_id) → curriculum_versions}). Documents with no paper link resolve
+     * to no curriculum and are therefore never served — fail-closed, never
+     * unscoped. The curriculum id is a bound parameter (never SQL text).</p>
      */
-    public List<ChunkHit> search(float[] queryVector, Document.Kind kind, int limit) {
+    public List<ChunkHit> search(float[] queryVector, Document.Kind kind, UUID curriculumVersionId, int limit) {
+        if (curriculumVersionId == null) {
+            throw new IllegalArgumentException(
+                    "curriculumVersionId is mandatory — chunk search never runs unscoped (T-C07)");
+        }
         String literal = toVectorLiteral(queryVector);
         String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
         String sql = """
@@ -51,13 +65,19 @@ public class ChunkVectorRepository {
                 from document_chunks c
                 join documents d on d.id = c.document_row_id
                 where c.embedding is not null
+                  and exists (
+                        select 1 from exam_papers p
+                        join subjects s on s.id = p.subject_id
+                        where s.curriculum_version_id = ?
+                          and (p.question_paper_document_id = d.document_id
+                            or p.mark_scheme_document_id = d.document_id))
                 """ + kindFilter + """
                 order by c.embedding <=> ?::vector
                 limit ?
                 """;
         return jdbc.query(sql,
                 (rs, i) -> mapHit(rs),
-                literal, literal, limit);
+                literal, curriculumVersionId, literal, limit);
     }
 
     private ChunkHit mapHit(java.sql.ResultSet rs) throws java.sql.SQLException {

@@ -11,8 +11,10 @@ import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ContentRetrievalService;
 import com.syllabai.content.Document;
 import com.syllabai.content.DocumentRepository;
+import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,10 @@ import org.junit.jupiter.api.Test;
  * chunks too); a missing embedding provider degrades to empty, not failure.
  */
 class ContentVectorRetrieverTest {
+
+    private static final CurriculumScope SCOPE = new CurriculumScope(
+            UUID.fromString("00000000-0000-0000-0000-0000000004c1"), "4CH1-2017",
+            Set.of(UUID.randomUUID()));
 
     private final ContentRetrievalService retrieval = mock(ContentRetrievalService.class);
     private final DocumentRepository documents = mock(DocumentRepository.class);
@@ -38,12 +44,12 @@ class ContentVectorRetrieverTest {
                 "test://ms.pdf", "ms.pdf", "application/pdf", "c".repeat(64), "SHA-256",
                 20, 25, 18, 3, "opendataloader-pdf", "2.5.7", null, "{}", null);
         when(documents.findById(docRow)).thenReturn(Optional.of(doc));
-        when(retrieval.search(any(), isNull(), anyInt())).thenReturn(List.of(
+        when(retrieval.search(any(), isNull(), org.mockito.ArgumentMatchers.eq(SCOPE), anyInt())).thenReturn(List.of(
                 new ChunkHit(chunkId, docRow, "ms-1", "MARK_SCHEME", 4,
                         "accept: chlorine is oxidised", 16, 16, List.of("e26"),
                         "gemini", 0.81)));
 
-        List<EvidenceItem> evidence = adapter.retrieve("chlorine oxidation", 10);
+        List<EvidenceItem> evidence = adapter.retrieve("chlorine oxidation", 10, SCOPE);
 
         assertThat(evidence).hasSize(1);
         assertThat(evidence.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
@@ -59,10 +65,10 @@ class ContentVectorRetrieverTest {
     @Test
     @DisplayName("sub-threshold similarity is dropped — zero-relevance chunks are not evidence")
     void dropsSubThreshold() {
-        when(retrieval.search(any(), isNull(), anyInt())).thenReturn(List.of(
+        when(retrieval.search(any(), isNull(), org.mockito.ArgumentMatchers.eq(SCOPE), anyInt())).thenReturn(List.of(
                 hit(0.81), hit(0.15), hit(0.14), hit(0.0), hit(-0.2)));
 
-        List<EvidenceItem> evidence = adapter.retrieve("query", 10);
+        List<EvidenceItem> evidence = adapter.retrieve("query", 10, SCOPE);
 
         assertThat(evidence).hasSize(2);   // 0.81 and the boundary 0.15 survive
     }
@@ -70,10 +76,19 @@ class ContentVectorRetrieverTest {
     @Test
     @DisplayName("no embedding provider configured → empty candidates, not an exception")
     void degradesWithoutProvider() {
-        when(retrieval.search(any(), isNull(), anyInt()))
+        when(retrieval.search(any(), isNull(), org.mockito.ArgumentMatchers.eq(SCOPE), anyInt()))
                 .thenThrow(new IllegalStateException("no embedding provider configured"));
 
-        assertThat(adapter.retrieve("query", 10)).isEmpty();
+        assertThat(adapter.retrieve("query", 10, SCOPE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("null curriculum scope is rejected — retrieval never runs unscoped (T-C07)")
+    void rejectsNullScope() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> adapter.retrieve("query", 10, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("never runs unscoped");
     }
 
     private ChunkHit hit(double score) {

@@ -1,5 +1,7 @@
 package com.syllabai.tutor;
 
+import com.syllabai.curriculum.CurriculumScope;
+import com.syllabai.curriculum.CurriculumScopeResolver;
 import com.syllabai.tutor.dto.TutorAnswerView;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,6 +43,7 @@ public class KaRagService {
 
     private final KnowledgeRetriever knowledgeRetriever;
     private final VectorRetriever vectorRetriever;
+    private final CurriculumScopeResolver curriculumScopes;
     private final ReciprocalRankFusion fusion;
     private final EvidenceReranker reranker;
     private final ContextAssembler contextAssembler;
@@ -54,6 +57,7 @@ public class KaRagService {
 
     public KaRagService(KnowledgeRetriever knowledgeRetriever,
                         VectorRetriever vectorRetriever,
+                        CurriculumScopeResolver curriculumScopes,
                         ReciprocalRankFusion fusion,
                         EvidenceReranker reranker,
                         ContextAssembler contextAssembler,
@@ -65,6 +69,7 @@ public class KaRagService {
                         @Value("${syllabai.tutor.evidence-limit:6}") int evidenceLimit) {
         this.knowledgeRetriever = knowledgeRetriever;
         this.vectorRetriever = vectorRetriever;
+        this.curriculumScopes = curriculumScopes;
         this.fusion = fusion;
         this.reranker = reranker;
         this.contextAssembler = contextAssembler;
@@ -87,16 +92,24 @@ public class KaRagService {
         }
         long startedAt = System.nanoTime();
 
+        // 0. active curriculum scope (T-C07, fail-closed): unresolved scope ⇒
+        // both retrieval surfaces stay empty ⇒ the deterministic refusal below.
+        // Never serve across curricula; never serve unscoped.
+        CurriculumScope scope = curriculumScopes.resolveActive(learnerId).orElse(null);
+
         // 1. deterministic intent + KG context
-        KnowledgeRetriever.KnowledgeContext knowledge =
-                knowledgeRetriever.retrieve(query, maxTopics);
+        KnowledgeRetriever.KnowledgeContext knowledge = scope == null
+                ? new KnowledgeRetriever.KnowledgeContext(List.of(), List.of(), List.of())
+                : knowledgeRetriever.retrieve(query, maxTopics, scope);
 
         // 2. hybrid retrieval: KG evidence + vector evidence
         List<EvidenceItem> kgCandidates = knowledge.topics().stream()
                 .map(topic -> EvidenceItem.fromNode(topic.nodeId(), topic.code(),
                         "TOPIC", topic.title(), null, topic.matchScore()))
                 .toList();
-        List<EvidenceItem> vectorCandidatesList = vectorRetriever.retrieve(query, vectorCandidates);
+        List<EvidenceItem> vectorCandidatesList = scope == null
+                ? List.of()
+                : vectorRetriever.retrieve(query, vectorCandidates, scope);
 
         // 3. rank fusion (both sources contribute; neither dominates)
         List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorCandidatesList));

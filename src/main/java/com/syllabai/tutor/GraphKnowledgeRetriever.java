@@ -1,5 +1,6 @@
 package com.syllabai.tutor;
 
+import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext.MatchedTopic;
@@ -73,7 +74,10 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
     }
 
     @Override
-    public KnowledgeContext retrieve(String query, int maxTopics) {
+    public KnowledgeContext retrieve(String query, int maxTopics, CurriculumScope scope) {
+        if (scope == null) {
+            throw new IllegalArgumentException("curriculum scope is mandatory — retrieval never runs unscoped (T-C07)");
+        }
         Set<String> queryTokens = tokensOf(query);
         if (queryTokens.isEmpty()) {
             return new KnowledgeContext(List.of(), List.of(), List.of());
@@ -83,8 +87,15 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
         // §7: only VALIDATED curriculum nodes may inform what serves to learners —
         // SUGGESTED/UNVALIDATED seeds are invisible to the tutor until a teacher
         // validates them (mirrors ServableQuestionSpec for assessment).
+        // T-C07: additionally restricted to the active curriculum's intent
+        // surface — nodes outside the scope subtree (other curricula, paper-
+        // scrape cruft) are invisible even when their titles would match.
+        Set<UUID> surface = scope.intentSurfaceNodeIds();
         Map<UUID, MatchAccumulator> matches = new LinkedHashMap<>();
         for (KnowledgeNode node : graph.structureNodes()) {
+            if (!surface.contains(node.id())) {
+                continue;
+            }
             if (node.validationStatus() != KnowledgeNode.ValidationStatus.VALIDATED) {
                 continue;
             }

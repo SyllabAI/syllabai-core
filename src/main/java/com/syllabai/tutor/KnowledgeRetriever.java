@@ -1,5 +1,6 @@
 package com.syllabai.tutor;
 
+import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,15 +11,23 @@ import java.util.UUID;
  * (prerequisites, misconceptions) those topics imply. Intent resolution is
  * deterministic in v0: no LLM invents entities (Master Spec §7 — the pipeline
  * never guesses beyond what the KG actually contains).
+ *
+ * <p>T-C07: retrieval is always curriculum-scoped — the caller resolves the
+ * active {@link CurriculumScope} once per request (fail-closed: unresolved
+ * scope ⇒ the orchestrator refuses without calling this port) and passes it
+ * to every retrieval call. There is deliberately no unscoped overload.</p>
  */
 public interface KnowledgeRetriever {
 
     /**
      * @param query     the learner's question
      * @param maxTopics bound on matched topics
+     * @param scope     the active curriculum scope (non-null; matching is
+     *                  restricted to the scope's intent surface — nodes outside
+     *                  it are invisible even when their titles would match)
      * @return matched topics + their prerequisite/misconception context
      */
-    KnowledgeContext retrieve(String query, int maxTopics);
+    KnowledgeContext retrieve(String query, int maxTopics, CurriculumScope scope);
 
     /**
      * KG context for one query.
