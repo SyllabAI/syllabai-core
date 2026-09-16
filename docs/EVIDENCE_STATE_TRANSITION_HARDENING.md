@@ -23,11 +23,25 @@ Primary coverage lives in:
 - `src/test/java/com/syllabai/smartmark/SmartMarkServiceTest.java`
 - `src/test/java/com/syllabai/it/MultipartMarkingFlowIT.java`
 
+## Concurrency regression harness
+
+`src/test/java/com/syllabai/it/EvidenceStateConcurrencyIT.java` has now been added under the `agent-chatgpt:` lane. It uses real Postgres/Testcontainers and separate executor threads to exercise:
+
+- same-answer concurrent authoritative marking;
+- different-part concurrent authoritative marking;
+- final aggregate marks after concurrent part completion;
+- post-race retry/override idempotence;
+- learner-state observation count as the persisted proxy for evidence-event multiplicity.
+
+**Status: UNVERIFIED.** The repository environment available to this lane has no Docker runtime, and GitHub Actions hosted minutes are currently exhausted. Therefore the harness has not yet been executed against real Postgres and must not be described as passing or failing.
+
+The harness is intentionally test-only. No production code, migration, learner-state semantics, r3 measurement rule, or T0 measurement procedure was changed in this lane.
+
 ## Remaining production-hardening gap
 
 `Attempt.markEvidenceEmitted()` is an in-memory boolean transition. The service layer is transactional, but `Attempt` has no database-level compare-and-set/optimistic-version guard specifically protecting the evidence emission transition.
 
-That creates two distinct concurrency questions that are **not** established by the current unit tests:
+That creates two distinct concurrency questions that are **not** established by the current unit tests or by an executed integration test yet:
 
 - Two transactions loading separate copies of the same attempt could potentially both observe `evidenceEmitted=false` and race to publish evidence.
 - Two transactions marking different parts of the same multi-part attempt could each observe the other part as still `PENDING`, producing a liveness case where neither transaction emits the now-settled attempt's evidence.
@@ -36,11 +50,11 @@ These are design-level risks, not verified production defects. Do not claim them
 
 ## Proposed smallest safe follow-up
 
-Before introducing schema or service changes, add a database-backed concurrency test that establishes the required invariant:
+Execute `EvidenceStateConcurrencyIT` once a real Postgres/Testcontainers runner is available. The required invariant is:
 
 > For one structured attempt, exactly one `AssessmentEvidenceRecordedEvent` may be committed after the attempt becomes fully settled, regardless of concurrent authoritative marking order.
 
-The test should cover at minimum:
+The test should establish at minimum:
 
 - same-answer concurrent marking;
 - different-part concurrent marking;
@@ -59,8 +73,8 @@ Only after the failing/successful behavior is demonstrated should the implementa
 - No change to mastery semantics.
 - No change to Smart Mark κ thresholds.
 - No production data mutation.
-- No hosted CI dispatch is required for this documentation-only hardening record.
+- No hosted CI dispatch while the Actions quota remains exhausted.
 
 ## Evidence boundary
 
-Current repository tests establish the lifecycle behavior for sequential service calls and publisher idempotence. They do **not** establish cross-transaction concurrency safety. That distinction is intentional and must remain explicit until a real Postgres/Testcontainers concurrency test proves otherwise.
+Current repository tests establish the lifecycle behavior for sequential service calls and publisher idempotence. The new concurrency harness exists but remains **UNVERIFIED** until executed against real Postgres. That distinction is intentional and must remain explicit until a real database-backed run proves or falsifies the concurrency safety invariant.
