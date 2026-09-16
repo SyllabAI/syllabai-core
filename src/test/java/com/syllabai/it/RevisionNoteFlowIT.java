@@ -139,11 +139,13 @@ class RevisionNoteFlowIT {
         RevisionNoteBodyView body = learnerController.body("1-1-2-diffusion");
         assertThat(body.prevNoteId()).isEqualTo("1-1-1-three-states");
         assertThat(body.nextNoteId()).isEqualTo("1-2-1-atoms");
-        assertThat(body.assets()).containsExactly("diagram-a.png");
+        // the diffusion note has no diagrams; the three-states note carries one
+        assertThat(body.assets()).isEmpty();
 
         RevisionNoteBodyView first = learnerController.body("1-1-1-three-states");
         assertThat(first.prevNoteId()).isNull();
         assertThat(first.nextNoteId()).isEqualTo("1-1-2-diffusion");
+        assertThat(first.assets()).containsExactly("diagram-a.png");
 
         // asset bytes round-trip
         RevisionNoteAsset asset = noteService.asset("diagram-a.png");
@@ -206,6 +208,15 @@ class RevisionNoteFlowIT {
     @Test
     @DisplayName("fail-closed package validation: bad version, traversal filename, dangling asset ref")
     void ingestValidationIsFailClosed() throws Exception {
+        // a failed ingest must not have replaced or partially written anything:
+        // the corpus stays exactly as the earlier test's successful ingest left it
+        java.util.function.ToIntFunction<RevisionNotesIndexView> count =
+                idx -> idx.topics().stream()
+                        .mapToInt(t -> t.subtopics().stream()
+                                .mapToInt(s -> s.notes().size()).sum()).sum();
+        int before = count.applyAsInt(noteService.index(UUID.randomUUID()));
+        assertThat(before).isGreaterThan(0); // this test may run after the flow test
+
         String badVersion = """
                 {"packageVersion": "9.9", "corpusVersion": "x", "generatedAt": "t",
                  "topics": [], "assets": []}
@@ -237,7 +248,7 @@ class RevisionNoteFlowIT {
         assertThatThrownBy(() -> ingestService.ingest(zip(dangling, "other.png", new byte[] {1})))
                 .isInstanceOf(BadRequestException.class);
 
-        // a failed ingest must not have replaced or partially written anything
-        assertThat(noteService.index(UUID.randomUUID()).topics()).isEmpty();
+        // the corpus is byte-identical before and after all rejected ingests
+        assertThat(count.applyAsInt(noteService.index(UUID.randomUUID()))).isEqualTo(before);
     }
 }
