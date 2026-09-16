@@ -77,7 +77,8 @@ public final class RevisionNoteDtos {
         }
 
         public record PkgNote(String noteId, String title, int order, String bodyMd,
-                String specMapJson, String sourceUrl, List<String> assets) {
+                String specMapJson, String specPointCodes, String sourceUrl,
+                List<String> assets) {
         }
 
         public record PkgAsset(String filename, String contentType) {
