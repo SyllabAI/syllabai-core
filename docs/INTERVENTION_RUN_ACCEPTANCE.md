@@ -6,6 +6,12 @@ sanctioned path toward ACCEPTED, §14 decision gate) + `syllabai-core` issue #19
 **Scope:** backend orchestration boundary only; no graph UI, no workflow
 engine, no learner-model change.
 
+**Status: ACCEPTED (2026-09-17, session 84).** The §14 decision gate is closed:
+all acceptance criteria demonstrated, persistence/query cost understood, the
+fixed tree GREEN in real Docker CI (`35139255878` at `7eb621a`), production
+deploy verified live on the same commit, and the operator's conditional
+promotion directive given and executed.
+
 **Implementation provenance:** the domain layer (aggregate, status machine,
 repositories, service core, V26 schema, first unit tests) was implemented by a
 concurrent lane on main (`4cb01b6`..`190f683`, 2026-09-15); this session
@@ -93,12 +99,14 @@ REPORTED | UNVERIFIED | REJECTED.
 
 ## Honest remainders
 
-- `InterventionRunFlowIT` executed once in real Docker CI (runs
-  `35075687695`/`35077858230`/`35078454055`, 2026-09-16): both flows were RED
-  on the two fixture defects (above). The fixtures are now CORRECTED (2026-09-17,
-  local — see below); until one green core-ci run executes on the fixed tree,
-  the IT stays `UNVERIFIED — ACTIONS MINUTES EXHAUSTED` and is NOT claimed as
-  passing. Fixture corrections (test-only commit; zero product changes, zero
+- `InterventionRunFlowIT` first executed in real Docker CI on 2026-09-16 (runs
+  `35075687695`/`35077858230`/`35078454055`): both flows were RED on the two
+  fixture defects (above). The fixtures were corrected test-only (`ef69d8d`),
+  and the **fixed tree has since run GREEN in authoritative Docker CI** — run
+  `35139255878` at core `7eb621a`: surefire 582/0/0/1 (the 1 skip = the
+  live-gated benchmark) + failsafe 74/0/0/0 with `InterventionRunFlowIT`
+  **2/2 GREEN** (`Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`). The
+  prior `UNVERIFIED — ACTIONS MINUTES EXHAUSTED` caveat is retired. Fixture corrections (test-only commit; zero product changes, zero
   gate changes):
   1. the NBA assertion assumed `PRACTISE_QUESTIONS/LOW_MASTERY`, but the
      zero-mark fixture deterministically produces `RETRY_PROBLEM_QUESTION`
@@ -122,9 +130,9 @@ REPORTED | UNVERIFIED | REJECTED.
   fixtures (assert the deterministic NBA action the policy actually produces,
   and root the fixture paper's subject on its ingestion island) remove that
   blocker the moment one authoritative run executes on this tree.
-- The prototype stays **PROPOSED → (pending) ACCEPTED**: the contract §14 gate
-  requires the acceptance criteria above PLUS an understanding of
-  persistence/query cost before promotion. §14 audit (2026-09-17
+- **ACCEPTED (2026-09-17, session 84).** The contract §14 gate required the
+  acceptance criteria above PLUS an understanding of persistence/query cost
+  before promotion. §14 audit (2026-09-17
   reconciliation): criterion claims 1–10 are demonstrated (unit 540 green in
   CI + live 10/10 on production). The §14 cost precondition is now CLOSED:
   `INTERVENTION_RUN_PERSISTENCE_QUERY_COST.md` (2026-09-17, local analysis —
@@ -132,7 +140,15 @@ REPORTED | UNVERIFIED | REJECTED.
   surface (all run-PK-scoped, both child finders index-covered), the growth
   model (≈0.75 MB/month worst case at pilot scale), and the §10 normalization
   verdict (trigger NOT fired; `evidence_refs` jsonb identified as vestigial —
-  recorded for a future migration, not changed now). **E2 promotion therefore
-  has exactly ONE remaining precondition: one green core-ci run on the fixed
-  tree.** Promotion itself remains the operator's decision and is NOT claimed.
+  recorded for a future migration, not changed now). **The final
+  precondition closed the same day: one green core-ci run on the fixed tree**
+  (run `35139255878` at `7eb621a`, a descendant of the fixture fix `ef69d8d`),
+  and the operator's conditional promotion directive was given and executed.
+  Deployed-state evidence (Render API, service `srv-dagijie7bikc73bc0460`): the
+  LIVE deploy at verification time is exactly `7eb621a` (`dep-dalekmjn`,
+  status live, prior deploys deactivated); intervention product code is
+  byte-identical from the live-verified `02643ed` to `7eb621a`, so the
+  production 10/10 applies verbatim to the deployed build
+  (`/api/v1/learners/me/intervention-runs` unauth → 401 fail-closed;
+  `/actuator/health` → 200 warm).
 - Live verification is read-mostly: run creation/lifecycle is exercised on production with a fresh test learner (append-only rows, zero learner-state impact by the proven boundary).
