@@ -8,6 +8,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -84,10 +85,35 @@ public class InterventionRunService {
         return steps.save(step);
     }
 
+    /**
+     * Attaches an evidence REFERENCE to the run. The canonical attempt/evidence
+     * record is never copied or duplicated (E2 acceptance criterion 5); the run
+     * points at it. Terminal runs fail closed: a completed/cancelled/failed
+     * run's history is append-only at the domain level in the sense that its
+     * recorded evidence set is frozen once terminal (contract §5) — a late
+     * attachment would rewrite the meaning of a terminal run.
+     */
     @Transactional
     public InterventionRunEvidence attachEvidence(UUID runId, String evidenceRef, String role) {
-        get(runId);
+        InterventionRun run = get(runId);
+        if (run.status().terminal()) {
+            throw new IllegalStateException("Terminal run cannot be changed");
+        }
         return evidence.save(new InterventionRunEvidence(runId, evidenceRef, role, Instant.now()));
+    }
+
+    /** Ordered step observations of one run (reconstruction, E2 criterion 8). */
+    @Transactional(readOnly = true)
+    public List<InterventionRunStep> stepsOf(UUID runId) {
+        get(runId);
+        return steps.findByRunIdOrderBySequenceNoAsc(runId);
+    }
+
+    /** Evidence references of one run, in attachment order (reconstruction). */
+    @Transactional(readOnly = true)
+    public List<InterventionRunEvidence> evidenceOf(UUID runId) {
+        get(runId);
+        return evidence.findByRunIdOrderByCapturedAtAsc(runId);
     }
 
     @Transactional

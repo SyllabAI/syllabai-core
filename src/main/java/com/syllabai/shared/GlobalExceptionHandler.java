@@ -43,6 +43,18 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "attempt_required", ex.getMessage());
     }
 
+    // E2 intervention-run boundary (issue #19, contract §6): resuming against a
+    // materially different intervention definition fails closed with a NAMED
+    // conflict — the client must start a new run, not retry the same one.
+    // (Other E2 state conflicts are translated at the intervention controller
+    // boundary into the shared ConflictException; a blanket IllegalStateException
+    // mapping here would misreport genuine infrastructure failures as 409s.)
+    @ExceptionHandler(com.syllabai.intervention.InterventionVersionMismatchException.class)
+    ResponseEntity<ApiError> interventionVersionMismatch(
+            com.syllabai.intervention.InterventionVersionMismatchException ex) {
+        return build(HttpStatus.CONFLICT, "intervention_version_mismatch", ex.getMessage());
+    }
+
     // A concurrent write to an optimistic-locked row (learner state aggregates
     // carry @Version, C-4) surfaces here instead of silently dropping one update.
     // 409 tells the client the operation collided with another write and can be

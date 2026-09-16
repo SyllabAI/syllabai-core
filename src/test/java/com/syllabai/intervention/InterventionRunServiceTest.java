@@ -77,6 +77,27 @@ class InterventionRunServiceTest {
         assertThrows(IllegalStateException.class, () -> run.cancel(Instant.now()));
     }
 
+    /**
+     * E2 criterion 9 (append-only terminal history) covers the evidence set:
+     * a late attachment would rewrite the meaning of a terminal run (E2
+     * contract §5), so the service fails closed — the run is fetched but no
+     * evidence row is written.
+     */
+    @Test
+    void evidenceCannotBeAttachedToTerminalRun() {
+        InterventionRunService service = new InterventionRunService(runs, steps, evidence);
+        InterventionRun run = new InterventionRun(
+                UUID.randomUUID(), null, null, "NBA", "[]", "[]", "[]",
+                null, null, null, "PRACTICE", "v1", "hash", "[]");
+        run.activate(Instant.now());
+        run.complete("EVIDENCE_COLLECTED", Instant.now());
+        when(runs.findById(run.runId())).thenReturn(Optional.of(run));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.attachEvidence(run.runId(), "attempt:1", "ATTEMPT_EVIDENCE"));
+        verify(evidence, never()).save(any());
+    }
+
     private static InterventionRunService.CreateCommand command(String hash) {
         return new InterventionRunService.CreateCommand(
                 UUID.randomUUID(), null, null, "NBA", "[\"sp:1\"]", "[]", "[\"ev:1\"]",
