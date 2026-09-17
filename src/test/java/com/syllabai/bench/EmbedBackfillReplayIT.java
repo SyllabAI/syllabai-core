@@ -166,7 +166,7 @@ class EmbedBackfillReplayIT {
         }
 
         EmbedBackfill.BackfillResult result = EmbedBackfill.run(jdbc, new FakeEmbeddingProvider(),
-                null, null, out, "fake-embed", 768, 0, "IT", "2026-09-17");
+                null, null, out, "fake-embed", 768, 0, "IT", "2026-09-17", null);
 
         assertThat(result.status()).isEqualTo("COMPLETE");
         assertThat(result.chunksEmbedded()).isEqualTo(3);
@@ -215,7 +215,7 @@ class EmbedBackfillReplayIT {
         String before = Files.readString(out.resolve("embeddings_chunks.jsonl"), StandardCharsets.UTF_8);
 
         EmbedBackfill.BackfillResult result = EmbedBackfill.run(jdbc, new FakeEmbeddingProvider(),
-                null, null, out, "fake-embed", 768, 0, "IT", "2026-09-17");
+                null, null, out, "fake-embed", 768, 0, "IT", "2026-09-17", null);
 
         assertThat(result.chunksEmbedded()).isZero();
         assertThat(result.chunksStoredTotal()).isEqualTo(3);
@@ -224,5 +224,92 @@ class EmbedBackfillReplayIT {
         Integer pending = jdbc.queryForObject(
                 "select count(*) from document_chunks where embedding is null", Integer.class);
         assertThat(pending).isZero();
+    }
+
+    @Test
+    @Order(4)
+    @DisplayName("quota hard-stop: clean INCOMPLETE artifact, then preload resumes without re-embedding")
+    void quotaStopsCleanlyThenPreloadResumes() throws Exception {
+        // two fresh pending chunks (distinct content, same document)
+        jdbc.update("""
+                insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
+                    token_estimate, created_at)
+                values (?, ?, 3, ?, ?::jsonb, 16, now())
+                """, UUID.nameUUIDFromBytes("it-embed-chunk-3".getBytes()), DOC_ROW,
+                CHUNK_CONTENT_1 + " (variant)", "{}");
+        jdbc.update("""
+                insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
+                    token_estimate, created_at)
+                values (?, ?, 4, ?, ?::jsonb, 16, now())
+                """, UUID.nameUUIDFromBytes("it-embed-chunk-4".getBytes()), DOC_ROW,
+                CHUNK_CONTENT_1 + " (variant two)", "{}");
+
+        Path partial = Path.of("target/embed-backfill-it-partial");
+        wipe(partial);
+        EmbedBackfill.BackfillResult stopped = EmbedBackfill.run(jdbc,
+                new OneShotThenQuotaProvider(), null, null, partial,
+                "fake-embed", 768, 0, "IT", "2026-09-17", null);
+        assertThat(stopped.status()).isEqualTo("INCOMPLETE");
+        assertThat(stopped.chunksEmbedded()).isEqualTo(1);
+        assertThat(stopped.pendingAfter()).isEqualTo(1);
+        // the artifact IS dumped despite the hard stop (preload checkpoint)
+        assertThat(partial.resolve("embeddings_chunks.jsonl")).exists();
+        List<String> sums = Files.readAllLines(partial.resolve("SHA256SUMS"), StandardCharsets.UTF_8);
+        assertThat(sums).hasSize(2); // chunks + manifest (no query pass — goldDir null)
+
+        // resume: preload the partial artifact, normal fake finishes the remainder
+        Path resumedOut = Path.of("target/embed-backfill-it-resumed");
+        wipe(resumedOut);
+        EmbedBackfill.BackfillResult resumed = EmbedBackfill.run(jdbc,
+                new FakeEmbeddingProvider(), null, null, resumedOut,
+                "fake-embed", 768, 0, "IT", "2026-09-17", partial);
+        assertThat(resumed.status()).isEqualTo("COMPLETE");
+        assertThat(resumed.chunksEmbedded()).isEqualTo(1); // only the remainder was embedded
+        assertThat(resumed.chunksStoredTotal()).isEqualTo(5);
+        Integer pending = jdbc.queryForObject(
+                "select count(*) from document_chunks where embedding is null", Integer.class);
+        assertThat(pending).isZero();
+    }
+
+    private static void wipe(Path dir) throws Exception {
+        if (Files.exists(dir)) {
+            try (var walk = Files.walk(dir)) {
+                walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
+    }
+
+    /** Embeds exactly one chunk, then the free-tier daily quota dies (scripted). */
+    static final class OneShotThenQuotaProvider implements EmbeddingProvider {
+        private final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public String model() {
+            return "fake-embed";
+        }
+
+        @Override
+        public int dimension() {
+            return 768;
+        }
+
+        @Override
+        public float[] embedDocument(String text) {
+            if (calls.incrementAndGet() > 1) {
+                throw new EmbedBackfill.EmbeddingRateException(
+                        "daily quota exhausted: simulated (RPD)", null);
+            }
+            return FakeEmbeddingProvider.vector("doc|" + text);
+        }
+
+        @Override
+        public float[] embedQuery(String text) {
+            return FakeEmbeddingProvider.vector("query|" + text);
+        }
+
+        @Override
+        public List<float[]> embedDocuments(List<String> texts) {
+            return texts.stream().map(this::embedDocument).toList();
+        }
     }
 }
