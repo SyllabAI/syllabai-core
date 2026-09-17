@@ -616,11 +616,21 @@ public final class Run004A {
         return states;
     }
 
-    /** Scope fallback for a pre-loaded bench DB (IT path) — exactly one curriculum version. */
+    /**
+     * Scope fallback for a pre-loaded bench DB (IT path) — the curriculum
+     * version owning the corpus's papers. NOT a count over curriculum_versions:
+     * V6 seeds a baseline IAL row, so every migrated DB carries at least two
+     * versions and only the papers-owning one is the bench scope (CI run
+     * 35211795632 found this; the loader path is unaffected — it derives the
+     * deterministic scope id itself).
+     */
     private static CurriculumScope benchScope(JdbcTemplate jdbc) {
-        List<UUID> ids = jdbc.queryForList("select id from curriculum_versions", UUID.class);
+        List<UUID> ids = jdbc.queryForList(
+                "select distinct s.curriculum_version_id "
+                        + "from exam_papers p join subjects s on s.id = p.subject_id",
+                UUID.class);
         if (ids.size() != 1) {
-            throw new IllegalStateException("expected exactly one curriculum version for the bench scope, "
+            throw new IllegalStateException("expected exactly one curriculum version owning the bench papers, "
                     + "found " + ids.size() + " (fail-closed)");
         }
         return new CurriculumScope(ids.get(0), "BENCH", Set.of());
