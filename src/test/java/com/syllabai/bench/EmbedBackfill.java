@@ -94,8 +94,10 @@ public final class EmbedBackfill {
         log("building the production EmbeddingProvider bean (EmbeddingConfig wiring)");
         EmbeddingProvider provider = realProvider(apiKey, model, dimension);
 
+        String preloadEnv = env("BENCH_PRELOAD_ARTIFACT", "");
+        Path preloadDir = preloadEnv.isBlank() ? null : Path.of(preloadEnv);
         BackfillResult result = run(jdbc, provider, snapshot, goldDir, outDir,
-                model, dimension, minIntervalMs, coreCommit, runDate);
+                model, dimension, minIntervalMs, coreCommit, runDate, preloadDir);
 
         log(String.format("DONE status=%s chunks_embedded=%d pending_after=%d queries=%d model=%s out=%s",
                 result.status(), result.chunksEmbedded(), result.pendingAfter(),
@@ -108,7 +110,8 @@ public final class EmbedBackfill {
     /** Injectable core — the IT drives this with a fake provider over a tiny corpus. */
     static BackfillResult run(JdbcTemplate jdbc, EmbeddingProvider provider, BenchSnapshot snapshot,
                               Path goldDir, Path outDir, String model, int dimension,
-                              long minIntervalMs, String coreCommit, String runDate) throws Exception {
+                              long minIntervalMs, String coreCommit, String runDate,
+                              Path preloadDir) throws Exception {
         Instant generatedAt = Instant.now();
         Files.createDirectories(outDir);
 
@@ -129,6 +132,15 @@ public final class EmbedBackfill {
         }
         log("corpus rows: " + dbChunks);
 
+        // CI jobs are ephemeral: the artifact IS the resume state across
+        // dispatches. Preload a previous partial artifact (checksum-verified,
+        // model-matched, fail-closed) so a re-dispatch only embeds the remainder.
+        int preloaded = 0;
+        if (preloadDir != null && Files.isDirectory(preloadDir)) {
+            preloaded = preloadArtifact(jdbc, preloadDir, snapshot, model);
+            log("preloaded " + preloaded + " chunk vectors from the previous partial artifact");
+        }
+
         RatePacer pacer = new RatePacer(minIntervalMs);
 
         // ── 2. chunk pass: pending only (embedding IS NULL), deterministic order
@@ -143,6 +155,8 @@ public final class EmbedBackfill {
         log("pending chunks: " + pending.size());
         ChunkVectorRepository vectors = new ChunkVectorRepository(jdbc);
         int embeddedNow = 0;
+        boolean budgetExhausted = false;
+        try {
         for (PendingChunk p : pending) {
             float[] v = pacer.call("chunk " + p.documentId() + ":" + p.chunkIndex(),
                     () -> provider.embedDocument(p.content()));
@@ -159,13 +173,18 @@ public final class EmbedBackfill {
                 log("embedded " + embeddedNow + "/" + pending.size());
             }
         }
+        } catch (EmbeddingRateException e) {
+            budgetExhausted = true;
+            log("embedding budget/rate hard-stop — dumping INCOMPLETE artifact (preload checkpoint): "
+                    + e.getMessage());
+        }
         int pendingAfter = jdbc.queryForObject(
                 "select count(*) from document_chunks where embedding is null", Integer.class);
 
         // ── 3. query pass (gold queries, RETRIEVAL_QUERY inside the provider) ─
         Map<String, float[]> queryVectors = new LinkedHashMap<>();
         int queries = 0;
-        if (goldDir != null && Files.isDirectory(goldDir)) {
+        if (!budgetExhausted && goldDir != null && Files.isDirectory(goldDir)) {
             BenchGold gold = BenchGold.load(goldDir);
             for (BenchGold.GoldRecord rec : gold.records()) {
                 float[] v = pacer.call("query " + rec.id(), () -> provider.embedQuery(rec.query()));
@@ -258,12 +277,22 @@ public final class EmbedBackfill {
         manifest.put("core_commit", coreCommit);
         manifest.put("run_date", runDate);
         manifest.put("generated_at", generatedAt.toString());
-        manifest.put("notes", List.of(
+        List<String> notes = new ArrayList<>(List.of(
                 "compute-once-freeze-forever: benchmark replays apply this artifact offline; no API calls at replay time",
                 "text-embedding-004 (codebase default) is RETIRED (404 v1+v1beta, probed with valid key 2026-09-17);"
                         + " gemini-embedding-001 passed explicitly at outputDimensionality=768 — vector(768) schema-compatible",
                 "production default repair + model_versions registration registered separately (benchmark-only slice here)",
                 "embedding is index preparation, not serving: T-C07 scope + T-C05 VALIDATED boundaries apply at query time"));
+        if (preloaded > 0) {
+            notes.add("resumed-from-preload: " + preloaded
+                    + " chunk vectors were preloaded from the previous partial artifact (checksum-verified, "
+                    + "same model); chunks_embedded_this_run counts only this run's API calls");
+        }
+        if (budgetExhausted) {
+            notes.add("INCOMPLETE: embedding budget/rate exhausted mid-run — this artifact is a PRELOAD "
+                    + "checkpoint (pending_after > 0); re-dispatch with BENCH_PRELOAD_ARTIFACT pointed here");
+        }
+        manifest.put("notes", notes);
         Path manifestFile = outDir.resolve("manifest.json");
         Files.writeString(manifestFile, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(manifest),
                 StandardCharsets.UTF_8);
@@ -287,9 +316,12 @@ public final class EmbedBackfill {
 
     /** The production bean, built by the production factory (fail-fast dim contract included). */
     static EmbeddingProvider realProvider(String apiKey, String model, int dimension) {
+        // bench robustness knob only (EMBED_TIMEOUT_S, default 120s): the production
+        // provider wiring in application.yml is untouched and stays 30s.
+        int timeoutS = Integer.parseInt(env("EMBED_TIMEOUT_S", "120"));
         AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
         ctx.registerBean(EmbeddingProperties.class,
-                () -> new EmbeddingProperties(new EmbeddingProperties.GeminiEmbedding(apiKey, model, dimension, 30)));
+                () -> new EmbeddingProperties(new EmbeddingProperties.GeminiEmbedding(apiKey, model, dimension, timeoutS)));
         ctx.register(EmbeddingConfig.class);
         ctx.refresh();
         try {
@@ -360,6 +392,27 @@ public final class EmbedBackfill {
         }
     }
 
+
+    /**
+     * Applies a previous partial artifact's chunk vectors into the fresh bench
+     * DB. Checksum-verified fail-closed; model must match (single-model index
+     * rule); INCOMPLETE artifacts are allowed — that is their whole point.
+     * Returns rows applied.
+     */
+    static int preloadArtifact(JdbcTemplate jdbc, Path preloadDir, BenchSnapshot snapshot,
+                               String model) throws Exception {
+        ObjectMapper pm = new ObjectMapper();
+        JsonNode pman = pm.readTree(Files.readString(preloadDir.resolve("manifest.json"),
+                StandardCharsets.UTF_8));
+        if (!model.equals(pman.path("model").asText())) {
+            throw new IllegalStateException("preload artifact model " + pman.path("model").asText()
+                    + " != run model " + model + " (fail-closed — single-model index rule)");
+        }
+        Run004A.verifyArtifact(preloadDir, Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot")),
+                null, null, snapshot, false);
+        return Run004A.applyChunkVectors(jdbc, preloadDir, snapshot);
+    }
+
     /**
      * Call pacing + adaptive backoff. Min-interval between call starts (default
      * tuned under the free-tier RPM ceiling); 429/rate errors retry with
@@ -408,7 +461,9 @@ public final class EmbedBackfill {
                         log("daily quota exhausted at " + what + " — surfacing INCOMPLETE (resume by re-dispatch)");
                         throw new EmbeddingRateException("daily quota exhausted: " + m, e);
                     }
-                    if (!rate && !msg.contains("500") && !msg.contains("503") && !msg.contains("backend")) {
+                    boolean timeout = msg.contains("timed out") || msg.contains("timeout");
+                    if (!rate && !timeout && !msg.contains("500") && !msg.contains("503")
+                            && !msg.contains("backend")) {
                         throw new IllegalStateException("embedding call failed at " + what + ": " + m, e);
                     }
                     log("retry " + attempt + "/12 at " + what + " after " + backoff / 1000 + "s ("
