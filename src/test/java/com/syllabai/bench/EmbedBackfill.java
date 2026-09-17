@@ -360,11 +360,11 @@ public final class EmbedBackfill {
     }
 
     /**
-     * Rotation core: try key i; on a quota-class hard stop move to key i+1 and
-     * retry the SAME unit; after the last key rethrow (INCOMPLETE +
-     * resume-by-preload semantics unchanged). Non-quota failures keep the
-     * RatePacer retry ladder and never rotate — a transient 429/timeout is not
-     * a dead key.
+     * Rotation core: try key i; on a key-level hard stop (daily-quota
+     * exhaustion OR project/keys denial) move to key i+1 and retry the SAME
+     * unit; after the last key rethrow (INCOMPLETE + resume-by-preload
+     * semantics unchanged). Non-key failures keep the RatePacer retry ladder
+     * and never rotate — a transient 429/timeout is not a dead key.
      */
     static float[] embedRotating(List<EmbeddingProvider> providers,
                                  IntFunction<Callable<float[]>> attemptFor,
@@ -380,7 +380,7 @@ public final class EmbedBackfill {
                 if (idx + 1 >= providers.size()) {
                     throw e;
                 }
-                log("key-" + idx + " quota-exhausted at " + what + " — rotating to key-"
+                log("key-" + idx + " unusable at " + what + " — rotating to key-"
                         + (idx + 1) + " of " + providers.size());
                 idx++;
             }
@@ -434,6 +434,28 @@ public final class EmbedBackfill {
         return m.contains("exceeded your current quota") || m.contains("per day")
                 || m.contains("requests per day") || m.contains("daily") || m.contains("rpd")
                 || m.contains("billing");
+    }
+
+    /**
+     * Key-denied classifier: TRUE means the key's project itself is refused
+     * at a timescale beyond retrying — the same "rotate to the next key"
+     * class as daily-quota exhaustion. Observed 2026-09-17 (run 7,
+     * 35240141258): Google answers "403 . Your project has been denied
+     * access. Please contact support." from the FIRST call of a project that
+     * is suspended/flagged, and the previous classifier routed that wording
+     * into the generic fatal branch — the whole run died with exit 1 and no
+     * INCOMPLETE artifact. Revoked/invalid keys surface the same way.
+     * Deliberately narrow: an unknown 403 stays fatal (visible), only the
+     * observed project-denied and invalid-key wordings rotate.
+     */
+    static boolean isKeyDenied(String message) {
+        if (message == null) {
+            return false;
+        }
+        String m = message.toLowerCase();
+        return (m.contains("403") && m.contains("denied access"))
+                || m.contains("api key not valid") || m.contains("api_key_invalid")
+                || m.contains("api_key_blocked") || m.contains("consumer has been suspended");
     }
 
     /** The production bean, built by the production factory (fail-fast dim contract included). */
@@ -586,6 +608,10 @@ public final class EmbedBackfill {
                     if (quotaDay) {
                         log("daily quota exhausted at " + what + " — surfacing INCOMPLETE (resume by re-dispatch)");
                         throw new EmbeddingRateException("daily quota exhausted: " + m, e);
+                    }
+                    if (isKeyDenied(m)) {
+                        log("key denied at " + what + " — surfacing for rotation (dead key, not retryable)");
+                        throw new EmbeddingRateException("key denied: " + m, e);
                     }
                     boolean timeout = msg.contains("timed out") || msg.contains("timeout");
                     if (!rate && !timeout && !msg.contains("500") && !msg.contains("503")
