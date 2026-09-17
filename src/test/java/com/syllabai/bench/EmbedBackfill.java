@@ -408,7 +408,9 @@ public final class EmbedBackfill {
             throw new IllegalStateException("preload artifact model " + pman.path("model").asText()
                     + " != run model " + model + " (fail-closed — single-model index rule)");
         }
-        Run004A.verifyArtifact(preloadDir, Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot")),
+        Run004A.verifyArtifact(preloadDir,
+                snapshot == null ? null
+                        : Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot")),
                 null, null, snapshot, false);
         return Run004A.applyChunkVectors(jdbc, preloadDir, snapshot);
     }

@@ -218,6 +218,12 @@ class ArmAReplayIT {
         Files.writeString(goldDir.resolve("manifest.json"), JSON.writeValueAsString(Map.of(
                 "files_sha256", Map.of("class_it.json", goldSha),
                 "counts", Map.of("total", 1))), StandardCharsets.UTF_8);
+        // the real gold dir carries a SHA256SUMS (the manifest echo reads it) —
+        // the fixture must mirror that shape
+        String manifestSha = EmbedBackfill.sha256(goldDir.resolve("manifest.json"));
+        Files.writeString(goldDir.resolve("SHA256SUMS"),
+                goldSha + "  class_it.json\n" + manifestSha + "  manifest.json\n",
+                StandardCharsets.UTF_8);
 
         // ── real backfill run (fake provider, WITH gold → query pass) ────────
         Path artifactDir = Path.of("target/arma-it-artifact");
