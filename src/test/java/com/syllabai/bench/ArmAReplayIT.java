@@ -33,7 +33,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Hermetic end-to-end IT for the arm A replay path (session 94), CI lane only
- * (Docker-gated, same posture as the other *IT classes): a tiny seeded corpus
+ * (Docker-gated, same posture as the other *IT classes). The distinguishing
+ * {@code bench.fixture=arma} property keeps this class out of Spring's context
+ * cache collision with EmbedBackfillReplayIT (identical otherwise) so both get
+ * their own container and DB — measured once in CI run 35211338443.
+ *
+ * <p>Fixture: a tiny seeded corpus
  * (one VALIDATED paper + one SUGGESTED paper), a real {@code EmbedBackfill.run}
  * with an ALIGNED fake provider (query vector == document vector for the same
  * text — passes the production cosine floor deterministically) producing the
@@ -48,7 +53,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * tie-dependent exact ranks (the duplicate-content trick creates an exact
  * cosine tie between the two A-chunks by design).</p>
  */
-@SpringBootTest
+@SpringBootTest(properties = "bench.fixture=arma")
 @ActiveProfiles("it")
 @Testcontainers(disabledWithoutDocker = true)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
