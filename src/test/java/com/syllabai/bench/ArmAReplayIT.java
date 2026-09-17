@@ -182,22 +182,22 @@ class ArmAReplayIT {
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
                     token_estimate, created_at)
                 values (?, ?, 0, ?, ?::jsonb, 16, now())
-                """, ROW_V_0, DOC_ROW_V, CONTENT_A, "{}");
+                """, ROW_V_0, DOC_ROW_V, CONTENT_A, "[]");
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
                     token_estimate, created_at)
                 values (?, ?, 1, ?, ?::jsonb, 16, now())
-                """, ROW_V_1, DOC_ROW_V, CONTENT_B, "{}");
+                """, ROW_V_1, DOC_ROW_V, CONTENT_B, "[]");
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
                     token_estimate, created_at)
                 values (?, ?, 2, ?, ?::jsonb, 16, now())
-                """, ROW_V_2, DOC_ROW_V, CONTENT_A + " (tail)", "{}");
+                """, ROW_V_2, DOC_ROW_V, CONTENT_A + " (tail)", "[]");
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
                     token_estimate, created_at)
                 values (?, ?, 0, ?, ?::jsonb, 16, now())
-                """, ROW_S_0, DOC_ROW_S, CONTENT_A, "{}");
+                """, ROW_S_0, DOC_ROW_S, CONTENT_A, "[]");
     }
 
     @Test
