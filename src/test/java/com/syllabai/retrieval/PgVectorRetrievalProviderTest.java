@@ -77,6 +77,13 @@ class PgVectorRetrievalProviderTest {
         assertThat(c.providerScore()).isEqualTo(0.42); // cosine, native
         assertThat(c.validationStatus()).isNull();
         assertThat(c.embeddingModel()).isNull(); // not carried by EvidenceItem — never invented
+        // Identity convention (fabric dedup + portable gold refs): chunk ordinals
+        // and provenance travel in metadata — the adapter must not drop them.
+        assertThat(c.metadata()).containsEntry("chunk_index", "4");
+        assertThat(c.metadata()).containsEntry("document_kind", "MARK_SCHEME");
+        assertThat(c.metadata()).containsEntry("page_start", "3");
+        assertThat(c.metadata()).containsEntry("page_end", "3");
+        assertThat(c.metadata()).containsEntry("element_ids", "e1,e2");
     }
 
     @Test

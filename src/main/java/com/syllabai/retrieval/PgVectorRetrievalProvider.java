@@ -51,6 +51,28 @@ public class PgVectorRetrievalProvider implements RetrievalProvider {
     }
 
     private RetrievalCandidate toCandidate(EvidenceItem item) {
+        java.util.Map<String, String> metadata = new java.util.LinkedHashMap<>();
+        // RetrievalCandidate identity convention: chunk ordinals and page ranges
+        // travel in metadata as provenance detail — without chunk_index a fused
+        // candidate cannot reconstruct its portable gold ref (document checksum +
+        // chunk ordinal). The adapter previously dropped these (empty metadata);
+        // nothing consumed the fabric then, so filling them is additive fidelity,
+        // not a behavior change.
+        if (item.chunkIndex() != null) {
+            metadata.put("chunk_index", String.valueOf(item.chunkIndex()));
+        }
+        if (item.source() != null) {
+            metadata.put("document_kind", item.source().name());
+        }
+        if (item.pageStart() != null) {
+            metadata.put("page_start", String.valueOf(item.pageStart()));
+        }
+        if (item.pageEnd() != null) {
+            metadata.put("page_end", String.valueOf(item.pageEnd()));
+        }
+        if (item.elementIds() != null && !item.elementIds().isEmpty()) {
+            metadata.put("element_ids", String.join(",", item.elementIds()));
+        }
         return new RetrievalCandidate(
                 id(),
                 item.documentRowId(),
@@ -63,6 +85,6 @@ public class PgVectorRetrievalProvider implements RetrievalProvider {
                 item.retrievalScore(),
                 null,
                 null,
-                java.util.Map.of());
+                java.util.Map.copyOf(metadata));
     }
 }

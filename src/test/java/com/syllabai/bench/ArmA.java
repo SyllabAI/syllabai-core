@@ -222,7 +222,7 @@ public final class ArmA {
     }
 
     /** Same stub as Run003B: bench corpus is doc_version 1 — findById → empty → fallback 1. */
-    private static DocumentRepository stubDocumentRepository() {
+    static DocumentRepository stubDocumentRepository() {
         return (DocumentRepository) java.lang.reflect.Proxy.newProxyInstance(
                 DocumentRepository.class.getClassLoader(),
                 new Class<?>[]{DocumentRepository.class},

@@ -559,7 +559,7 @@ public final class Run004A {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private static EmbeddingProvider frozenQueryProvider(Path artifactDir, BenchGold gold) throws Exception {
+    static EmbeddingProvider frozenQueryProvider(Path artifactDir, BenchGold gold) throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         var mapType = mapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class);
         JsonNode manifest = JSON.readTree(Files.readString(artifactDir.resolve("manifest.json"),
@@ -604,7 +604,7 @@ public final class Run004A {
         return new ArmA.FrozenQueryVectors(model, dim, byStrippedQuery);
     }
 
-    private static Map<String, String> paperStateByDocumentId(BenchSnapshot snapshot) {
+    static Map<String, String> paperStateByDocumentId(BenchSnapshot snapshot) {
         Map<String, String> states = new LinkedHashMap<>();
         for (BenchSnapshot.ChunkRef c : snapshot.chunks().values()) {
             String docId = c.reference().substring(0, c.reference().lastIndexOf(':'));
