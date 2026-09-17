@@ -197,9 +197,9 @@ class EmbedBackfillReplayIT {
                 .as("bit-exact float4 round-trip through ::real[] dump")
                 .isLessThanOrEqualTo(1);
 
-        // SHA256SUMS verifies against the actual files
+        // SHA256SUMS verifies against the actual files (no query pass here — goldDir is null)
         List<String> sums = Files.readAllLines(out.resolve("SHA256SUMS"), StandardCharsets.UTF_8);
-        assertThat(sums).hasSize(3);
+        assertThat(sums).hasSize(2); // chunks + manifest (query file absent without a gold dir)
         for (String line : sums) {
             String[] parts = line.trim().split("\\s+", 2);
             String recomputed = EmbedBackfill.sha256(out.resolve(parts[1].trim()));
