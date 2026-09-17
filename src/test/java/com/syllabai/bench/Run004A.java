@@ -450,6 +450,19 @@ public final class Run004A {
 
     static int applyChunkVectors(JdbcTemplate jdbc, Path artifactDir, BenchSnapshot snapshot)
             throws Exception {
+        // Run-004-A replay path: the frozen artifact must cover the whole snapshot.
+        return applyChunkVectors(jdbc, artifactDir, snapshot, true);
+    }
+
+    /**
+     * {@code requireComplete=false} is the EmbedBackfill preload/resume path:
+     * partial artifacts are its whole point (session 92), so coverage of the
+     * full snapshot is NOT asserted — every row is still fail-closed verified
+     * against the snapshot (ref membership, chunk_id, deterministic id).
+     */
+    static int applyChunkVectors(JdbcTemplate jdbc, Path artifactDir, BenchSnapshot snapshot,
+                                 boolean requireComplete)
+            throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         var mapType = mapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class);
         ChunkVectorRepository vectors = new ChunkVectorRepository(jdbc);
@@ -513,7 +526,7 @@ public final class Run004A {
                 log("applied " + applied + " vectors");
             }
         }
-        if (snapshot != null && artifactRefs.size() != snapshot.chunkCount()) {
+        if (requireComplete && snapshot != null && artifactRefs.size() != snapshot.chunkCount()) {
             throw new IllegalStateException("artifact carries " + artifactRefs.size() + " refs, snapshot has "
                     + snapshot.chunkCount() + " (fail-closed)");
         }

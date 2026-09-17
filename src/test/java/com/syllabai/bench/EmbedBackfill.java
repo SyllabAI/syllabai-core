@@ -534,7 +534,10 @@ public final class EmbedBackfill {
                 snapshot == null ? null
                         : Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot")),
                 null, null, snapshot, false);
-        return Run004A.applyChunkVectors(jdbc, preloadDir, snapshot);
+        // requireComplete=false — a partial preload checkpoint is the entire
+        // point of this path (run 35229113407 died on exactly this: the shared
+        // helper asserted full-snapshot coverage and rejected the 7-ref resume).
+        return Run004A.applyChunkVectors(jdbc, preloadDir, snapshot, false);
     }
 
     /**

@@ -271,6 +271,130 @@ class EmbedBackfillReplayIT {
         assertThat(pending).isZero();
     }
 
+    @Test
+    @Order(5)
+    @DisplayName("preload with a real snapshot: partial applies (requireComplete=false), replay stays fail-closed")
+    void preloadWithSnapshotAppliesPartialButReplayStaysFailClosed() throws Exception {
+        // regression pin for run 35229113407: the shared helper asserted full
+        // snapshot coverage and rejected the partial preload checkpoint. The
+        // snapshot-bearing path (production always passes one) was never IT-
+        // covered because the earlier resume test passed snapshot = null.
+        Path snapDir = Path.of("target/embed-it-snap");
+        wipe(snapDir);
+        Files.createDirectories(snapDir);
+        String snapDoc = "it-embed-snap-doc";
+        String ref0 = snapDoc + ":0";
+        String ref1 = snapDoc + ":1";
+        String content0 = "Snap chunk zero for preload regression.";
+        String content1 = "Snap chunk one for preload regression.";
+
+        List<Map<String, Object>> snapChunks = List.of(
+                Map.of("chunk_ref", ref0, "content", content0, "paper_state", "UNKNOWN",
+                        "kind", "MARK_SCHEME"),
+                Map.of("chunk_ref", ref1, "content", content1, "paper_state", "UNKNOWN",
+                        "kind", "MARK_SCHEME"));
+        byte[] chunksGz = gzip(JSON.writeValueAsBytes(snapChunks));
+        Files.write(snapDir.resolve("chunks.jsonl.gz"), chunksGz);
+        Files.write(snapDir.resolve("spec_points.json"), "[]".getBytes(StandardCharsets.UTF_8));
+        Files.write(snapDir.resolve("misconceptions.json"), "[]".getBytes(StandardCharsets.UTF_8));
+        Files.write(snapDir.resolve("graph_edges.json"), "[]".getBytes(StandardCharsets.UTF_8));
+        Files.write(snapDir.resolve("question_anchors.json"), "[]".getBytes(StandardCharsets.UTF_8));
+
+        Map<String, Object> snapManifest = new java.util.LinkedHashMap<>();
+        snapManifest.put("snapshot_version", "it-snap-001");
+        Map<String, Object> hashes = new java.util.LinkedHashMap<>();
+        for (String name : List.of("chunks.jsonl.gz", "spec_points.json", "misconceptions.json",
+                "graph_edges.json", "question_anchors.json")) {
+            hashes.put(name, sha256Hex(Files.readAllBytes(snapDir.resolve(name))));
+        }
+        snapManifest.put("files_sha256", hashes);
+        snapManifest.put("counts", Map.of("chunks", 2));
+        Files.write(snapDir.resolve("manifest.json"), JSON.writerWithDefaultPrettyPrinter()
+                .writeValueAsBytes(snapManifest));
+        BenchSnapshot snapshot = BenchSnapshot.load(snapDir);
+        org.assertj.core.api.Assertions.assertThat(snapshot.chunkCount()).isEqualTo(2);
+
+        // seed the bench-shaped rows: chunk ids MUST be the loader's deterministic ids
+        UUID docRow = UUID.nameUUIDFromBytes("it-embed-snap-doc-row".getBytes());
+        jdbc.update("""
+                insert into documents (id, document_id, schema_version, doc_version, kind, source_uri,
+                    mime_type, checksum, page_count, element_count, text_element_count,
+                    source_engine, source_engine_version, canonical_json, created_at)
+                values (?, ?, '1.0', 1, 'MARK_SCHEME', 'it://embed-snap', 'application/pdf',
+                    'it-embed-checksum-snap', 1, 2, 2, 'it', '1', ?::jsonb, now())
+                """, docRow, snapDoc, "{}");
+        for (int i = 0; i < 2; i++) {
+            String ref = snapDoc + ":" + i;
+            jdbc.update("""
+                    insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
+                        token_estimate, created_at)
+                    values (?, ?, ?, ?, ?::jsonb, 16, now())
+                    """, UUID.nameUUIDFromBytes(("bench-chunk|" + ref).getBytes(StandardCharsets.UTF_8)),
+                    docRow, i, i == 0 ? content0 : content1, "{}");
+        }
+
+        // partial artifact: 1 of 2 refs — exactly the production preload shape
+        Path partial = Path.of("target/embed-backfill-it-snap-partial");
+        wipe(partial);
+        Files.createDirectories(partial);
+        UUID chunkRow0 = UUID.nameUUIDFromBytes(("bench-chunk|" + ref0).getBytes(StandardCharsets.UTF_8));
+        Map<String, Object> artRow = new java.util.LinkedHashMap<>();
+        artRow.put("ref", ref0);
+        artRow.put("chunk_id", chunkRow0.toString());
+        artRow.put("model", "fake-embed");
+        artRow.put("v", FakeEmbeddingProvider.vector("doc|" + content0));
+        Files.write(partial.resolve("embeddings_chunks.jsonl"),
+                (JSON.writeValueAsString(artRow) + "\n").getBytes(StandardCharsets.UTF_8));
+        Map<String, Object> artManifest = new java.util.LinkedHashMap<>();
+        artManifest.put("model", "fake-embed");
+        artManifest.put("dimension", 768);
+        artManifest.put("task_types", Map.of("chunks", "RETRIEVAL_DOCUMENT"));
+        artManifest.put("pending_after", 1);
+        Files.write(partial.resolve("manifest.json"), JSON.writeValueAsBytes(artManifest));
+
+        // 1. replay semantics unchanged: full coverage still asserted (this is
+        //    the exact exception that killed run 35229113407)
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> Run004A.applyChunkVectors(jdbc, partial, snapshot, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("artifact carries 1 refs, snapshot has 2 (fail-closed)");
+
+        // 2. preload semantics: the SAME partial artifact applies with requireComplete=false
+        int applied = Run004A.applyChunkVectors(jdbc, partial, snapshot, false);
+        org.assertj.core.api.Assertions.assertThat(applied).isEqualTo(1);
+        Integer stored = jdbc.queryForObject(
+                "select count(*) from document_chunks where embedding_model = 'fake-embed' "
+                        + "and embedding is not null", Integer.class);
+        org.assertj.core.api.Assertions.assertThat(stored).isEqualTo(1);
+
+        // 3. per-row fail-closed checks survive the partial flag: unknown ref still rejects
+        Path rogue = Path.of("target/embed-backfill-it-snap-rogue");
+        wipe(rogue);
+        Files.createDirectories(rogue);
+        Map<String, Object> rogueRow = new java.util.LinkedHashMap<>(artRow);
+        rogueRow.put("ref", snapDoc + ":9");
+        Files.write(rogue.resolve("embeddings_chunks.jsonl"),
+                (JSON.writeValueAsString(rogueRow) + "\n").getBytes(StandardCharsets.UTF_8));
+        Files.write(rogue.resolve("manifest.json"), JSON.writeValueAsBytes(artManifest));
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> Run004A.applyChunkVectors(jdbc, rogue, snapshot, false))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("artifact ref not in snapshot");
+    }
+
+    private static byte[] gzip(byte[] bytes) throws Exception {
+        var out = new java.io.ByteArrayOutputStream();
+        try (var gz = new java.util.zip.GZIPOutputStream(out)) {
+            gz.write(bytes);
+        }
+        return out.toByteArray();
+    }
+
+    private static String sha256Hex(byte[] bytes) throws Exception {
+        return java.util.HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(bytes));
+    }
+
     private static void wipe(Path dir) throws Exception {
         if (Files.exists(dir)) {
             try (var walk = Files.walk(dir)) {
