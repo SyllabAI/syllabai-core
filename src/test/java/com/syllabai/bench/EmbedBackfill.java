@@ -19,12 +19,15 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.IntConsumer;
+import java.util.function.IntFunction;
 
 /**
  * Embedding backfill runner (T-C13 arm A prerequisite; session 92). Computes
@@ -58,7 +61,11 @@ import java.util.concurrent.Callable;
  *   BENCH_JDBC_URL=... BENCH_JDBC_USER=... BENCH_JDBC_PASSWORD=... \
  *   BENCH_SNAPSHOT=&lt;snap-001 dir&gt; BENCH_GOLD=&lt;gold dir&gt; \
  *   BENCH_RUN_OUT=&lt;artifact out dir&gt; BENCH_CORE_COMMIT=&lt;sha&gt; \
- *   SYLLABAI_EMBEDDING_GEMINI_API_KEY=... \
+ *   SYLLABAI_EMBEDDING_GEMINI_API_KEYS=key1[,key2;key3 ...] \
+ *     (comma/semicolon/space separated; keys should come from DISTINCT Google
+ *      projects — same-project keys share one quota pool; on a daily-quota 429
+ *      the runner rotates to the next key and retries the SAME chunk; legacy
+ *      single SYLLABAI_EMBEDDING_GEMINI_API_KEY remains the fallback) \
  *   [EMBED_MODEL=gemini-embedding-001] [EMBED_MIN_INTERVAL_MS=600] \
  *   java -cp ... com.syllabai.bench.EmbedBackfill
  * </pre></p>
@@ -77,7 +84,12 @@ public final class EmbedBackfill {
         Path snapshotDir = Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot"));
         Path goldDir = Path.of(env("BENCH_GOLD", "bench/inputs/gold"));
         Path outDir = Path.of(env("BENCH_RUN_OUT", "bench/out/embed-backfill"));
-        String apiKey = required("SYLLABAI_EMBEDDING_GEMINI_API_KEY");
+        List<String> apiKeys = parseKeys(System.getenv("SYLLABAI_EMBEDDING_GEMINI_API_KEYS"),
+                System.getenv("SYLLABAI_EMBEDDING_GEMINI_API_KEY"));
+        if (apiKeys.isEmpty()) {
+            throw new IllegalStateException("missing required env SYLLABAI_EMBEDDING_GEMINI_API_KEYS"
+                    + " (or legacy SYLLABAI_EMBEDDING_GEMINI_API_KEY)");
+        }
         String model = env("EMBED_MODEL", "gemini-embedding-001");
         int dimension = Integer.parseInt(env("EMBED_DIMENSION", "768"));
         long minIntervalMs = Long.parseLong(env("EMBED_MIN_INTERVAL_MS", "600"));
@@ -92,12 +104,20 @@ public final class EmbedBackfill {
         JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(url, user, pass));
 
         log("building the production EmbeddingProvider bean (EmbeddingConfig wiring)");
-        EmbeddingProvider provider = realProvider(apiKey, model, dimension);
+        List<EmbeddingProvider> providers = new ArrayList<>();
+        for (String apiKey : apiKeys) {
+            providers.add(realProvider(apiKey, model, dimension));
+        }
+        List<String> fingerprints = new ArrayList<>();
+        for (String apiKey : apiKeys) {
+            fingerprints.add(keyFingerprint(apiKey));
+        }
+        log("embedding providers: " + providers.size() + " key(s) " + fingerprints);
 
         String preloadEnv = env("BENCH_PRELOAD_ARTIFACT", "");
         Path preloadDir = preloadEnv.isBlank() ? null : Path.of(preloadEnv);
-        BackfillResult result = run(jdbc, provider, snapshot, goldDir, outDir,
-                model, dimension, minIntervalMs, coreCommit, runDate, preloadDir);
+        BackfillResult result = run(jdbc, providers, snapshot, goldDir, outDir,
+                model, dimension, minIntervalMs, coreCommit, runDate, preloadDir, apiKeys);
 
         log(String.format("DONE status=%s chunks_embedded=%d pending_after=%d queries=%d model=%s out=%s",
                 result.status(), result.chunksEmbedded(), result.pendingAfter(),
@@ -112,6 +132,15 @@ public final class EmbedBackfill {
                               Path goldDir, Path outDir, String model, int dimension,
                               long minIntervalMs, String coreCommit, String runDate,
                               Path preloadDir) throws Exception {
+        return run(jdbc, List.of(provider), snapshot, goldDir, outDir, model, dimension,
+                minIntervalMs, coreCommit, runDate, preloadDir, List.of());
+    }
+
+    /** Multi-key core: providers[i] is built from apiKeys[i] through the same production wiring. */
+    static BackfillResult run(JdbcTemplate jdbc, List<EmbeddingProvider> providers, BenchSnapshot snapshot,
+                              Path goldDir, Path outDir, String model, int dimension,
+                              long minIntervalMs, String coreCommit, String runDate,
+                              Path preloadDir, List<String> apiKeys) throws Exception {
         Instant generatedAt = Instant.now();
         Files.createDirectories(outDir);
 
@@ -156,10 +185,14 @@ public final class EmbedBackfill {
         ChunkVectorRepository vectors = new ChunkVectorRepository(jdbc);
         int embeddedNow = 0;
         boolean budgetExhausted = false;
+        int[] perKeyEmbedded = new int[providers.size()];
+        int[] perKeyQueries = new int[providers.size()];
         try {
         for (PendingChunk p : pending) {
-            float[] v = pacer.call("chunk " + p.documentId() + ":" + p.chunkIndex(),
-                    () -> provider.embedDocument(p.content()));
+            float[] v = embedRotating(providers,
+                    i -> () -> providers.get(i).embedDocument(p.content()),
+                    pacer, "chunk " + p.documentId() + ":" + p.chunkIndex(),
+                    i -> perKeyEmbedded[i]++);
             if (v == null || v.length != dimension) {
                 throw new IllegalStateException("provider returned "
                         + (v == null ? "null" : v.length) + " dims, expected " + dimension
@@ -187,7 +220,9 @@ public final class EmbedBackfill {
         if (!budgetExhausted && goldDir != null && Files.isDirectory(goldDir)) {
             BenchGold gold = BenchGold.load(goldDir);
             for (BenchGold.GoldRecord rec : gold.records()) {
-                float[] v = pacer.call("query " + rec.id(), () -> provider.embedQuery(rec.query()));
+                float[] v = embedRotating(providers,
+                        i -> () -> providers.get(i).embedQuery(rec.query()),
+                        pacer, "query " + rec.id(), i -> perKeyQueries[i]++);
                 if (v == null || v.length != dimension) {
                     throw new IllegalStateException("provider returned "
                             + (v == null ? "null" : v.length) + " dims for query " + rec.id()
@@ -292,6 +327,16 @@ public final class EmbedBackfill {
             notes.add("INCOMPLETE: embedding budget/rate exhausted mid-run — this artifact is a PRELOAD "
                     + "checkpoint (pending_after > 0); re-dispatch with BENCH_PRELOAD_ARTIFACT pointed here");
         }
+        if (providers.size() > 1) {
+            List<String> fps = new ArrayList<>();
+            for (String apiKey : apiKeys) {
+                fps.add(keyFingerprint(apiKey));
+            }
+            notes.add("multi-key run: keys=" + providers.size() + " per_key_chunks_embedded="
+                    + Arrays.toString(perKeyEmbedded) + " per_key_queries="
+                    + Arrays.toString(perKeyQueries) + " fingerprints=" + fps);
+            notes.add("keys are expected to come from DISTINCT Google projects — same-project keys share one quota pool");
+        }
         manifest.put("notes", notes);
         Path manifestFile = outDir.resolve("manifest.json");
         Files.writeString(manifestFile, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(manifest),
@@ -312,6 +357,83 @@ public final class EmbedBackfill {
         String status = pendingAfter == 0 ? "COMPLETE" : "INCOMPLETE";
         log("artifact written to " + outDir + " (status " + status + ")");
         return new BackfillResult(status, embeddedNow, pendingAfter, queries, byRef.size());
+    }
+
+    /**
+     * Rotation core: try key i; on a quota-class hard stop move to key i+1 and
+     * retry the SAME unit; after the last key rethrow (INCOMPLETE +
+     * resume-by-preload semantics unchanged). Non-quota failures keep the
+     * RatePacer retry ladder and never rotate — a transient 429/timeout is not
+     * a dead key.
+     */
+    static float[] embedRotating(List<EmbeddingProvider> providers,
+                                 IntFunction<Callable<float[]>> attemptFor,
+                                 RatePacer pacer, String what,
+                                 IntConsumer onSuccess) throws Exception {
+        int idx = 0;
+        while (true) {
+            try {
+                float[] v = pacer.call(what, attemptFor.apply(idx));
+                onSuccess.accept(idx);
+                return v;
+            } catch (EmbeddingRateException e) {
+                if (idx + 1 >= providers.size()) {
+                    throw e;
+                }
+                log("key-" + idx + " quota-exhausted at " + what + " — rotating to key-"
+                        + (idx + 1) + " of " + providers.size());
+                idx++;
+            }
+        }
+    }
+
+    /** Multi-key env parsing: SYLLABAI_EMBEDDING_GEMINI_API_KEYS wins, legacy single-key is the fallback. */
+    static List<String> parseKeys(String multi, String single) {
+        LinkedHashMap<String, Boolean> out = new LinkedHashMap<>();
+        if (multi != null && !multi.isBlank()) {
+            for (String k : multi.split("[,;\\s]+")) {
+                if (!k.isBlank()) {
+                    out.putIfAbsent(k.trim(), Boolean.TRUE);
+                }
+            }
+        }
+        if (out.isEmpty() && single != null && !single.isBlank()) {
+            out.put(single.trim(), Boolean.TRUE);
+        }
+        return new ArrayList<>(out.keySet());
+    }
+
+    /** sha256-fingerprint prefix (10 hex) — audit-safe key identity, never the key itself. */
+    static String keyFingerprint(String key) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(key.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder("sha256:");
+            for (int i = 0; i < 5; i++) {
+                sb.append(String.format("%02x", d[i]));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "sha256:unavailable";
+        }
+    }
+
+    /**
+     * Quota-class classifier: TRUE means the key's pool is exhausted at a
+     * timescale beyond retrying (plan/daily quota) — the caller should rotate
+     * to the next key instead of burning the retry ladder. The 2026-09-17
+     * workflow logs show Google's daily-quota wording ("You exceeded your
+     * current quota, please check your plan and billing details"), which the
+     * previous per-day-only patterns missed and burned 12 retries on.
+     */
+    static boolean isQuotaExhausted(String message) {
+        if (message == null) {
+            return false;
+        }
+        String m = message.toLowerCase();
+        return m.contains("exceeded your current quota") || m.contains("per day")
+                || m.contains("requests per day") || m.contains("daily") || m.contains("rpd")
+                || m.contains("billing");
     }
 
     /** The production bean, built by the production factory (fail-fast dim contract included). */
@@ -457,8 +579,7 @@ public final class EmbedBackfill {
                     String msg = m.toLowerCase();
                     boolean rate = msg.contains("429") || msg.contains("rate") || msg.contains("resource_exhausted")
                             || msg.contains("too many requests");
-                    boolean quotaDay = msg.contains("per day") || msg.contains("requests per day")
-                            || msg.contains("daily") || msg.contains("rpd");
+                    boolean quotaDay = isQuotaExhausted(m);
                     if (quotaDay) {
                         log("daily quota exhausted at " + what + " — surfacing INCOMPLETE (resume by re-dispatch)");
                         throw new EmbeddingRateException("daily quota exhausted: " + m, e);
