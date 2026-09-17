@@ -362,9 +362,13 @@ class EmbedBackfillReplayIT {
         // 2. preload semantics: the SAME partial artifact applies with requireComplete=false
         int applied = Run004A.applyChunkVectors(jdbc, partial, snapshot, false);
         org.assertj.core.api.Assertions.assertThat(applied).isEqualTo(1);
-        Integer stored = jdbc.queryForObject(
-                "select count(*) from document_chunks where embedding_model = 'fake-embed' "
-                        + "and embedding is not null", Integer.class);
+        // scope to this document — earlier ordered tests already stored fake-embed vectors
+        Integer stored = jdbc.queryForObject("""
+                select count(*) from document_chunks c
+                join documents d on d.id = c.document_row_id
+                where d.document_id = ? and c.embedding_model = 'fake-embed'
+                  and c.embedding is not null
+                """, Integer.class, snapDoc);
         org.assertj.core.api.Assertions.assertThat(stored).isEqualTo(1);
 
         // 3. per-row fail-closed checks survive the partial flag: unknown ref still rejects
