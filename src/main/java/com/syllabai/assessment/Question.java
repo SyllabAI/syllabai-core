@@ -48,6 +48,10 @@ public class Question {
     @Column(name = "difficulty", nullable = false)
     private int difficulty;
 
+    /** where the 1-5 difficulty came from (ADR-026/V29; null = legacy seed) */
+    @Column(name = "difficulty_source", length = 30)
+    private String difficultySource;
+
     @Column(name = "expected_time_seconds", nullable = false)
     private int expectedTimeSeconds;
 
@@ -113,6 +117,8 @@ public class Question {
     public String stem() { return stem; }
     public int marks() { return marks; }
     public int difficulty() { return difficulty; }
+    public String difficultySource() { return difficultySource; }
+    public void setDifficultySource(String source) { this.difficultySource = source; }
     public int expectedTimeSeconds() { return expectedTimeSeconds; }
     public String commandWord() { return commandWord; }
     public UUID primaryTopicNodeId() { return primaryTopicNodeId; }

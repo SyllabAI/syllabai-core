@@ -79,4 +79,14 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     java.util.List<UUID> findDistinctPrimaryTopicsByPaperIds(
             @org.springframework.data.repository.query.Param("paperIds")
             java.util.Collection<UUID> paperIds);
+
+    /**
+     * ADR-026 SME bank replacement: deactivate every currently-active question
+     * in one bulk update (rows survive — attempts, marking queues, evidence and
+     * FK chains stay intact; only serving stops).
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+            "update Question q set q.active = false where q.active = true")
+    int deactivateAllActive();
 }
