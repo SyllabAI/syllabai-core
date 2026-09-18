@@ -25,7 +25,11 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "documents")
 public class Document {
 
-    public enum Kind { QUESTION_PAPER, MARK_SCHEME, SYLLABUS, OTHER }
+    public enum Kind {
+        QUESTION_PAPER, MARK_SCHEME, SYLLABUS, OTHER,
+        /** T-C06 corpus roles (V29): instructional content family. */
+        TEXTBOOK, EXTERNAL_NOTES, EXTERNAL_QUESTIONS
+    }
 
     @Id
     @Column(name = "id")
@@ -87,6 +91,14 @@ public class Document {
     @Column(name = "ingested_by")
     private UUID ingestedBy;
 
+    /**
+     * T-C05 lifecycle state on the document itself (V29). Corpus imports are
+     * born {@code SUGGESTED}; nothing serves without human validation.
+     * Insert-side only today: no serving predicate reads it yet.
+     */
+    @Column(name = "validation_state", nullable = false, length = 20)
+    private String validationState = "SUGGESTED";
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -124,6 +136,9 @@ public class Document {
     void onInsert() {
         if (id == null) id = UUID.randomUUID();
         if (createdAt == null) createdAt = Instant.now();
+        if (validationState == null || validationState.isBlank()) {
+            validationState = "SUGGESTED"; // corpus imports land SUGGESTED (T-C06)
+        }
     }
 
     public UUID id() { return id; }
@@ -145,6 +160,7 @@ public class Document {
     public Instant extractedAt() { return extractedAt; }
     public String canonicalJson() { return canonicalJson; }
     public UUID ingestedBy() { return ingestedBy; }
+    public String validationState() { return validationState; }
     public Instant createdAt() { return createdAt; }
 
     void setChunkCount(int chunkCount) { this.chunkCount = chunkCount; }
