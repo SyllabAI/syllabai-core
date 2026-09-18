@@ -64,13 +64,13 @@ class TestBuilderServiceTest {
         return new StudentQuestionView(id, "ref-" + id, "STRUCTURED", "stem " + id, marks,
                 difficulty, 300, null, null, null, List.of(),
                 List.of(new StudentQuestionView.PartView(
-                        UUID.randomUUID(), "a", "prompt", null, marks)));
+                        UUID.randomUUID(), "a", "prompt", null, marks)), List.of());
     }
 
     /** a servable view whose PRIMARY topic is the given node (targeting counts) */
     private StudentQuestionView questionOn(UUID id, UUID topicId) {
         return new StudentQuestionView(id, "ref-" + id, "MCQ_SINGLE", "stem " + id, 1,
-                1, 60, null, topicId, null, List.of(), List.of());
+                1, 60, null, topicId, null, List.of(), List.of(), List.of());
     }
 
     /** a secondary topic-mapping row for the targeting counts */

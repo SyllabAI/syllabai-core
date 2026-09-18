@@ -39,7 +39,7 @@ class MarkSchemeRevealServiceTest {
 
     private StudentQuestionView question() {
         return new StudentQuestionView(QUESTION_ID, "q01-ext", "STRUCTURED", "Explain the trend.", 6,
-                2, 300, "Explain", UUID.randomUUID(), PAPER_ID, List.of(), List.of());
+                2, 300, "Explain", UUID.randomUUID(), PAPER_ID, List.of(), List.of(), List.of());
     }
 
     private QuestionVersion version() {

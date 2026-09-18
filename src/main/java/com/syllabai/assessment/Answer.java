@@ -20,12 +20,18 @@ import java.util.UUID;
  * final truth) → HUMAN_MARKED (authoritative). A later human mark on an already-marked
  * answer becomes an OVERRIDE: it revises the marks and feeds the κ agreement gate, but
  * BKT evidence for the attempt has already fired once and is never re-fired.</p>
+ *
+ * <p>SELF_MARKED (ADR-026 SME practice tranche): the learner's own authoritative
+ * self-assessment against the revealed mark scheme — the Save-My-Exams-style flow.
+ * It settles the answer and fires the same once-only evidence as a human mark, but it
+ * is recorded in {@code learner_self_marks} (never {@code HumanMark}) so the κ
+ * agreement sample stays teacher-only by construction.</p>
  */
 @Entity
 @Table(name = "answers")
 public class Answer {
 
-    public enum MarkingState { PENDING, SMART_MARKED, HUMAN_MARKED, OVERRIDDEN }
+    public enum MarkingState { PENDING, SMART_MARKED, HUMAN_MARKED, OVERRIDDEN, SELF_MARKED }
 
     @Id
     @Column(name = "id")
@@ -96,6 +102,12 @@ public class Answer {
     public void smartMarked(int marks) {
         this.marksAwarded = marks;
         this.markingState = MarkingState.SMART_MARKED;
+    }
+
+    /** learner self-mark on a pending/smart-marked answer: authoritative, κ-excluded */
+    public void selfMarked(int marks) {
+        this.marksAwarded = marks;
+        this.markingState = MarkingState.SELF_MARKED;
     }
 
     /** human mark on a pending/smart-marked answer: authoritative */

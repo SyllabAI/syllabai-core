@@ -1,6 +1,9 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.StudentQuestionView;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,14 +38,17 @@ public class ServableQuestionService {
     private final QuestionRepository questions;
     private final QuestionVersionRepository questionVersions;
     private final ExamPaperRepository examPapers;
+    private final SmeQuestionSpecPointRepository specPoints;
     private final ServableQuestionSpec servable = new ServableQuestionSpec();
 
     public ServableQuestionService(QuestionRepository questions,
                                    QuestionVersionRepository questionVersions,
-                                   ExamPaperRepository examPapers) {
+                                   ExamPaperRepository examPapers,
+                                   SmeQuestionSpecPointRepository specPoints) {
         this.questions = questions;
         this.questionVersions = questionVersions;
         this.examPapers = examPapers;
+        this.specPoints = specPoints;
     }
 
     /** servable questions mapped to a topic (primary or question_topics), difficulty-ordered */
@@ -53,6 +59,32 @@ public class ServableQuestionService {
     /** all servable questions, difficulty-ordered */
     public List<StudentQuestionView> allActive() {
         return projectAll(filterBlockedPapers(questions.findAllActive()));
+    }
+
+    /**
+     * Curriculum codes per question id (ADR-026): PRIMARY mappings first, then
+     * SECONDARY, each code-ordered — one batched query, empty lists for
+     * questions without mappings (e.g. the seed MCQs).
+     */
+    private Map<UUID, List<String>> specPointCodes(Collection<UUID> questionIds) {
+        Map<UUID, List<String>> byQuestion = new HashMap<>();
+        if (questionIds.isEmpty()) {
+            return byQuestion;
+        }
+        Map<UUID, List<SmeQuestionSpecPointRepository.CodeProjection>> grouped = specPoints
+                .findCodesByQuestionIdsIn(questionIds).stream()
+                .collect(Collectors.groupingBy(SmeQuestionSpecPointRepository.CodeProjection::getQuestionId));
+        grouped.forEach((questionId, rows) -> {
+            List<String> codes = new ArrayList<>(rows.stream()
+                    .sorted(Comparator
+                            .comparing((SmeQuestionSpecPointRepository.CodeProjection r) ->
+                                    "PRIMARY".equals(r.getRole()) ? 0 : 1)
+                            .thenComparing(SmeQuestionSpecPointRepository.CodeProjection::getCode))
+                    .map(SmeQuestionSpecPointRepository.CodeProjection::getCode)
+                    .toList());
+            byQuestion.put(questionId, codes);
+        });
+        return byQuestion;
     }
 
     /**
@@ -72,7 +104,9 @@ public class ServableQuestionService {
         return questions.findWithOptions(id)
                 .filter(q -> !paperBlocksServing(Set.of(), q.examPaperId()))
                 .map(q -> project(q, currentVersion(q.id())))
-                .filter(Objects::nonNull);
+                .filter(Objects::nonNull)
+                .map(v -> v.withSpecPointCodes(
+                        specPointCodes(List.of(v.id())).getOrDefault(v.id(), List.of())));
     }
 
     /** whether a question may still be served to learners (e.g. before recommending a retry) */
@@ -120,9 +154,12 @@ public class ServableQuestionService {
                             .max(Comparator.comparingInt(QuestionVersion::version))
                             .ifPresent(current -> currentByQuestion.put(questionId, current)));
         }
+        Map<UUID, List<String>> codes = specPointCodes(
+                candidates.stream().map(Question::id).toList());
         return candidates.stream()
                 .map(q -> project(q, currentByQuestion.get(q.id())))
                 .filter(Objects::nonNull)
+                .map(v -> v.withSpecPointCodes(codes.getOrDefault(v.id(), List.of())))
                 .toList();
     }
 

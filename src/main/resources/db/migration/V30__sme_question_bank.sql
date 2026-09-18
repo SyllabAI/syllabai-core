@@ -1,4 +1,7 @@
--- V29: SME question-bank import surface (ADR-026).
+-- V30: SME question-bank import surface (ADR-026).
+--
+-- (Renumbered from V29: T-C06's V29__content_corpus_kinds landed on main
+-- after this branch was cut — two V29s cannot coexist under Flyway.)
 --
 -- Adds the T-C18-ratified question_spec_points mapping table (fail-closed:
 -- spec points must exist as knowledge nodes; PRIMARY/SECONDARY roles), a

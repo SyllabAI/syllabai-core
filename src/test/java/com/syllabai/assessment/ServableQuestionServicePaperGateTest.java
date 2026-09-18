@@ -29,8 +29,10 @@ class ServableQuestionServicePaperGateTest {
     private final QuestionVersionRepository questionVersions =
             mock(QuestionVersionRepository.class);
     private final ExamPaperRepository examPapers = mock(ExamPaperRepository.class);
+    private final com.syllabai.sme.SmeQuestionSpecPointRepository specPoints =
+            mock(com.syllabai.sme.SmeQuestionSpecPointRepository.class);
     private final ServableQuestionService service =
-            new ServableQuestionService(questions, questionVersions, examPapers);
+            new ServableQuestionService(questions, questionVersions, examPapers, specPoints);
 
     private Question structuredQuestion(UUID paperId) {
         Question question = mock(Question.class);

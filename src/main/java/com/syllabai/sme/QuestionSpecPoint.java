@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /**
  * A question → specification-point mapping (T-C18 ratified design, landed by
- * ADR-026/V29). Spec points are knowledge nodes (SUBTOPIC-typed, codes like
+ * ADR-026/V30). Spec points are knowledge nodes (SUBTOPIC-typed, codes like
  * {@code 4CH1-1.15}); the mapping carries a PRIMARY/SECONDARY role and the
  * two-tier AI/HUMAN validation vocabulary — SME-resolution mappings land
  * AI_VALIDATED under the operator's 2026-09-17 delegation and are upgradable

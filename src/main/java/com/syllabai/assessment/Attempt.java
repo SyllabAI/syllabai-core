@@ -79,7 +79,7 @@ public class Attempt {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    public enum MarkingState { AUTO_GRADED, PENDING, SMART_MARKED, HUMAN_MARKED, OVERRIDDEN }
+    public enum MarkingState { AUTO_GRADED, PENDING, SMART_MARKED, HUMAN_MARKED, OVERRIDDEN, SELF_MARKED }
 
     protected Attempt() {
         // JPA
@@ -136,6 +136,11 @@ public class Attempt {
 
     public void humanMarked(boolean revising) {
         this.markingState = revising ? MarkingState.OVERRIDDEN : MarkingState.HUMAN_MARKED;
+    }
+
+    /** learner self-mark settles the attempt like a human mark (ADR-026 SME tranche) */
+    public void selfMarked() {
+        this.markingState = MarkingState.SELF_MARKED;
     }
 
     /**
