@@ -13,9 +13,23 @@ import org.springframework.stereotype.Repository;
  * {@code vector(768)}, so embeddings are written and searched here with plain SQL
  * and explicit {@code ?::vector} casts — the same JdbcTemplate-meets-native-SQL
  * posture the knowledge-graph recursive CTEs use.
+ *
+ * <p>Embed-revision read filter (V33, plan §6): {@link #CURRENT_EMBED_REV} is the
+ * single constant deciding which corpus generation serves. rev1 rows (all of
+ * production today) carry embed_rev = 1; the R3 v2 ingest writes embed_rev = 2
+ * rows and the cut-over is THIS constant flipping to 2 — rollback is flipping it
+ * back. rev1 rows are never mutated in place; they are deleted at the R5
+ * cut-over once the eval gate passes.</p>
  */
 @Repository
 public class ChunkVectorRepository {
+
+    /**
+     * The corpus generation that serves (plan §6). 1 = rev1 (current production:
+     * 172 legacy docs, no headers/metadata). Flip to 2 only at the R3 cut-over,
+     * after the golden-set eval gates pass — never before.
+     */
+    public static final int CURRENT_EMBED_REV = 1;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -47,9 +61,16 @@ public class ChunkVectorRepository {
      * to this curriculum version (the DB-verified join path
      * {@code document_chunks → documents(document_row_id) → exam_papers
      * (question/mark_scheme_document_id = documents.document_id) → subjects
-     * (subject_id) → curriculum_versions}). Documents with no paper link resolve
-     * to no curriculum and are therefore never served — fail-closed, never
-     * unscoped. The curriculum id is a bound parameter (never SQL text).</p>
+     * (subject_id) → curriculum_versions}). OR — the V33 subject-branch — the
+     * chunk itself carries {@code subject_id} resolving into the same curriculum
+     * version, which is how the knowledge layer (notes/spec/textbook chunks with
+     * no exam-paper row) becomes servable. Both branches fail closed: chunks
+     * with NULL subject_id and no paper link resolve to no curriculum and are
+     * never served. The curriculum id is a bound parameter (never SQL text).</p>
+     *
+     * <p>Every row is also filtered to {@code embed_rev = CURRENT_EMBED_REV} so
+     * two corpus generations never blend inside one result set (plan §6
+     * supersession rule — RRF must never see both).</p>
      */
     public List<ChunkHit> search(float[] queryVector, Document.Kind kind, UUID curriculumVersionId, int limit) {
         if (curriculumVersionId == null) {
@@ -65,19 +86,26 @@ public class ChunkVectorRepository {
                 from document_chunks c
                 join documents d on d.id = c.document_row_id
                 where c.embedding is not null
-                  and exists (
-                        select 1 from exam_papers p
-                        join subjects s on s.id = p.subject_id
-                        where s.curriculum_version_id = ?
-                          and (p.question_paper_document_id = d.document_id
-                            or p.mark_scheme_document_id = d.document_id))
+                  and c.embed_rev = ?
+                  and (
+                        exists (
+                              select 1 from exam_papers p
+                              join subjects s on s.id = p.subject_id
+                              where s.curriculum_version_id = ?
+                                and (p.question_paper_document_id = d.document_id
+                                  or p.mark_scheme_document_id = d.document_id))
+                     or exists (
+                              select 1 from subjects s2
+                              where s2.curriculum_version_id = ?
+                                and s2.id = c.subject_id))
                 """ + kindFilter + """
                 order by c.embedding <=> ?::vector
                 limit ?
                 """;
         return jdbc.query(sql,
                 (rs, i) -> mapHit(rs),
-                literal, curriculumVersionId, literal, limit);
+                literal, CURRENT_EMBED_REV, curriculumVersionId, curriculumVersionId,
+                literal, limit);
     }
 
     private ChunkHit mapHit(java.sql.ResultSet rs) throws java.sql.SQLException {

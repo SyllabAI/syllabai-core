@@ -64,6 +64,7 @@ class ChunkLexicalRepositoryTest {
         verify(jdbc).query(sql.capture(), any(RowMapper.class), any(Object[].class));
         assertThat(sql.getValue())
                 .contains("websearch_to_tsquery('english', ?)")
+                .contains("c.embed_rev = ?")
                 .contains("content_tsv @@ q.tsq")
                 .contains("ts_rank_cd(c.content_tsv, q.tsq)")
                 .contains("order by ts_rank_cd(c.content_tsv, q.tsq) desc, c.id")
@@ -86,7 +87,7 @@ class ChunkLexicalRepositoryTest {
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbc).query(sql.capture(), any(RowMapper.class), args.capture());
-        assertThat(args.getValue()).containsExactly("moles", CV_ID, 7);
+        assertThat(args.getValue()).containsExactly("moles", ChunkVectorRepository.CURRENT_EMBED_REV, CV_ID, 7);
     }
 
     @Test

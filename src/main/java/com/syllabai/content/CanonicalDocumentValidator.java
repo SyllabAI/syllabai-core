@@ -76,6 +76,24 @@ public class CanonicalDocumentValidator {
             }
         }
 
+        // retrieval identity (Embedding v2, plan §4.2/§8.1): optional as a whole,
+        // but any series that IS present must be the canonical enum — a raw
+        // label like "Summer 2019" stored as a filter is a lie waiting for a
+        // year-range query (plan §12 anti-pattern 7)
+        if (doc.retrieval() != null) {
+            CanonicalDocumentDto.RetrievalMeta meta = doc.retrieval();
+            if (meta.series() != null && !meta.series().isBlank()
+                    && !Set.of("JAN", "JUN", "NOV").contains(meta.series().strip())) {
+                violations.add("retrieval.series must be JAN, JUN or NOV (was "
+                        + quote(meta.series()) + ") — canonicalize \"Summer\"→JUN, "
+                        + "\"October/November\"→NOV before ingest");
+            }
+            if (meta.year() != null && (meta.year() < 1950 || meta.year() > 2100)) {
+                violations.add("retrieval.year must be a plausible exam year (was "
+                        + meta.year() + ")");
+            }
+        }
+
         // text may legitimately be null (layout-only elements — the real 4CH0 QP
         // fixture ships one); chunking skips them, so validation tolerates them
         Set<String> elementIds = new HashSet<>();

@@ -12,6 +12,8 @@ import com.syllabai.curriculum.CurriculumVersionRepository;
 import com.syllabai.curriculum.Subject;
 import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.content.CanonicalDocumentDto;
+import com.syllabai.content.CanonicalDocumentValidator;
+import com.syllabai.content.ChunkVectorRepository;
 import com.syllabai.content.ContentIngestionService;
 import com.syllabai.content.ContentRetrievalService;
 import com.syllabai.content.Document;
@@ -23,6 +25,7 @@ import com.syllabai.content.EmbeddingProvider;
 import com.syllabai.content.InvalidDocumentException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -267,11 +270,126 @@ class ContentPipelineIT {
                 qp.dto().documentId(), "0.9", qp.dto().version(), qp.dto().source(),
                 qp.dto().pageCount(), qp.dto().pages(), qp.dto().sections(),
                 qp.dto().textBlocks(), qp.dto().tables(), qp.dto().figures(),
-                qp.dto().equations(), qp.dto().provenance());
+                qp.dto().equations(), qp.dto().provenance(), null);
 
         assertThatThrownBy(() -> ingestion.ingest(tampered, qp.raw(), Document.Kind.OTHER, null))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("schemaVersion");
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("V33 atom-alignment: a grouped corpus chunks atom-aligned — no chunk crosses an atom")
+    void atomAlignedChunking() {
+        // the fixture carries a retrieval block whose subjectCode must resolve
+        CurriculumVersion atomsCv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "NOTE-ATOMS", "IT fixture atoms",
+                CurriculumVersion.Status.ACTIVE));
+        subjects.save(new Subject(atomsCv, "NOTE-ATOMS", "Chemistry (atoms)"));
+
+        String checksum = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        String documentId = CanonicalDocumentValidator.derivedDocumentId(
+                checksum, "opendataloader-pdf", "2.5.7");
+        String filler = "lorem ".repeat(133); // ~800 chars ≈ 200 estimated tokens per block
+        List<CanonicalDocumentDto.TextBlockElement> blocks = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            blocks.add(new CanonicalDocumentDto.TextBlockElement("q3-" + i, "text_block",
+                    1, null, "atom three part " + i + " " + filler, i, 1.0, "paragraph",
+                    null, "opendataloader-pdf", "2.5.7", "q3"));
+        }
+        for (int i = 0; i < 3; i++) {
+            blocks.add(new CanonicalDocumentDto.TextBlockElement("q4-" + i, "text_block",
+                    2, null, "atom four part " + i + " " + filler, i, 1.0, "paragraph",
+                    null, "opendataloader-pdf", "2.5.7", "q4"));
+        }
+        CanonicalDocumentDto doc = new CanonicalDocumentDto(documentId, "1.0", 1,
+                new CanonicalDocumentDto.SourceInfo("atoms-it.pdf", checksum, "SHA-256",
+                        "application/pdf", "atoms-it.pdf"),
+                2, List.of(), List.of(), blocks, List.of(), List.of(), List.of(),
+                new CanonicalDocumentDto.ProvenanceInfo("opendataloader-pdf", "2.5.7",
+                        "2026-09-20T00:00:00Z", java.util.Map.of(), "syllabai-parser", "1.0"),
+                new CanonicalDocumentDto.RetrievalMeta("IGCSE Chemistry", "NOTE-ATOMS",
+                        "JUN", 2022, "1C", null, null, null));
+
+        // 200-token blocks pack against the 300-token target → each atom yields
+        // MULTIPLE chunks; the assertion is that no chunk ever mixes atoms
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(doc, "{}", Document.Kind.QUESTION_PAPER, null);
+        assertThat(result.chunks()).isGreaterThanOrEqualTo(4);
+
+        List<DocumentChunk> stored = chunks
+                .findByDocumentRowIdOrderByChunkIndexAsc(result.id());
+        assertThat(stored).hasSize(result.chunks());
+        for (DocumentChunk chunk : stored) {
+            String first = chunk.elementIds().get(0);
+            boolean atomThree = first.startsWith("q3-");
+            assertThat(chunk.atomNumber()).isEqualTo(atomThree ? "3" : "4");
+            for (String id : chunk.elementIds()) {
+                assertThat(id.startsWith(atomThree ? "q3-" : "q4-")).isTrue();
+            }
+            // metadata mirror + per-chunk header on EVERY chunk (chunks 2..n of an
+            // atom are not blind — plan §4.1 step 4)
+            assertThat(chunk.series()).isEqualTo("JUN");
+            assertThat(chunk.year()).isEqualTo(2022);
+            assertThat(chunk.paperCode()).isEqualTo("1C");
+            assertThat(chunk.embedRev()).isEqualTo(ChunkVectorRepository.CURRENT_EMBED_REV);
+            assertThat(chunk.content()).contains("IGCSE Chemistry 4CH1 | Jun 2022 | 1C | Q");
+        }
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("V33 subject branch: paper-less note chunks serve inside their curriculum and leak nowhere else")
+    void subjectLinkedNoteServesViaSubjectBranch() {
+        // curriculum + subject with NO exam-paper row (the knowledge layer shape)
+        CurriculumVersion cv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "NOTE-IT", "IT fixture notes",
+                CurriculumVersion.Status.ACTIVE));
+        subjects.save(new Subject(cv, "NOTE-IT", "Chemistry (notes)"));
+
+        String checksum = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        String documentId = CanonicalDocumentValidator.derivedDocumentId(
+                checksum, "opendataloader-pdf", "2.5.7");
+        List<CanonicalDocumentDto.TextBlockElement> blocks = List.of(
+                new CanonicalDocumentDto.TextBlockElement("n-0", "text_block", 1, null,
+                        "Electrolysis of molten sodium chloride produces sodium metal and "
+                                + "chlorine gas at the electrodes.", 0, 1.0, "paragraph",
+                        null, "opendataloader-pdf", "2.5.7", null),
+                new CanonicalDocumentDto.TextBlockElement("n-1", "text_block", 1, null,
+                        "Molten ionic compounds conduct because their ions are free to "
+                                + "move towards the electrodes.", 1, 1.0, "paragraph",
+                        null, "opendataloader-pdf", "2.5.7", null));
+        CanonicalDocumentDto note = new CanonicalDocumentDto(documentId, "1.0", 1,
+                new CanonicalDocumentDto.SourceInfo("notes.pdf", checksum, "SHA-256",
+                        "application/pdf", "notes.pdf"),
+                1, List.of(), List.of(), blocks, List.of(), List.of(), List.of(),
+                new CanonicalDocumentDto.ProvenanceInfo("opendataloader-pdf", "2.5.7",
+                        "2026-09-20T00:00:00Z", java.util.Map.of(), "syllabai-parser", "1.0"),
+                new CanonicalDocumentDto.RetrievalMeta("IGCSE Chemistry", "NOTE-IT",
+                        null, null, null, "Notes", "Electrolysis", List.of("1.44")));
+
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(note, "{}", Document.Kind.EXTERNAL_NOTES, null);
+        embedding.embedDocument(result.id());
+
+        // the owning curriculum serves the note chunk through the SUBJECT branch
+        // (there is no exam_papers row — the old join path alone could never see it)
+        var owner = retrieval.search("electrolysis molten chloride electrodes",
+                null, new CurriculumScope(cv.id(), "NOTE-IT", Set.of()), 10);
+        assertThat(owner).isNotEmpty();
+        assertThat(owner.get(0).documentId()).isEqualTo(documentId);
+        assertThat(owner.get(0).content()).containsIgnoringCase("electrolysis");
+
+        // leakage control: a foreign curriculum (own subject, different id) never
+        // sees the note chunk — fail-closed unchanged
+        var foreignHits = retrieval.search("electrolysis molten chloride electrodes",
+                null, new CurriculumScope(
+                        curriculumVersions.save(new CurriculumVersion("Edexcel", "IGCSE",
+                                "NOTE-FOREIGN", "IT fixture foreign",
+                                CurriculumVersion.Status.ACTIVE)).id(),
+                        "NOTE-FOREIGN", Set.of()), 50);
+        assertThat(foreignHits)
+                .noneMatch(h -> h.documentId().equals(documentId));
     }
 
     /**

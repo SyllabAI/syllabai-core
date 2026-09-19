@@ -40,21 +40,30 @@ final class CanonicalDocs {
                 List.of(),
                 new CanonicalDocumentDto.ProvenanceInfo("opendataloader-pdf", "2.5.7",
                         "2026-09-03T08:01:48.225885671Z",
-                        java.util.Map.of("mode", "fast"), "syllabai-parser", "1.0"));
+                        java.util.Map.of("mode", "fast"), "syllabai-parser", "1.0"),
+                null);
     }
 
     static CanonicalDocumentDto.TextBlockElement block(String id, int page, int order,
                                                         String text) {
         return new CanonicalDocumentDto.TextBlockElement(id, "text_block", page,
                 new CanonicalDocumentDto.BoundingBox(1.0, 1.0, 10.0, 10.0, "pt"),
-                text, order, 1.0, "paragraph", null, "opendataloader-pdf", "2.5.7");
+                text, order, 1.0, "paragraph", null, "opendataloader-pdf", "2.5.7", null);
+    }
+
+    /** a block carrying an atom group key (Embedding v2 bridge shape) */
+    static CanonicalDocumentDto.TextBlockElement groupedBlock(String id, int page, int order,
+                                                               String text, String groupKey) {
+        return new CanonicalDocumentDto.TextBlockElement(id, "text_block", page,
+                new CanonicalDocumentDto.BoundingBox(1.0, 1.0, 10.0, 10.0, "pt"),
+                text, order, 1.0, "paragraph", null, "opendataloader-pdf", "2.5.7", groupKey);
     }
 
     static CanonicalDocumentDto.TableElement table(String id, int page, int order, String text) {
         return new CanonicalDocumentDto.TableElement(id, "table", page,
                 new CanonicalDocumentDto.BoundingBox(1.0, 1.0, 10.0, 10.0, "pt"),
                 text, order, 1.0, List.of(List.of("Time", "Volume")), 1, 2,
-                "opendataloader-pdf", "2.5.7");
+                "opendataloader-pdf", "2.5.7", null);
     }
 
     /** N pages of M same-sized blocks — page p holds blocks ordered by reading order. */
@@ -70,7 +79,37 @@ final class CanonicalDocs {
                 new CanonicalDocumentDto.SourceInfo("bulk.pdf", sha256(), "SHA-256",
                         "application/pdf", "bulk.pdf"),
                 pages, List.of(), List.of(), blocks, List.of(), List.of(), List.of(),
-                valid().provenance());
+                valid().provenance(), null);
+    }
+
+    /**
+     * A minimal two-atom document (Embedding v2 bridge shape): each atom is a
+     * group of same-sized blocks with its own group key. Deterministic content:
+     * atom g1 spans pages 1..2, atom g2 spans pages 3..4.
+     */
+    static CanonicalDocumentDto twoAtoms(int blocksPerAtom) {
+        String checksum = sha256();
+        List<CanonicalDocumentDto.TextBlockElement> blocks = new ArrayList<>();
+        for (int b = 0; b < blocksPerAtom; b++) {
+            blocks.add(groupedBlock("g1-" + b, 1 + (b % 2), b,
+                    "atom one block " + b + " " + "lorem ".repeat(8), "q3"));
+        }
+        for (int b = 0; b < blocksPerAtom; b++) {
+            blocks.add(groupedBlock("g2-" + b, 3 + (b % 2), b,
+                    "atom two block " + b + " " + "lorem ".repeat(8), "q4"));
+        }
+        return new CanonicalDocumentDto(
+                CanonicalDocumentValidator.derivedDocumentId(checksum,
+                        "opendataloader-pdf", "2.5.7"),
+                "1.0", 1,
+                new CanonicalDocumentDto.SourceInfo("atoms.pdf", checksum, "SHA-256",
+                        "application/pdf", "atoms.pdf"),
+                4, List.of(), List.of(), blocks, List.of(), List.of(), List.of(),
+                valid().provenance(),
+                // doc-level identity for a paper — no doc-level spec codes
+                // (spec anchoring is per-question, never doc-wide)
+                new CanonicalDocumentDto.RetrievalMeta("IGCSE Chemistry", "4CH1",
+                        "JUN", 2022, "1C", null, null, null));
     }
 
     private static String sha256() {

@@ -82,7 +82,7 @@ class ChunkingServiceTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto withHuge = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), List.of(),
-                blocks, List.of(), List.of(), List.of(), doc.provenance());
+                blocks, List.of(), List.of(), List.of(), doc.provenance(), null);
         List<ChunkDraft> chunks = chunking.chunk(withHuge);
         assertThat(chunks).hasSize(2);
         assertThat(chunks.get(1).content()).isEqualTo(huge.strip());
@@ -95,7 +95,7 @@ class ChunkingServiceTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto empty = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), doc.provenance());
+                List.of(), List.of(), List.of(), List.of(), doc.provenance(), null);
         assertThat(chunking.chunk(empty)).isEmpty();
     }
 
@@ -114,5 +114,115 @@ class ChunkingServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ChunkingService(10, 300))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ── Embedding v2 (plan §4.1): atom-boundary mode + per-chunk headers ──────
+
+    @Test
+    @DisplayName("V33: a group-key change is a hard boundary — no chunk crosses an atom")
+    void atomBoundaryRespected() {
+        CanonicalDocumentDto doc = CanonicalDocs.twoAtoms(4);
+        List<ChunkDraft> chunks = chunking.chunk(doc, Document.Kind.QUESTION_PAPER);
+
+        assertThat(chunks).isNotEmpty();
+        for (ChunkDraft chunk : chunks) {
+            // every chunk carries exactly one group key (never a mix)
+            List<String> ids = chunk.elementIds();
+            boolean fromAtomOne = ids.get(0).startsWith("g1-");
+            for (String id : ids) {
+                assertThat(id.startsWith(fromAtomOne ? "g1-" : "g2-")).isTrue();
+            }
+            assertThat(chunk.groupKey()).isEqualTo(fromAtomOne ? "q3" : "q4");
+        }
+        // both atoms produced chunks
+        assertThat(chunks.stream().map(ChunkDraft::groupKey).distinct())
+                .containsExactlyInAnyOrder("q3", "q4");
+    }
+
+    @Test
+    @DisplayName("V33: oversized block inside an atom splits at block boundary WITHIN the atom")
+    void oversizedInsideAtomStaysInsideAtom() {
+        String huge = "x".repeat(4000); // 1000 estimated tokens > max 800
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        List<CanonicalDocumentDto.TextBlockElement> blocks = List.of(
+                CanonicalDocs.groupedBlock("a-0", 1, 0, "atom q3 small block", "q3"),
+                CanonicalDocs.groupedBlock("a-1", 1, 1, huge, "q3"),
+                CanonicalDocs.groupedBlock("a-2", 1, 2, "atom q3 after block", "q3"),
+                CanonicalDocs.groupedBlock("b-0", 2, 0, "atom q4 block", "q4"));
+        CanonicalDocumentDto grouped = new CanonicalDocumentDto(doc.documentId(), "1.0",
+                doc.version(), doc.source(), doc.pageCount(), doc.pages(), List.of(),
+                blocks, List.of(), List.of(), List.of(), doc.provenance(), null);
+
+        List<ChunkDraft> chunks = chunking.chunk(grouped, Document.Kind.QUESTION_PAPER);
+
+        // no chunk mixes group keys, and q3 still yields chunks after the oversized one
+        assertThat(chunks).hasSize(4);
+        assertThat(chunks.get(0).groupKey()).isEqualTo("q3");
+        assertThat(chunks.get(0).elementIds()).containsExactly("a-0");
+        assertThat(chunks.get(1).groupKey()).isEqualTo("q3"); // oversized, own chunk
+        assertThat(chunks.get(1).elementIds()).containsExactly("a-1");
+        assertThat(chunks.get(2).groupKey()).isEqualTo("q3"); // same atom continues
+        assertThat(chunks.get(2).elementIds()).containsExactly("a-2");
+        assertThat(chunks.get(3).groupKey()).isEqualTo("q4");
+        assertThat(chunks.get(3).elementIds()).containsExactly("b-0");
+    }
+
+    @Test
+    @DisplayName("V33: every chunk of a retrieval-carrying document is stamped with the header")
+    void headerProjectedOnEveryChunk() {
+        CanonicalDocumentDto doc = CanonicalDocs.twoAtoms(2);
+        List<ChunkDraft> chunks = chunking.chunk(doc, Document.Kind.QUESTION_PAPER);
+
+        assertThat(chunks).hasSize(2);
+        for (ChunkDraft chunk : chunks) {
+            String[] lines = chunk.content().split("\n", 2);
+            assertThat(lines).hasSize(2);
+            // subject segment qualifies title + code; series/year/paper/qref/pages present
+            assertThat(lines[0])
+                    .isEqualTo("IGCSE Chemistry 4CH1 | Jun 2022 | 1C | Q"
+                            + chunk.groupKey().substring(1) + " | pp."
+                            + chunk.pageStart() + "–" + chunk.pageEnd());
+            // header is prepended, body follows untouched
+            assertThat(lines[1]).startsWith("atom ");
+        }
+    }
+
+    @Test
+    @DisplayName("V33: legacy-shaped documents (no retrieval block) get no header — byte-identical bodies")
+    void legacyDocumentsUnchanged() {
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        List<ChunkDraft> chunks = chunking.chunk(doc, Document.Kind.QUESTION_PAPER);
+        assertThat(chunks).isNotEmpty();
+        for (ChunkDraft chunk : chunks) {
+            assertThat(chunk.groupKey()).isNull();
+            // no identity material in the document ⇒ no header line anywhere
+            assertThat(chunk.content()).doesNotContain("IGCSE");
+            assertThat(chunk.content().lines().count())
+                    .isEqualTo(chunk.elementIds().size());
+        }
+    }
+
+    @Test
+    @DisplayName("V33: a mark scheme chunk without explicit label carries the MS prefix in the q segment")
+    void markSchemeHeaderPrefix() {
+        CanonicalDocumentDto doc = CanonicalDocs.twoAtoms(1);
+        List<ChunkDraft> chunks = chunking.chunk(doc, Document.Kind.MARK_SCHEME);
+        assertThat(chunks).isNotEmpty();
+        String[] lines = chunks.get(0).content().split("\n", 2);
+        assertThat(lines[0]).contains(" | MS Q3 | ");
+    }
+
+    @Test
+    @DisplayName("V33: notes header composes label + numeric-aware spec range")
+    void notesHeaderComposition() {
+        assertThat(ChunkHeaderBuilder.specRangeSegment(List.of("1.25", "1.22", "1.10")))
+                .isEqualTo("Spec 1.10–1.25");
+        assertThat(ChunkHeaderBuilder.specRangeSegment(List.of("1.22")))
+                .isEqualTo("Spec 1.22");
+        assertThat(ChunkHeaderBuilder.specRangeSegment(List.of())).isEmpty();
+        assertThat(ChunkHeaderBuilder.displaySeries("JUN")).isEqualTo("Jun");
+        assertThat(ChunkHeaderBuilder.normalizeAtom("q14")).isEqualTo("14");
+        assertThat(ChunkHeaderBuilder.normalizeAtom("Q14b")).isEqualTo("14b");
+        assertThat(ChunkHeaderBuilder.normalizeAtom(null)).isNull();
     }
 }

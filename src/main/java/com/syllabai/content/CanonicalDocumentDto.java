@@ -14,6 +14,17 @@ import java.util.List;
  * {@code confidence}, {@code source_engine}, {@code source_engine_version}). The core
  * re-validates every invariant the parser guarantees — never trust input across a
  * process boundary — see {@link CanonicalDocumentValidator}.</p>
+ *
+ * <p>Embedding-v2 additions (all OPTIONAL, schema-1.0 tolerant — older documents
+ * without them chunk exactly as before):</p>
+ * <ul>
+ *   <li>{@code retrieval} — doc-level retrieval identity (subject/series/year/
+ *       paper code) mirrored into chunk metadata columns; the SQL side of
+ *       "headers are for the vector, columns are for SQL".</li>
+ *   <li>{@code group_key} on text/table/equation elements — the atom identity
+ *       ({@code q3}, {@code q4}…). A group-key change is a hard chunk boundary:
+ *       no chunk ever crosses an atom (plan §4.1).</li>
+ * </ul>
  */
 public record CanonicalDocumentDto(
         @JsonProperty("documentId") String documentId,
@@ -27,7 +38,8 @@ public record CanonicalDocumentDto(
         @JsonProperty("tables") List<TableElement> tables,
         @JsonProperty("figures") List<FigureElement> figures,
         @JsonProperty("equations") List<EquationElement> equations,
-        @JsonProperty("provenance") ProvenanceInfo provenance) {
+        @JsonProperty("provenance") ProvenanceInfo provenance,
+        @JsonProperty("retrieval") RetrievalMeta retrieval) {
 
     public static final String SUPPORTED_SCHEMA = "1.0";
 
@@ -61,6 +73,24 @@ public record CanonicalDocumentDto(
             @JsonProperty("unit") String unit) {
     }
 
+    /**
+     * Doc-level retrieval identity (Embedding v2, plan §4.2/§6.3). Every field is
+     * optional; whatever is present is mirrored into chunk metadata columns and
+     * the per-chunk retrieval header. {@code series} must be the canonical enum
+     * JAN/JUN/NOV when present (validator-enforced) — raw labels like
+     * "Summer 2019" are rejected, never stored.
+     */
+    public record RetrievalMeta(
+            @JsonProperty("subjectTitle") String subjectTitle,
+            @JsonProperty("subjectCode") String subjectCode,
+            @JsonProperty("series") String series,
+            @JsonProperty("year") Integer year,
+            @JsonProperty("paperCode") String paperCode,
+            @JsonProperty("label") String label,
+            @JsonProperty("unit") String unit,
+            @JsonProperty("specCodes") List<String> specCodes) {
+    }
+
     public record TextBlockElement(
             @JsonProperty("element_id") String elementId,
             @JsonProperty("element_type") String elementType,
@@ -72,7 +102,8 @@ public record CanonicalDocumentDto(
             @JsonProperty("role") String role,
             @JsonProperty("heading_level") Integer headingLevel,
             @JsonProperty("source_engine") String sourceEngine,
-            @JsonProperty("source_engine_version") String sourceEngineVersion) {
+            @JsonProperty("source_engine_version") String sourceEngineVersion,
+            @JsonProperty("group_key") String groupKey) {
     }
 
     public record TableElement(
@@ -87,7 +118,8 @@ public record CanonicalDocumentDto(
             @JsonProperty("row_count") Integer rowCount,
             @JsonProperty("column_count") Integer columnCount,
             @JsonProperty("source_engine") String sourceEngine,
-            @JsonProperty("source_engine_version") String sourceEngineVersion) {
+            @JsonProperty("source_engine_version") String sourceEngineVersion,
+            @JsonProperty("group_key") String groupKey) {
     }
 
     public record FigureElement(
@@ -115,7 +147,8 @@ public record CanonicalDocumentDto(
             @JsonProperty("confidence") Double confidence,
             @JsonProperty("latex") String latex,
             @JsonProperty("source_engine") String sourceEngine,
-            @JsonProperty("source_engine_version") String sourceEngineVersion) {
+            @JsonProperty("source_engine_version") String sourceEngineVersion,
+            @JsonProperty("group_key") String groupKey) {
     }
 
     public record ProvenanceInfo(

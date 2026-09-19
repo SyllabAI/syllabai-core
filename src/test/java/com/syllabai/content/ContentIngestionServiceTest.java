@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.curriculum.SubjectRepository;
 import com.syllabai.shared.ConflictException;
+import com.syllabai.shared.NotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,9 +27,10 @@ class ContentIngestionServiceTest {
 
     private final DocumentRepository documents = mock(DocumentRepository.class);
     private final DocumentChunkRepository chunks = mock(DocumentChunkRepository.class);
+    private final SubjectRepository subjects = mock(SubjectRepository.class);
     private final ContentIngestionService service = new ContentIngestionService(
             new CanonicalDocumentValidator(), new ChunkingService(300, 800),
-            documents, chunks);
+            documents, chunks, subjects);
 
     private final List<Document> savedDocuments = new ArrayList<>();
     private final List<DocumentChunk> savedChunks = new ArrayList<>();
@@ -76,6 +79,76 @@ class ContentIngestionServiceTest {
     }
 
     @Test
+    @DisplayName("V33: retrieval identity is mirrored onto every chunk; embed_rev = current")
+    void retrievalMetadataMirrored() {
+        UUID subjectId = UUID.randomUUID();
+        com.syllabai.curriculum.Subject subject = subject("4CH1", subjectId);
+        when(subjects.findByCode("4CH1")).thenReturn(Optional.of(subject));
+        CanonicalDocumentDto doc = CanonicalDocs.twoAtoms(2);
+
+        service.ingest(doc, "{}", Document.Kind.QUESTION_PAPER, null);
+
+        assertThat(savedChunks).isNotEmpty();
+        for (DocumentChunk chunk : savedChunks) {
+            assertThat(chunk.kind()).isEqualTo(Document.Kind.QUESTION_PAPER);
+            assertThat(chunk.subjectId()).isEqualTo(subjectId);
+            assertThat(chunk.series()).isEqualTo("JUN");
+            assertThat(chunk.year()).isEqualTo(2022);
+            assertThat(chunk.paperCode()).isEqualTo("1C");
+            assertThat(chunk.specCodes()).isNull(); // doc-level spec anchoring is not a paper thing
+            assertThat(chunk.embedRev())
+                    .isEqualTo(ChunkVectorRepository.CURRENT_EMBED_REV);
+        }
+        // atom numbers per chunk: group keys q3/q4 map to 3/4
+        List<String> atoms = savedChunks.stream().map(DocumentChunk::atomNumber).toList();
+        assertThat(atoms).contains("3", "4");
+        assertThat(atoms).doesNotContain("q3");
+    }
+
+    @Test
+    @DisplayName("V33: a document without a retrieval block chunks legacy-shape (identity null, never served)")
+    void legacyShapeWithoutRetrievalBlock() {
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+
+        service.ingest(doc, "{}", Document.Kind.QUESTION_PAPER, null);
+
+        assertThat(savedChunks).isNotEmpty();
+        for (DocumentChunk chunk : savedChunks) {
+            assertThat(chunk.subjectId()).isNull();
+            assertThat(chunk.series()).isNull();
+            assertThat(chunk.atomNumber()).isNull();
+            assertThat(chunk.embedRev()).isEqualTo(ChunkVectorRepository.CURRENT_EMBED_REV);
+        }
+        verify(subjects, never()).findByCode(any());
+    }
+
+    @Test
+    @DisplayName("V33: a present-but-unresolvable subjectCode is a loud 404, never a silent invisible corpus")
+    void unresolvableSubjectCodeRejected() {
+        when(subjects.findByCode("NOPE")).thenReturn(Optional.empty());
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        CanonicalDocumentDto badSubject = new CanonicalDocumentDto(
+                doc.documentId(), "1.0", doc.version(), doc.source(), doc.pageCount(),
+                doc.pages(), doc.sections(), doc.textBlocks(), doc.tables(), doc.figures(),
+                doc.equations(), doc.provenance(),
+                new CanonicalDocumentDto.RetrievalMeta(null, "NOPE", "JUN", 2022,
+                        "1C", null, null, null));
+
+        assertThatThrownBy(() -> service.ingest(badSubject, "{}", Document.Kind.QUESTION_PAPER, null))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("NOPE");
+        verify(documents, never()).save(any());
+        assertThat(savedChunks).isEmpty();
+    }
+
+    private static com.syllabai.curriculum.Subject subject(String code, UUID id) {
+        com.syllabai.curriculum.Subject s = mock(com.syllabai.curriculum.Subject.class);
+        when(s.id()).thenReturn(id);
+        when(s.code()).thenReturn(code);
+        return s;
+    }
+
+    @Test
     @DisplayName("re-ingesting the same checksum is an idempotent no-op")
     void dedupByChecksum() {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
@@ -118,7 +191,7 @@ class ContentIngestionServiceTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "9.9",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
-                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
 
         assertThatThrownBy(() -> service.ingest(bad, "{}", Document.Kind.OTHER, null))
                 .isInstanceOf(InvalidDocumentException.class)

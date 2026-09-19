@@ -21,9 +21,11 @@ class ContentCorpusKindTest {
 
     private final DocumentRepository documents = mock(DocumentRepository.class);
     private final DocumentChunkRepository chunks = mock(DocumentChunkRepository.class);
+    private final com.syllabai.curriculum.SubjectRepository subjects =
+            mock(com.syllabai.curriculum.SubjectRepository.class);
     private final ContentIngestionService service = new ContentIngestionService(
             new CanonicalDocumentValidator(), new ChunkingService(300, 800),
-            documents, chunks);
+            documents, chunks, subjects);
 
     private final List<Document> savedDocuments = new ArrayList<>();
 

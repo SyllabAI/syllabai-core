@@ -3,6 +3,7 @@ package com.syllabai.content;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,15 @@ import org.springframework.stereotype.Service;
  *   <li>Text source: {@code textBlocks} + {@code tables} + {@code equations}
  *       (flattened text), ordered by {@code (page_number, reading_order)} — the
  *       canonical reading order. Figures carry no text and are skipped.</li>
+ *   <li><em>Atom-boundary mode (Embedding v2, plan §4.1)</em>: when the document's
+ *       blocks carry {@code group_key} (atom identity), a group-key change is a
+ *       HARD chunk boundary — the current chunk is flushed exactly like the
+ *       oversized-block path. No chunk ever crosses an atom; a question split
+ *       across chunks is a citation integrity bug, not a nuance. Token packing
+ *       continues WITHIN a group: an atom larger than {@code maxTokens} splits
+ *       at block boundaries inside the atom, never across atoms. Documents
+ *       without group keys chunk exactly as before (page-marker/reading-order
+ *       packing remains the fallback for legacy-shaped documents).</li>
  *   <li>Block boundaries are respected: a chunk is always a whole number of blocks.
  *       A chunk closes when adding the next block would exceed {@code targetTokens};
  *       a single block larger than {@code maxTokens} becomes its own (oversized)
@@ -22,6 +32,12 @@ import org.springframework.stereotype.Service;
  *       provider tokenizer; reproducibility beats precision here.</li>
  *   <li>Every chunk keeps its element ids in reading order — the §8/§17 provenance
  *       spine retrieval results cite back through.</li>
+ *   <li><em>Per-chunk header projection (plan §4.1 step 4)</em>: every chunk is
+ *       stamped with the header line built by {@link ChunkHeaderBuilder} from the
+ *       document identity + group key + the chunk's page range, prepended to the
+ *       chunk text before embedding. The global 300/800 sizes stay kind-agnostic:
+ *       they are compatible with every matrix row's max (QP/MS 900, notes 800,
+ *       spec 300 — see the retrieval plan §4.2).</li>
  * </ul>
  */
 @Service
@@ -42,12 +58,20 @@ public class ChunkingService {
     }
 
     public List<ChunkDraft> chunk(CanonicalDocumentDto doc) {
+        return chunk(doc, null);
+    }
+
+    /**
+     * @param kind the persisted document kind — used only for header composition
+     *             (e.g. the {@code MS Q3} prefix); pass null for kind-agnostic calls
+     */
+    public List<ChunkDraft> chunk(CanonicalDocumentDto doc, Document.Kind kind) {
         List<ChunkCandidate> candidates = new ArrayList<>();
         if (doc.textBlocks() != null) {
             for (var e : doc.textBlocks()) {
                 if (e != null && e.text() != null && !e.text().isBlank()) {
                     candidates.add(new ChunkCandidate(e.elementId(), e.pageNumber(),
-                            e.readingOrder(), e.text().strip()));
+                            e.readingOrder(), e.text().strip(), e.groupKey()));
                 }
             }
         }
@@ -55,7 +79,7 @@ public class ChunkingService {
             for (var e : doc.tables()) {
                 if (e != null && e.text() != null && !e.text().isBlank()) {
                     candidates.add(new ChunkCandidate(e.elementId(), e.pageNumber(),
-                            e.readingOrder(), e.text().strip()));
+                            e.readingOrder(), e.text().strip(), e.groupKey()));
                 }
             }
         }
@@ -66,7 +90,7 @@ public class ChunkingService {
                         : (e.latex() != null && !e.latex().isBlank() ? e.latex() : null));
                 if (text != null) {
                     candidates.add(new ChunkCandidate(e.elementId(), e.pageNumber(),
-                            e.readingOrder(), text.strip()));
+                            e.readingOrder(), text.strip(), e.groupKey()));
                 }
             }
         }
@@ -79,34 +103,53 @@ public class ChunkingService {
         List<ChunkDraft> chunks = new ArrayList<>();
         List<ChunkCandidate> current = new ArrayList<>();
         int currentTokens = 0;
+        String currentGroupKey = null;
 
         for (ChunkCandidate candidate : candidates) {
             int candidateTokens = estimate(candidate.text());
             if (candidateTokens > maxTokens) {
                 // oversized block: flush what we have, then emit it as its own chunk
                 if (!current.isEmpty()) {
-                    chunks.add(build(current, currentTokens));
+                    chunks.add(build(doc, kind, current, currentTokens, currentGroupKey));
                     current = new ArrayList<>();
                     currentTokens = 0;
                 }
-                chunks.add(build(List.of(candidate), candidateTokens));
+                chunks.add(build(doc, kind, List.of(candidate), candidateTokens,
+                        candidate.groupKey()));
                 continue;
             }
-            if (currentTokens + candidateTokens > targetTokens && !current.isEmpty()) {
-                chunks.add(build(current, currentTokens));
+            // atom-boundary mode: a group-key change is a hard boundary (plan §4.1
+            // step 2) — flush before packing continues within the new group
+            if (!current.isEmpty() && !Objects.equals(currentGroupKey, candidate.groupKey())) {
+                chunks.add(build(doc, kind, current, currentTokens, currentGroupKey));
                 current = new ArrayList<>();
                 currentTokens = 0;
+            }
+            if (currentTokens + candidateTokens > targetTokens && !current.isEmpty()) {
+                chunks.add(build(doc, kind, current, currentTokens, currentGroupKey));
+                current = new ArrayList<>();
+                currentTokens = 0;
+            }
+            if (current.isEmpty()) {
+                currentGroupKey = candidate.groupKey();
             }
             current.add(candidate);
             currentTokens += candidateTokens;
         }
         if (!current.isEmpty()) {
-            chunks.add(build(current, currentTokens));
+            chunks.add(build(doc, kind, current, currentTokens, currentGroupKey));
         }
         return chunks;
     }
 
-    private ChunkDraft build(List<ChunkCandidate> blocks, int tokenEstimate) {
+    private ChunkDraft build(CanonicalDocumentDto doc, Document.Kind kind,
+                             List<ChunkCandidate> blocks, int tokenEstimate,
+                             String groupKey) {
+        String header = ChunkHeaderBuilder.build(kind, doc.retrieval(), groupKey,
+                blocks.stream().map(ChunkCandidate::pageNumber).filter(Objects::nonNull)
+                        .min(Integer::compareTo).orElse(null),
+                blocks.stream().map(ChunkCandidate::pageNumber).filter(Objects::nonNull)
+                        .max(Integer::compareTo).orElse(null));
         StringBuilder content = new StringBuilder();
         List<String> elementIds = new ArrayList<>(blocks.size());
         int pageStart = Integer.MAX_VALUE;
@@ -120,8 +163,12 @@ public class ChunkingService {
             pageStart = Math.min(pageStart, b.pageNumber());
             pageEnd = Math.max(pageEnd, b.pageNumber());
         }
-        return new ChunkDraft(content.toString(), pageStart, pageEnd, elementIds,
-                Math.max(1, tokenEstimate));
+        String body = content.toString();
+        String withHeader = header.isBlank() ? body : header + "\n" + body;
+        return new ChunkDraft(withHeader,
+                pageStart == Integer.MAX_VALUE ? null : pageStart,
+                pageEnd == Integer.MIN_VALUE ? null : pageEnd,
+                elementIds, Math.max(1, tokenEstimate), groupKey);
     }
 
     /** Deterministic estimate documented in the class javadoc. */
@@ -130,6 +177,6 @@ public class ChunkingService {
     }
 
     private record ChunkCandidate(String elementId, int pageNumber, int readingOrder,
-                                  String text) {
+                                  String text, String groupKey) {
     }
 }

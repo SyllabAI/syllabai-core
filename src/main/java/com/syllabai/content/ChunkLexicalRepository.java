@@ -31,7 +31,15 @@ import org.springframework.stereotype.Repository;
  * curriculum and are never served — fail-closed, never unscoped. The
  * curriculum id is a bound parameter (never SQL text); document kinds are
  * folded into the SQL text as code-controlled enum names (house pattern, see
- * {@link ChunkVectorRepository}).</p>
+ * {@link ChunkVectorRepository}).
+ *
+ * <p>V33 additions mirroring the vector surface: every query filters
+ * {@code embed_rev = ChunkVectorRepository.CURRENT_EMBED_REV} (supersession —
+ * two corpus generations must never blend in one candidate set, plan §6). The
+ * V33 subject branch ({@code c.subject_id} resolving into the curriculum) is
+ * NOT added here: the lexical arm is a benchmark surface (T-C13/T-C14) scored
+ * against the exam-paper corpus; extending it to the knowledge layer happens
+ * with the R4 routing work, deliberately, not implicitly.</p>
  */
 @Repository
 public class ChunkLexicalRepository {
@@ -75,6 +83,7 @@ public class ChunkLexicalRepository {
                 join documents d on d.id = c.document_row_id
                 cross join (select websearch_to_tsquery('english', ?) as tsq) q
                 where c.content_tsv @@ q.tsq
+                  and c.embed_rev = ?
                   and exists (
                         select 1 from exam_papers p
                         join subjects s on s.id = p.subject_id
@@ -87,7 +96,8 @@ public class ChunkLexicalRepository {
                 """;
         return jdbc.query(sql,
                 (rs, i) -> mapHit(rs),
-                normalizedQuery, curriculumVersionId, limit);
+                normalizedQuery, ChunkVectorRepository.CURRENT_EMBED_REV,
+                curriculumVersionId, limit);
     }
 
     /**
@@ -126,6 +136,7 @@ public class ChunkLexicalRepository {
                 join documents d on d.id = c.document_row_id
                 cross join (select websearch_to_tsquery('english', ?) as tsq) q
                 where c.content_tsv @@ q.tsq
+                  and c.embed_rev = ?
                   and exists (
                         select 1 from exam_papers p
                         join subjects s on s.id = p.subject_id
@@ -139,7 +150,8 @@ public class ChunkLexicalRepository {
                 """;
         return jdbc.query(sql,
                 (rs, i) -> mapHit(rs),
-                normalizedQuery, curriculumVersionId, limit);
+                normalizedQuery, ChunkVectorRepository.CURRENT_EMBED_REV,
+                curriculumVersionId, limit);
     }
 
     /** Code-controlled enum names folded into SQL text (never user input). */

@@ -56,6 +56,31 @@ class ChunkVectorRepositoryTest {
                 .contains("join subjects s on s.id = p.subject_id")
                 .contains("s.curriculum_version_id = ?")
                 .contains("p.question_paper_document_id = d.document_id")
-                .contains("p.mark_scheme_document_id = d.document_id");
+                .contains("p.mark_scheme_document_id = d.document_id")
+                // V33: embed-revision read filter + subject branch for paper-less chunks
+                .contains("c.embed_rev = ?")
+                .contains("from subjects s2")
+                .contains("s2.id = c.subject_id");
+    }
+
+    @Test
+    @DisplayName("V33: bind order is vector, embed_rev, cv id (paper branch), cv id (subject branch), vector, limit")
+    void bindOrderCarriesEmbedRevAndScope() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        repository.search(new float[] {0.1f}, null, CV_ID, 5);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).query(sql.capture(), any(RowMapper.class), args.capture());
+        assertThat(sql.getValue()).contains("c.embed_rev = ?");
+        Object[] bound = args.getValue();
+        assertThat(bound).hasSize(6);
+        assertThat(bound[0]).isEqualTo("[0.1]");
+        assertThat(bound[1]).isEqualTo(ChunkVectorRepository.CURRENT_EMBED_REV);
+        assertThat(bound[2]).isEqualTo(CV_ID);
+        assertThat(bound[3]).isEqualTo(CV_ID);
+        assertThat(bound[5]).isEqualTo(5);
     }
 }

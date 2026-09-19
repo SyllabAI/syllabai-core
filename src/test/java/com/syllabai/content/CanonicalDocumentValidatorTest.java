@@ -30,7 +30,7 @@ class CanonicalDocumentValidatorTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "2.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
-                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("schemaVersion");
@@ -43,7 +43,7 @@ class CanonicalDocumentValidatorTest {
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), new CanonicalDocumentDto.SourceInfo("qp.pdf", null, null,
                         "application/pdf", null), doc.pageCount(), doc.pages(), doc.sections(),
-                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("source.checksum");
@@ -57,7 +57,7 @@ class CanonicalDocumentValidatorTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
-                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("outside 1..2");
@@ -72,7 +72,7 @@ class CanonicalDocumentValidatorTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
-                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("duplicate element_id e000000");
@@ -87,7 +87,7 @@ class CanonicalDocumentValidatorTest {
         CanonicalDocumentDto doc = CanonicalDocs.valid();
         CanonicalDocumentDto withBlank = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
-                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                blocks, doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         // the real 4CH0 QP fixture ships a null-text textBlock (e000034) — same case
         assertThatCode(() -> validator.validate(withBlank)).doesNotThrowAnyException();
     }
@@ -101,7 +101,7 @@ class CanonicalDocumentValidatorTest {
                         List.of("e-nope")));
         CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), sections,
-                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance());
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("references unknown element e-nope");
@@ -115,11 +115,55 @@ class CanonicalDocumentValidatorTest {
                 doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
                 doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(),
                 new CanonicalDocumentDto.ProvenanceInfo(null, null, null, null,
-                        "syllabai-parser", "1.0"));
+                        "syllabai-parser", "1.0"), null);
         assertThatThrownBy(() -> validator.validate(bad))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessageContaining("provenance.engine is required")
                 .hasMessageContaining("provenance.engineVersion is required");
         assertThat(1).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("V33: a canonical series (JAN/JUN/NOV) passes; raw labels are rejected")
+    void retrievalSeriesEnum() {
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        CanonicalDocumentDto good = new CanonicalDocumentDto(doc.documentId(), "1.0",
+                doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(),
+                new CanonicalDocumentDto.RetrievalMeta("IGCSE Chemistry", "4CH1",
+                        "JUN", 2022, "1C", null, null, null));
+        assertThatCode(() -> validator.validate(good)).doesNotThrowAnyException();
+
+        // "Summer 2019" stored as a filter is a lie waiting for a year-range
+        // query (plan §12 anti-pattern 7) — canonicalize before ingest
+        CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
+                doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(),
+                new CanonicalDocumentDto.RetrievalMeta(null, "4CH1", "Summer", 2019,
+                        null, null, null, null));
+        assertThatThrownBy(() -> validator.validate(bad))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessageContaining("retrieval.series must be JAN, JUN or NOV");
+    }
+
+    @Test
+    @DisplayName("V33: an implausible retrieval year is rejected")
+    void retrievalYearSanity() {
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        CanonicalDocumentDto bad = new CanonicalDocumentDto(doc.documentId(), "1.0",
+                doc.version(), doc.source(), doc.pageCount(), doc.pages(), doc.sections(),
+                doc.textBlocks(), doc.tables(), doc.figures(), doc.equations(), doc.provenance(),
+                new CanonicalDocumentDto.RetrievalMeta(null, "4CH1", "JUN", 2199,
+                        null, null, null, null));
+        assertThatThrownBy(() -> validator.validate(bad))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessageContaining("retrieval.year");
+    }
+
+    @Test
+    @DisplayName("V33: a document without a retrieval block passes (legacy shape tolerated)")
+    void retrievalBlockOptional() {
+        CanonicalDocumentDto doc = CanonicalDocs.valid();
+        assertThatCode(() -> validator.validate(doc)).doesNotThrowAnyException();
     }
 }
