@@ -21,7 +21,11 @@ public record EmbeddingProperties(GeminiEmbedding gemini) {
     public record GeminiEmbedding(String apiKey, String model, int dimension,
                                   Integer timeoutSeconds) {
         public GeminiEmbedding {
-            if (model == null || model.isBlank()) model = "text-embedding-004";
+            // text-embedding-004 was retired (API 404, probed 2026-09-17); the
+            // fallback default is the GA successor verified at
+            // outputDimensionality=768 — matching the yml default, the V11
+            // vector(768) column contract and the V32 registry seed.
+            if (model == null || model.isBlank()) model = "gemini-embedding-001";
             if (dimension <= 0) dimension = 768;
             if (timeoutSeconds == null || timeoutSeconds <= 0) timeoutSeconds = 30;
         }

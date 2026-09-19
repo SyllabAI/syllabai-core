@@ -128,7 +128,7 @@ class GeminiEmbeddingProvider implements EmbeddingProvider {
     }
 
     private static GoogleGenAiTextEmbeddingModelName toModelName(String configured) {
-        // "text-embedding-004" → enum TEXT_EMBEDDING_004
+        // "gemini-embedding-001" → enum GEMINI_EMBEDDING_001
         String enumName = configured.replace('-', '_').replace('.', '_').toUpperCase();
         return GoogleGenAiTextEmbeddingModelName.valueOf(enumName);
     }
