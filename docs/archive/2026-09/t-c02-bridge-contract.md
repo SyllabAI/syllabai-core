@@ -1,4 +1,6 @@
 > **ARCHIVED 2026-09-15 — completed task contract.** T-C02 invariants (all honored at merge). Historical references to `docs/t-c02-bridge-contract.md` now resolve to this archive copy.
+ >**SUPERSEDED (2026-09-20):** the chunking/retrieval contract described here is superseded by `docs/RETRIEVAL_EMBEDDING_PLAN.md` (Embedding v2: atom-boundary chunking, per-chunk headers, metadata columns, embed_rev). Kept for provenance only — do not implement from this document.
+>
 
 # T-C02 GLM-OCR → Core Bridge Contract
 

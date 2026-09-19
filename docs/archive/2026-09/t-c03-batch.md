@@ -1,4 +1,6 @@
 > **ARCHIVED 2026-09-15 — completed task contract.** T-C03 was implemented and merged (PR #5, issue #4); the batch proof and human-review tranches completed 2026-09-06..14 (see TODO.md T-C03/T-C04 rows in the main pack).
+ >**SUPERSEDED (2026-09-20):** the chunking/retrieval contract described here is superseded by `docs/RETRIEVAL_EMBEDDING_PLAN.md` (Embedding v2: atom-boundary chunking, per-chunk headers, metadata columns, embed_rev). Kept for provenance only — do not implement from this document.
+>
 
 # T-C03 — one controlled real-corpus batch + bridge audit
 
