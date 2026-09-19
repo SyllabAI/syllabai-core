@@ -328,12 +328,14 @@ class ContentPipelineIT {
                 assertThat(id.startsWith(atomThree ? "q3-" : "q4-")).isTrue();
             }
             // metadata mirror + per-chunk header on EVERY chunk (chunks 2..n of an
-            // atom are not blind — plan §4.1 step 4)
+            // atom are not blind — plan §4.1 step 4); the subject segment qualifies
+            // title + code, and the code here is the IT fixture's NOTE-ATOMS
             assertThat(chunk.series()).isEqualTo("JUN");
             assertThat(chunk.year()).isEqualTo(2022);
             assertThat(chunk.paperCode()).isEqualTo("1C");
             assertThat(chunk.embedRev()).isEqualTo(ChunkVectorRepository.CURRENT_EMBED_REV);
-            assertThat(chunk.content()).contains("IGCSE Chemistry 4CH1 | Jun 2022 | 1C | Q");
+            assertThat(chunk.content())
+                    .startsWith("IGCSE Chemistry NOTE-ATOMS | Jun 2022 | 1C | Q");
         }
     }
 
