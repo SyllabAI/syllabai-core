@@ -78,6 +78,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, "tutor_unavailable", ex.getMessage());
     }
 
+    @ExceptionHandler(com.syllabai.smartmark.SmartFeedbackGenerationException.class)
+    ResponseEntity<ApiError> smartFeedbackUnavailable(
+            com.syllabai.smartmark.SmartFeedbackGenerationException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "smart_feedback_unavailable", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()

@@ -247,4 +247,42 @@ public class TelemetryService {
                 payload,
                 event.occurredAt()));
     }
+
+    /**
+     * Student Smart Mark feedback actions (F-047 learner half): consumption of
+     * the ephemeral "Explain my feedback" / "Improve my answer" generations.
+     * The prose itself is never persisted — the accepted SmartMarkResult is the
+     * durable artifact; this event records only that the explanation/plan was
+     * consumed, with which grounding result and which model.
+     */
+    @EventListener
+    @Transactional
+    public void onSmartFeedbackExplained(com.syllabai.shared.events.SmartFeedbackExplainedEvent event) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("answerId", event.answerId().toString());
+        payload.put("attemptId", event.attemptId().toString());
+        payload.put("questionId", event.questionId().toString());
+        payload.put("smartMarkResultId", event.smartMarkResultId().toString());
+        payload.put("answerModel", event.modelId() == null ? "" : event.modelId());
+        payload.put("provenance", "smart-mark-feedback/1.0.0");
+        events.save(new TelemetryEvent(
+                event.learnerId(), TelemetryEvent.Type.SMART_FEEDBACK_EXPLAINED,
+                payload, event.occurredAt()));
+    }
+
+    @EventListener
+    @Transactional
+    public void onSmartImprovementPlanViewed(
+            com.syllabai.shared.events.SmartImprovementPlanViewedEvent event) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("answerId", event.answerId().toString());
+        payload.put("attemptId", event.attemptId().toString());
+        payload.put("questionId", event.questionId().toString());
+        payload.put("smartMarkResultId", event.smartMarkResultId().toString());
+        payload.put("answerModel", event.modelId() == null ? "" : event.modelId());
+        payload.put("provenance", "smart-mark-feedback/1.0.0");
+        events.save(new TelemetryEvent(
+                event.learnerId(), TelemetryEvent.Type.SMART_IMPROVEMENT_PLAN_VIEWED,
+                payload, event.occurredAt()));
+    }
 }
