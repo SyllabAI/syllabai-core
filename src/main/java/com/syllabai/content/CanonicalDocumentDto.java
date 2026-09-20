@@ -134,7 +134,8 @@ public record CanonicalDocumentDto(
             @JsonProperty("source_name") String sourceName,
             @JsonProperty("alt") String alt,
             @JsonProperty("source_engine") String sourceEngine,
-            @JsonProperty("source_engine_version") String sourceEngineVersion) {
+            @JsonProperty("source_engine_version") String sourceEngineVersion,
+            @JsonProperty("group_key") String groupKey) {
     }
 
     public record EquationElement(
