@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ToDoubleFunction;
 
 /**
  * The retrieval fabric orchestrator (T-C13/T-C14) — the registered "port + 4
@@ -66,9 +67,26 @@ import java.util.UUID;
  */
 public final class RetrievalFabric {
 
+    /**
+     * Plan §7 per-kind RRF weights (the v2 routing stance): knowledge-layer
+     * evidence leads, question evidence is verbatim context, mark schemes only
+     * surface when policy allows, cards are identity pointers. Sources absent
+     * from this map (KG nodes, learner work, OTHER) weigh 1.0. These are the
+     * weights the P3 routing posture ships with — any change re-runs the eval
+     * harness first (plan §9: no retrieval change ships without it).
+     */
+    public static final Map<EvidenceItem.EvidenceSource, Double> PLAN_V2_WEIGHTS = Map.of(
+            EvidenceItem.EvidenceSource.NOTE, 1.0,
+            EvidenceItem.EvidenceSource.SYLLABUS, 0.9,
+            EvidenceItem.EvidenceSource.QUESTION_PAPER, 0.8,
+            EvidenceItem.EvidenceSource.TEXTBOOK, 0.7,
+            EvidenceItem.EvidenceSource.MARK_SCHEME, 0.6,
+            EvidenceItem.EvidenceSource.CARD, 0.3);
+
     private final List<RetrievalProvider> providers;
     private final ReciprocalRankFusion fusion;
     private final BoundaryPolicy boundary;
+    private final ToDoubleFunction<EvidenceItem> weightOf;
 
     /**
      * @param providers the explicit candidate-generation arms, in composition
@@ -80,6 +98,20 @@ public final class RetrievalFabric {
     public RetrievalFabric(List<RetrievalProvider> providers,
                            ReciprocalRankFusion fusion,
                            BoundaryPolicy boundary) {
+        this(providers, fusion, boundary, null);
+    }
+
+    /**
+     * Weighted composition (plan §7 per-kind weights). {@code sourceWeights}
+     * maps an evidence source to its RRF contribution weight; sources absent
+     * from the map weigh 1.0 (the unweighted posture — the 3-arg constructor
+     * is exactly this with a null map, so bench replays stay bit-identical).
+     * Negative weights are a composition error and fail closed.
+     */
+    public RetrievalFabric(List<RetrievalProvider> providers,
+                           ReciprocalRankFusion fusion,
+                           BoundaryPolicy boundary,
+                           Map<EvidenceItem.EvidenceSource, Double> sourceWeights) {
         Objects.requireNonNull(providers, "providers");
         Objects.requireNonNull(fusion, "fusion");
         Objects.requireNonNull(boundary, "boundary");
@@ -87,6 +119,18 @@ public final class RetrievalFabric {
         this.providers = List.copyOf(providers);
         this.fusion = fusion;
         this.boundary = boundary;
+        if (sourceWeights == null) {
+            this.weightOf = item -> 1.0;
+        } else {
+            Map<EvidenceItem.EvidenceSource, Double> copy = Map.copyOf(sourceWeights);
+            copy.forEach((source, weight) -> {
+                if (weight == null || weight < 0) {
+                    throw new IllegalArgumentException(
+                            "source weight for " + source + " must be non-negative");
+                }
+            });
+            this.weightOf = item -> copy.getOrDefault(item.source(), 1.0);
+        }
     }
 
     /** One fused retrieval candidate: identity + fused rank score + contributing arms. */
@@ -131,7 +175,7 @@ public final class RetrievalFabric {
             rankedLists.add(eligible);
         }
 
-        List<EvidenceItem> fused = fusion.fuse(rankedLists);
+        List<EvidenceItem> fused = fusion.fuse(rankedLists, weightOf);
         List<FusedCandidate> out = new ArrayList<>(fused.size());
         for (EvidenceItem item : fused) {
             String locator = item.nodeId() != null ? item.nodeId().toString()
@@ -199,6 +243,9 @@ public final class RetrievalFabric {
             case "MARK_SCHEME" -> EvidenceItem.EvidenceSource.MARK_SCHEME;
             case "QUESTION_PAPER" -> EvidenceItem.EvidenceSource.QUESTION_PAPER;
             case "SYLLABUS" -> EvidenceItem.EvidenceSource.SYLLABUS;
+            case "EXTERNAL_NOTES" -> EvidenceItem.EvidenceSource.NOTE;
+            case "TEXTBOOK" -> EvidenceItem.EvidenceSource.TEXTBOOK;
+            case "EXTERNAL_QUESTIONS" -> EvidenceItem.EvidenceSource.CARD;
             default -> EvidenceItem.EvidenceSource.OTHER;
         };
     }

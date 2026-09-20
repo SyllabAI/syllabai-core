@@ -68,7 +68,16 @@ public record EvidenceItem(
         /** the learner's OWN submitted attempt content (§7.3 CHECK feedback:
          *  provenance is the learner's attempt row — their own data, resolved
          *  by ids, never another learner's, never model-invented) */
-        LEARNER_WORK
+        LEARNER_WORK,
+        /** SME revision-note chunk (plan §7 EXPLAIN leg: NOTE ≈ 1.0 — the
+         *  primary knowledge layer). Appended after the original members so
+         *  existing ordinals (fusion tiebreak) stay stable. */
+        NOTE,
+        /** textbook chunk (plan §7: TEXTBOOK ≈ 0.7 — tier-3 background). */
+        TEXTBOOK,
+        /** question-card chunk (plan §7: CARDS ≈ 0.3 — identity pointers,
+         *  never answer-bearing evidence). */
+        CARD
     }
 
     /** Build evidence from a vector chunk hit (retrievalScore = cosine similarity). */
@@ -81,6 +90,9 @@ public record EvidenceItem(
             case "MARK_SCHEME" -> EvidenceSource.MARK_SCHEME;
             case "QUESTION_PAPER" -> EvidenceSource.QUESTION_PAPER;
             case "SYLLABUS" -> EvidenceSource.SYLLABUS;
+            case "EXTERNAL_NOTES" -> EvidenceSource.NOTE;
+            case "TEXTBOOK" -> EvidenceSource.TEXTBOOK;
+            case "EXTERNAL_QUESTIONS" -> EvidenceSource.CARD;
             default -> EvidenceSource.OTHER;
         };
         return new EvidenceItem(source, content, documentRowId, documentId, documentVersion,
