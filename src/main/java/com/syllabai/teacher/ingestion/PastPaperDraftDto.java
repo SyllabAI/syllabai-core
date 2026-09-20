@@ -53,10 +53,30 @@ public record PastPaperDraftDto(
             @JsonProperty("confidence") double confidence) {
     }
 
+    /**
+     * @param generalGuidance optional additive field (V34, gap G-3): the board's
+     *                        scheme-level instructions ("accept ecf", "ignore
+     *                        significant-figure penalties"). Absent in pre-V34
+     *                        drafts — deserializes as null, which the ingestion
+     *                        bridge stores as "no scheme-level guidance". The
+     *                        parser bridge populates it when its extraction
+     *                        carries the scheme's general-instructions block.
+     */
     public record MarkSchemeDraft(
             @JsonProperty("version") String version,
             @JsonProperty("sourceDocumentId") String sourceDocumentId,
-            @JsonProperty("points") List<MarkPointDraft> points) {
+            @JsonProperty("points") List<MarkPointDraft> points,
+            @JsonProperty("generalGuidance") String generalGuidance) {
+
+        public MarkSchemeDraft {
+            points = points == null ? List.of() : List.copyOf(points);
+        }
+
+        /** pre-V34 shape: drafts without scheme-level general guidance (null) */
+        public MarkSchemeDraft(String version, String sourceDocumentId,
+                               List<MarkPointDraft> points) {
+            this(version, sourceDocumentId, points, null);
+        }
     }
 
     public record MarkPointDraft(

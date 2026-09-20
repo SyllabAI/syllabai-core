@@ -546,4 +546,33 @@ class ContentReviewServiceTest {
         verify(auditRecorder).record("MAP_TOPICS", "question", questionId,
                 null, null, "primary 4CH1-S2-b + 0 secondary");
     }
+
+    @Test
+    @DisplayName("scheme validation can author scheme-level general guidance (V34, G-3)")
+    void validateAuthorsGeneralGuidance() {
+        UUID schemeId = UUID.randomUUID();
+        MarkScheme scheme = new MarkScheme(null, "1", "ms-doc", "test");
+        when(markSchemes.findWithPoints(schemeId)).thenReturn(Optional.of(scheme));
+
+        service.validateMarkScheme(schemeId, null, "Accept ecf. Ignore sf penalties.");
+
+        assertThat(scheme.generalGuidance()).isEqualTo("Accept ecf. Ignore sf penalties.");
+        assertThat(scheme.validationState()).isEqualTo(MarkScheme.ValidationState.VALIDATED);
+        verify(auditRecorder).record("VALIDATE", "mark_scheme", schemeId,
+                "SUGGESTED", "VALIDATED", "0 criteria updates + general guidance");
+    }
+
+    @Test
+    @DisplayName("scheme validation without guidance leaves existing guidance untouched")
+    void validateWithoutGuidanceKeepsExisting() {
+        UUID schemeId = UUID.randomUUID();
+        MarkScheme scheme = new MarkScheme(null, "1", "ms-doc", "test");
+        scheme.setGeneralGuidance("Accept ecf.");
+        when(markSchemes.findWithPoints(schemeId)).thenReturn(Optional.of(scheme));
+
+        service.validateMarkScheme(schemeId, null, null);
+
+        assertThat(scheme.generalGuidance()).isEqualTo("Accept ecf.");
+        assertThat(scheme.validationState()).isEqualTo(MarkScheme.ValidationState.VALIDATED);
+    }
 }

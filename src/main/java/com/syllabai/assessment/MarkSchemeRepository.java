@@ -26,6 +26,17 @@ public interface MarkSchemeRepository extends JpaRepository<MarkScheme, UUID> {
     @EntityGraph(attributePaths = {"points", "points.questionPart"})
     Optional<MarkScheme> findFirstByQuestionVersionIdOrderByCreatedAtDesc(UUID questionVersionId);
 
+    /**
+     * The marking-path selection (V25, gap G-2): only a VALIDATED scheme may back
+     * Smart Mark — SUGGESTED, REJECTED and FLAGGED schemes never back marking
+     * (the FLAGGED rule was V20's stated intent; this finder enforces it).
+     * Review surfaces (content review, test builder, CLA) keep the unfiltered
+     * finder above — they must see the newest scheme whatever its state.
+     */
+    @EntityGraph(attributePaths = "points")
+    Optional<MarkScheme> findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+            UUID questionVersionId, MarkScheme.ValidationState validationState);
+
     @EntityGraph(attributePaths = "points")
     @Query("""
             select s from MarkScheme s

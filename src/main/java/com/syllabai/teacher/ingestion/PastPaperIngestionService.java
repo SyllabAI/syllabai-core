@@ -165,10 +165,15 @@ public class PastPaperIngestionService {
                 if (mine.isEmpty()) {
                     continue;
                 }
-                MarkScheme scheme = markSchemes.save(new MarkScheme(
+                MarkScheme scheme = new MarkScheme(
                         version, nullSafe(draft.markScheme().version(), "1"),
                         draft.markScheme().sourceDocumentId(),
-                        draft.extractionMethod()));
+                        draft.extractionMethod());
+                // scheme-level board instructions (V25, G-3) — null until the
+                // parser bridge extracts them; teacher authoring also possible
+                // at validation time
+                scheme.setGeneralGuidance(draft.markScheme().generalGuidance());
+                markSchemes.save(scheme);
                 int order = 0;
                 for (PastPaperDraftDto.MarkPointDraft mp : mine) {
                     QuestionPart part = resolvePart(version, mp.questionRef());
