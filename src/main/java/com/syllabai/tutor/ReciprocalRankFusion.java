@@ -40,6 +40,25 @@ public class ReciprocalRankFusion {
      * @return fused ranking best-first with {@code fusedScore} set
      */
     public List<EvidenceItem> fuse(List<List<EvidenceItem>> rankedLists) {
+        return fuse(rankedLists, item -> 1.0);
+    }
+
+    /**
+     * Weighted RRF (plan §7 per-kind weights): each rank contribution is scaled
+     * by the weight of the candidate's {@link EvidenceSource} — NOTE ≈ 1.0,
+     * SPEC(SYLLABUS) ≈ 0.9, QUESTION_PAPER ≈ 0.8, TEXTBOOK ≈ 0.7,
+     * MARK_SCHEME ≈ 0.6, CARDS ≈ 0.3. Rank order inside a list is untouched;
+     * only the list's influence on the fused score is scaled. The unweighted
+     * overload is exactly {@code weight 1.0 for every source}, so existing
+     * fused rankings (bench replays, KA-RAG serving) are bit-identical.
+     *
+     * @param rankedLists candidate rankings, best-first
+     * @param weightOf    per-candidate weight (non-negative; 0 removes the
+     *                    source's influence without dropping the candidate)
+     * @return fused ranking best-first with {@code fusedScore} set
+     */
+    public List<EvidenceItem> fuse(List<List<EvidenceItem>> rankedLists,
+                                   java.util.function.ToDoubleFunction<EvidenceItem> weightOf) {
         Map<UUID, EvidenceItem> byKey = new LinkedHashMap<>();
         Map<UUID, Double> scores = new LinkedHashMap<>();
 
@@ -50,7 +69,7 @@ public class ReciprocalRankFusion {
                 if (key == null) {
                     continue;   // evidence without grounding cannot be fused
                 }
-                double contribution = 1.0 / (k + rank + 1);
+                double contribution = weightOf.applyAsDouble(candidate) / (k + rank + 1);
                 scores.merge(key, contribution, Double::sum);
                 byKey.put(key, candidate);
             }
