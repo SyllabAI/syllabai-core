@@ -69,9 +69,11 @@ class RoutingFlowIT {
     private static final UUID Q_JAN_2022_Q2 = UUID.fromString("00000000-0000-0000-0000-00000000d022");
     private static final UUID Q_DUP_Q1 = UUID.fromString("00000000-0000-0000-0000-00000000d023");
     private static final UUID Q_PAPERLESS = UUID.fromString("00000000-0000-0000-0000-00000000d024");
+    private static final UUID Q_JUN_2011_INACTIVE = UUID.fromString("00000000-0000-0000-0000-00000000d025");
     private static final UUID VER_Q1 = UUID.fromString("00000000-0000-0000-0000-00000000d031");
     private static final UUID VER_Q2 = UUID.fromString("00000000-0000-0000-0000-00000000d032");
     private static final UUID VER_DUP = UUID.fromString("00000000-0000-0000-0000-00000000d033");
+    private static final UUID VER_INACT = UUID.fromString("00000000-0000-0000-0000-00000000d034");
     private static final UUID SCHEME_Q1 = UUID.fromString("00000000-0000-0000-0000-00000000d041");
     private static final UUID SCHEME_Q2 = UUID.fromString("00000000-0000-0000-0000-00000000d042");
     private static final UUID POINT_Q1 = UUID.fromString("00000000-0000-0000-0000-00000000d051");
@@ -122,6 +124,10 @@ class RoutingFlowIT {
                 "Explain why the rate is faster at higher temperature.", 6);
         question(Q_DUP_Q1, VER_DUP, PAPER_DUP, "q01-d023",
                 "Superseded duplicate stem — never served.", 5);
+        // the C13 import ships paper-anchored rows active=false — the paper axis
+        // must stay active-policy agnostic (gold-v1 enumerate_paper semantics)
+        question(Q_JUN_2011_INACTIVE, VER_INACT, PAPER_JUN_2011, "q02-d025",
+                "Inactive stem — still the paper's content.", 5, false);
 
         markScheme(SCHEME_Q2, VER_Q2, POINT_Q2, "allow reverse argument", 2);
         markScheme(SCHEME_Q1, VER_Q1, POINT_Q1, "M1 salt must be molten", 4);
@@ -149,12 +155,17 @@ class RoutingFlowIT {
 
     private void question(UUID id, UUID versionId, UUID paperId, String externalRef,
                           String stem, int marks) {
+        question(id, versionId, paperId, externalRef, stem, marks, true);
+    }
+
+    private void question(UUID id, UUID versionId, UUID paperId, String externalRef,
+                          String stem, int marks, boolean active) {
         jdbc.update("""
                 insert into questions (id, external_ref, question_type, stem, marks, difficulty,
                                        expected_time_seconds, provenance, active, version,
                                        exam_paper_id, created_at)
-                values (?, ?, 'STRUCTURED', ?, ?, 3, 90, 'PAST_PAPER', true, 1, ?, now())
-                """, id, externalRef, stem, marks, paperId);
+                values (?, ?, 'STRUCTURED', ?, ?, 3, 90, 'PAST_PAPER', ?, 1, ?, now())
+                """, id, externalRef, stem, marks, active, paperId);
         jdbc.update("""
                 insert into question_versions (id, question_id, version, stem, marks, difficulty,
                                                expected_time_seconds, validation_state, created_at)
@@ -219,6 +230,8 @@ class RoutingFlowIT {
         assertThat(result.parseDefect()).isFalse();
         assertThat(result.papers()).hasSize(1);
         assertThat(result.papers().get(0).paperId()).isEqualTo(PAPER_JUN_2011);
+        // active=false rows are still paper content (C13 import posture) — the
+        // inactive q02 resolves too; the duplicate's q01-d023 must never surface
         assertThat(result.papers().stream()
                 .map(p -> p.question() == null ? null : p.question().externalRef())
                 .toList()).doesNotContain("q01-d023");
@@ -250,15 +263,16 @@ class RoutingFlowIT {
 
     @Test
     @Order(5)
-    @DisplayName("enumerate paper axis: whole-paper question list; rejected dup excluded")
+    @DisplayName("enumerate paper axis: active-policy agnostic; rejected dup excluded")
     void enumeratePaper() {
         EnumerateResult result = enumerate.enumerate(
                 "every question in the June 2011 paper 4CH0/1C", scope);
         assertThat(result.mode()).isEqualTo("paper");
         assertThat(result.ambiguous()).isFalse();
+        // both the active and the inactive question list (gold semantics);
+        // the REJECTED duplicate's question never does
         assertThat(result.questions()).extracting("externalRef")
-                .containsExactly("q01-d021")
-                .doesNotContain("q01-d023");
+                .containsExactlyInAnyOrder("q01-d021", "q02-d025");
     }
 
     @Test

@@ -30,12 +30,15 @@ import org.springframework.stereotype.Service;
  *       paper, the bank returns its question list.</li>
  * </ol>
  *
- * <p>Set semantics mirror the ratified gold (gold-v1 compiler): questions are
- * {@code provenance='PAST_PAPER'} and active; paper information attaches via
- * a LEFT JOIN that hides REJECTED paper rows (§8.2 superseded duplicates) but
- * keeps their questions listable — a superseded paper's questions remain real
- * bank content, they simply no longer claim the retired paper identity.
- * Results deduplicate on the plan's key {@code (paper_code, qnum, kind)}.</p>
+ * <p>Set semantics mirror the ratified gold (gold-v1 compiler): topic/spec
+ * questions are {@code provenance='PAST_PAPER'} and active; the paper axis is
+ * active-policy agnostic (the C13 import ships paper-anchored rows
+ * active=false — they are still the paper's question list); paper information
+ * attaches via a LEFT JOIN that hides REJECTED paper rows (§8.2 superseded
+ * duplicates) but keeps their questions listable — a superseded paper's
+ * questions remain real bank content, they simply no longer claim the retired
+ * paper identity. Results deduplicate on the plan's key
+ * {@code (paper_code, qnum, kind)}.</p>
  */
 @Service
 public class EnumerateService {
@@ -149,10 +152,13 @@ public class EnumerateService {
         // deterministic: exactly one live paper per (code, series, year) — the
         // §8.2 duplicate guard (V35) enforces this invariant at the data layer
         PaperIdRow paper = papers.get(0);
+        // Active-policy AGNOSTIC (gold-v1 enumerate_paper semantics: "bank rows,
+        // active-policy agnostic" — the C13 import ships paper-anchored rows
+        // active=false; they are still the paper's question list)
         List<EnumeratedQuestion> rows = jdbc.query("""
                 select q.id, q.external_ref, q.stem, q.marks, q.question_type
                 from questions q
-                where q.exam_paper_id = ? and q.active and q.provenance = 'PAST_PAPER'
+                where q.exam_paper_id = ? and q.provenance = 'PAST_PAPER'
                 order by q.external_ref
                 """, (rs, i) -> new EnumeratedQuestion(rs.getObject("id", UUID.class),
                         rs.getString("external_ref"), excerpt(rs.getString("stem")),

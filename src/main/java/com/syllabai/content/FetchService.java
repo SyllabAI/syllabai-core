@@ -165,12 +165,15 @@ public class FetchService {
 
     private FetchQuestion resolveQuestion(UUID paperId, ParsedFetchQuery parsed) {
         // external_ref atom prefix: 'q01-<hash>' / 'q1-<hash>' — zero-padding tolerant,
-        // never a prefix collision ('q1-' does not match 'q10-…' because '-' anchors)
+        // never a prefix collision ('q1-' does not match 'q10-…' because '-' anchors).
+        // Active-policy AGNOSTIC (gold-v1 FETCH semantics): the bank's paper-anchored
+        // rows are the paper's content whether or not the learner surface has
+        // activated them — the C13 import ships them active=false.
         String refPattern = "^q0*" + parsed.qnum() + "-.*";
         List<FetchQuestion> hits = jdbc.query("""
                 select q.id, q.external_ref, q.stem, q.marks, q.question_type, q.command_word
                 from questions q
-                where q.exam_paper_id = ? and q.active and q.external_ref ~ ?
+                where q.exam_paper_id = ? and q.external_ref ~ ?
                 order by q.external_ref
                 limit 1
                 """, (rs, i) -> new FetchQuestion(
