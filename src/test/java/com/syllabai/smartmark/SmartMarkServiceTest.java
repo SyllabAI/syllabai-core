@@ -58,6 +58,7 @@ class SmartMarkServiceTest {
     private final QuestionPart part;
     private final Attempt attempt;
     private final Answer answer;
+    private final MarkScheme scheme;
 
     private final SmartMarkService service = new SmartMarkService(
             answers, attempts, questionVersions, markSchemes, smartMarkResults, agreementEvaluations,
@@ -90,7 +91,7 @@ class SmartMarkServiceTest {
         answer = new Answer(attempt, part, "an answer with water");
         TestIds.withId(answer, UUID.randomUUID());
 
-        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        scheme = new MarkScheme(version, "1", "ms", "test");
         TestIds.withId(scheme, UUID.randomUUID());
         MarkPoint pointA = new MarkPoint(scheme, part, "1-a", 0, "iron oxide", 1, List.of(), 0.9);
         TestIds.withId(pointA, UUID.randomUUID());
@@ -98,12 +99,16 @@ class SmartMarkServiceTest {
         TestIds.withId(pointB, UUID.randomUUID());
         scheme.addPoint(pointA);
         scheme.addPoint(pointB);
+        scheme.validate();   // matches the validated-only finder the service now uses
 
         when(answers.findAttemptIdById(any(UUID.class))).thenReturn(Optional.of(attempt.id()));
         when(attempts.findByIdForUpdate(any(UUID.class))).thenReturn(Optional.of(attempt));
         when(answers.findWithPartAndAttempt(answer.id())).thenReturn(Optional.of(answer));
         when(questionVersions.findByQuestionIdOrderByVersionDesc(question.id()))
                 .thenReturn(List.of(version));
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
+                .thenReturn(Optional.of(scheme));
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
                 .thenReturn(Optional.of(scheme));
         when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
@@ -147,6 +152,66 @@ class SmartMarkServiceTest {
     }
 
     @Test
+    @DisplayName("accepted runs stamp the scheme provenance they were marked against")
+    void stampsSchemeProvenance() {
+        when(agreementEvaluations.findFirstByScopeOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_ALL)).thenReturn(Optional.empty());
+
+        SmartMarkResult result = service.markAnswer(answer.id());
+
+        assertThat(result.markSchemeId()).isEqualTo(scheme.id());
+        assertThat(result.schemeValidationState())
+                .isEqualTo(MarkScheme.ValidationState.VALIDATED.name());
+    }
+
+    @Test
+    @DisplayName("a SUGGESTED scheme never backs marking — honest refusal row, state untouched")
+    void suggestedSchemeRefused() {
+        MarkScheme suggested = new MarkScheme(version, "2", "ms-2", "test");
+        TestIds.withId(suggested, UUID.randomUUID());
+        suggested.addPoint(new MarkPoint(suggested, part, "2-a", 0, "iron oxide", 1, List.of(), 0.9));
+        suggested.addPoint(new MarkPoint(suggested, part, "2-a", 1, "water", 1, List.of(), 0.9));
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
+                .thenReturn(Optional.empty());
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
+                .thenReturn(Optional.of(suggested));
+
+        SmartMarkResult result = service.markAnswer(answer.id());
+
+        assertThat(result.validationPassed()).isFalse();
+        assertThat(result.failureReason()).isEqualTo("SCHEME_NOT_VALIDATED");
+        assertThat(result.marksAwarded()).isZero();
+        assertThat(result.markSchemeId()).isEqualTo(suggested.id());
+        assertThat(result.schemeValidationState())
+                .isEqualTo(MarkScheme.ValidationState.SUGGESTED.name());
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+        verify(evidencePublisher, never()).publishGraded(any(), any(), any());
+        SmartMarkCompletedEvent event = (SmartMarkCompletedEvent) published.get(0);
+        assertThat(event.validationPassed()).isFalse();
+        assertThat(event.failureReason()).isEqualTo("SCHEME_NOT_VALIDATED");
+        assertThat(event.authoritative()).isFalse();
+        assertThat(event.marksPossible()).isEqualTo(2);   // refused scheme's in-scope ceiling
+    }
+
+    @Test
+    @DisplayName("a FLAGGED scheme never backs marking (V20 rule enforced on the marking path)")
+    void flaggedSchemeRefused() {
+        scheme.flag();   // setup already validated it — flag is the V20 poisoned state
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
+                .thenReturn(Optional.empty());
+
+        SmartMarkResult result = service.markAnswer(answer.id());
+
+        assertThat(result.validationPassed()).isFalse();
+        assertThat(result.failureReason()).isEqualTo("SCHEME_NOT_VALIDATED");
+        assertThat(result.schemeValidationState())
+                .isEqualTo(MarkScheme.ValidationState.FLAGGED.name());
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+    }
+
+    @Test
     @DisplayName("kappa gate fails closed: no evaluation rows = gated")
     void gateFailsClosed() {
         when(agreementEvaluations.findFirstByScopeOrderByComputedAtDesc(any())).thenReturn(Optional.empty());
@@ -185,7 +250,9 @@ class SmartMarkServiceTest {
         bothParts.addPoint(pointA3);
         bothParts.addPoint(pointB1);
         bothParts.addPoint(pointB2);
-        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
+        bothParts.validate();   // G-2: only a VALIDATED scheme backs marking
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
                 .thenReturn(Optional.of(bothParts));
 
         // κ gate released

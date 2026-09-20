@@ -213,6 +213,17 @@ public class ContentReviewService {
     @Transactional
     public MarkScheme validateMarkScheme(UUID schemeId,
                                          List<PointCriteria> criteriaUpdates) {
+        return validateMarkScheme(schemeId, criteriaUpdates, null);
+    }
+
+    /**
+     * V34 (gap G-3): {@code generalGuidance} authors the scheme-level board
+     * instructions ("accept ecf", "ignore significant-figure penalties") that
+     * have no per-point home; null/absent leaves any existing value untouched.
+     */
+    public MarkScheme validateMarkScheme(UUID schemeId,
+                                         List<PointCriteria> criteriaUpdates,
+                                         String generalGuidance) {
         MarkScheme scheme = markSchemes.findWithPoints(schemeId)
                 .orElseThrow(() -> new NotFoundException("mark scheme", schemeId));
         if (criteriaUpdates != null) {
@@ -225,13 +236,18 @@ public class ContentReviewService {
                 point.setAcceptanceCriteria(update.acceptanceCriteria());
             }
         }
+        if (generalGuidance != null) {
+            scheme.setGeneralGuidance(generalGuidance.isBlank() ? null : generalGuidance.strip());
+        }
         String from = stateName(scheme.validationState());
         scheme.validate();
         audit.record("VALIDATE", "mark_scheme", schemeId, from,
                 stateName(scheme.validationState()),
-                (criteriaUpdates == null ? 0 : criteriaUpdates.size()) + " criteria updates");
-        log.info("mark scheme {} validated ({} criteria updates)",
-                schemeId, criteriaUpdates == null ? 0 : criteriaUpdates.size());
+                (criteriaUpdates == null ? 0 : criteriaUpdates.size()) + " criteria updates"
+                        + (generalGuidance == null ? "" : " + general guidance"));
+        log.info("mark scheme {} validated ({} criteria updates{})",
+                schemeId, criteriaUpdates == null ? 0 : criteriaUpdates.size(),
+                generalGuidance == null ? "" : " + general guidance");
         return scheme;
     }
 

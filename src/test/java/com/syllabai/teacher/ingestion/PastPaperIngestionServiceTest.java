@@ -95,7 +95,8 @@ class PastPaperIngestionServiceTest {
                         new PastPaperDraftDto.MarkPointDraft("3-b", 1, "zinc layer prevents air contact", 1,
                                 List.of(), 0.55),
                         new PastPaperDraftDto.MarkPointDraft("9", 1, "question-level orphan point", 1,
-                                List.of(), 0.55))),
+                                List.of(), 0.55)),
+                        "Accept ecf. Ignore significant figure penalties."),
                 "opendataloader-fast+heuristics-v0",
                 true);
     }
@@ -125,6 +126,8 @@ class PastPaperIngestionServiceTest {
         MarkScheme scheme = (MarkScheme) savedAll.stream()
                 .filter(e -> e instanceof MarkScheme).findFirst().orElseThrow();
         assertThat(scheme.validationState()).isEqualTo(MarkScheme.ValidationState.SUGGESTED);
+        assertThat(scheme.generalGuidance())
+                .isEqualTo("Accept ecf. Ignore significant figure penalties.");
         assertThat(scheme.points()).hasSize(2);
         assertThat(scheme.points().get(0).questionPart()).isNotNull();   // "3-a" -> part "a"
         assertThat(scheme.points().get(0).questionPart().label()).isEqualTo("a");

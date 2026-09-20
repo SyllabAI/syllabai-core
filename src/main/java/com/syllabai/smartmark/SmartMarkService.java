@@ -29,6 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
  * applies provisional marks, and — only when the κ ≥ 0.60 agreement gate has released
  * Smart Mark — lets the marks drive the evidence contract. Before the gate passes,
  * smart marks are provisional and a human mark remains required for evidence.
+ *
+ * <p>Scheme honesty (V34, gap G-2): only a VALIDATED scheme backs marking. When the
+ * question version's newest scheme is SUGGESTED / REJECTED / FLAGGED, the run is
+ * refused with an honest {@code SCHEME_NOT_VALIDATED} result row (stamped with the
+ * scheme it refused) — nothing is marked, no state changes, no evidence fires. The
+ * refusal row keeps the calibration dataset complete: it records that marking was
+ * attempted and why it did not happen.</p>
  */
 @Service
 public class SmartMarkService {
@@ -95,8 +102,12 @@ public class SmartMarkService {
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("question version", question.id()));
         MarkScheme scheme = markSchemes
-                .findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id())
-                .orElseThrow(() -> new NotFoundException("mark scheme", version.id()));
+                .findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                        version.id(), MarkScheme.ValidationState.VALIDATED)
+                .orElse(null);
+        if (scheme == null) {
+            return refuseUnvalidatedScheme(answer, version.id());
+        }
 
         List<com.syllabai.assessment.MarkPoint> inScope = scheme.points().stream()
                 .filter(p -> answer.questionPartId().equals(p.questionPartId()))
@@ -112,7 +123,9 @@ public class SmartMarkService {
                 decision.accepted(),
                 decision.breakdown(),
                 decision.failureReason(),
-                pipeline.candidateRawOutput(decision)));
+                pipeline.candidateRawOutput(decision),
+                scheme.id(),
+                scheme.validationState().name()));
 
         boolean authoritative = false;
         if (decision.accepted()) {
@@ -151,6 +164,39 @@ public class SmartMarkService {
                 decision.accepted(), decision.failureReason(),
                 pipeline.candidateModelId(decision), SmartMarkResult.PIPELINE_VERSION,
                 authoritative, Instant.now()));
+        return result;
+    }
+
+    /**
+     * Honest refusal (V34, gap G-2): no VALIDATED scheme exists for the question
+     * version, so nothing is marked, no state changes and no evidence fires —
+     * but the attempt is recorded as an append-only result row stamped with the
+     * scheme it refused (the newest scheme in whatever state it is in), so the
+     * calibration dataset shows marking was attempted and why it did not happen.
+     * A question version with no scheme at all keeps the original NotFound
+     * behaviour (the V20 coverage guard makes that rare: VALIDATED papers always
+     * carry schemes).
+     */
+    private SmartMarkResult refuseUnvalidatedScheme(Answer answer, UUID questionVersionId) {
+        MarkScheme refused = markSchemes
+                .findFirstByQuestionVersionIdOrderByCreatedAtDesc(questionVersionId)
+                .orElseThrow(() -> new NotFoundException("mark scheme", questionVersionId));
+        log.info("smart mark refused for answer {} — newest scheme {} is {} "
+                        + "(only VALIDATED schemes back marking)",
+                answer.id(), refused.id(), refused.validationState());
+        SmartMarkResult result = smartMarkResults.save(new SmartMarkResult(
+                answer, null, 0, null, false,
+                List.of(), "SCHEME_NOT_VALIDATED", null,
+                refused.id(), refused.validationState().name()));
+        events.publishEvent(new SmartMarkCompletedEvent(
+                answer.id(), answer.attempt().id(), answer.attempt().learnerId(),
+                answer.attempt().question().id(), 0,
+                refused.points().stream()
+                        .filter(p -> answer.questionPartId().equals(p.questionPartId()))
+                        .mapToInt(com.syllabai.assessment.MarkPoint::marks)
+                        .sum(),
+                false, "SCHEME_NOT_VALIDATED", null, SmartMarkResult.PIPELINE_VERSION,
+                false, Instant.now()));
         return result;
     }
 

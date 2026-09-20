@@ -56,6 +56,16 @@ public class MarkScheme {
     @Column(name = "extraction_method", length = 120)
     private String extractionMethod;
 
+    /**
+     * Scheme-level general instructions from the board's mark scheme (V34, gap G-3):
+     * "accept ecf", "ignore significant figure penalties", "allow reverse ordering".
+     * These govern EVERY mark point decision — the marking prompt renders them as
+     * their own section when present (prompt registry v2). Homeless before V34:
+     * folding them into individual points lost their scheme-wide scope.
+     */
+    @Column(name = "general_guidance", columnDefinition = "text")
+    private String generalGuidance;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -96,8 +106,14 @@ public class MarkScheme {
     public String sourceDocumentId() { return sourceDocumentId; }
     public ValidationState validationState() { return validationState; }
     public String extractionMethod() { return extractionMethod; }
+    public String generalGuidance() { return generalGuidance; }
     public Instant createdAt() { return createdAt; }
     public List<MarkPoint> points() { return List.copyOf(points); }
+
+    /** teacher-authored or bridge-extracted scheme-level instructions (V34, G-3) */
+    public void setGeneralGuidance(String generalGuidance) {
+        this.generalGuidance = generalGuidance;
+    }
 
     public int totalMarks() {
         return points.stream().mapToInt(MarkPoint::marks).sum();

@@ -29,7 +29,7 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "smart_mark_results")
 public class SmartMarkResult {
 
-    public static final String PIPELINE_VERSION = "1.0.0";
+    public static final String PIPELINE_VERSION = "1.1.0";
 
     @Id
     @Column(name = "id")
@@ -69,6 +69,18 @@ public class SmartMarkResult {
     @Column(name = "failure_reason", length = 200)
     private String failureReason;
 
+    /**
+     * Provenance of what this run was marked against (V34, gap G-2): the selected
+     * scheme and its validation state AS OF the run. Makes the calibration set
+     * segmentable and honest — a refusal against a SUGGESTED scheme records the
+     * scheme it refused, an accepted run proves it marked against VALIDATED.
+     */
+    @Column(name = "mark_scheme_id")
+    private UUID markSchemeId;
+
+    @Column(name = "scheme_validation_state", length = 12)
+    private String schemeValidationState;
+
     /** raw generator output retained verbatim for audit (never parsed on read) */
     @Column(name = "raw_output", columnDefinition = "text")
     private String rawOutput;
@@ -84,6 +96,15 @@ public class SmartMarkResult {
                            Double confidence, boolean validationPassed,
                            List<Map<String, Object>> breakdown, String failureReason,
                            String rawOutput) {
+        // pre-V34 shape: rows without scheme provenance (kept for existing callers)
+        this(answer, modelId, marksAwarded, confidence, validationPassed,
+                breakdown, failureReason, rawOutput, null, null);
+    }
+
+    public SmartMarkResult(Answer answer, String modelId, int marksAwarded,
+                           Double confidence, boolean validationPassed,
+                           List<Map<String, Object>> breakdown, String failureReason,
+                           String rawOutput, UUID markSchemeId, String schemeValidationState) {
         this.answer = answer;
         this.modelId = modelId;
         this.marksAwarded = marksAwarded;
@@ -92,6 +113,8 @@ public class SmartMarkResult {
         this.breakdown = breakdown == null ? new java.util.ArrayList<>() : breakdown;
         this.failureReason = failureReason;
         this.rawOutput = rawOutput;
+        this.markSchemeId = markSchemeId;
+        this.schemeValidationState = schemeValidationState;
     }
 
     @PrePersist
@@ -110,5 +133,7 @@ public class SmartMarkResult {
     public List<Map<String, Object>> breakdown() { return breakdown; }
     public String failureReason() { return failureReason; }
     public String rawOutput() { return rawOutput; }
+    public UUID markSchemeId() { return markSchemeId; }
+    public String schemeValidationState() { return schemeValidationState; }
     public Instant createdAt() { return createdAt; }
 }

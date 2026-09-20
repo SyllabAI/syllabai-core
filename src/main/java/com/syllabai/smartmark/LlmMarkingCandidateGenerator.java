@@ -24,13 +24,16 @@ import org.springframework.stereotype.Component;
  *
  * <p>Temperature is pinned to 0.1 for near-deterministic marking decisions; the
  * prompt is versioned in the {@code prompt_versions} registry
- * ({@code smart-mark-candidate}, v1 — V10 seed).</p>
+ * ({@code smart-mark-candidate}, v2 — V25 seed). v2 adds the scheme-level
+ * general-guidance section ("accept ecf", "ignore significant-figure penalties"):
+ * rendered only when the selected scheme carries {@code generalGuidance} — the
+ * scheme-wide instructions the per-point acceptance criteria cannot express.</p>
  */
 @Component
 public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "smart-mark-candidate";
-    public static final String PROMPT_VERSION = "1";
+    public static final String PROMPT_VERSION = "2";
 
     private static final Logger log = LoggerFactory.getLogger(LlmMarkingCandidateGenerator.class);
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -93,6 +96,12 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
                 sb.append("  acceptance: ").append(String.join("; ", point.acceptanceCriteria()))
                         .append('\n');
             }
+        }
+        String guidance = context.scheme() == null ? null : context.scheme().generalGuidance();
+        if (guidance != null && !guidance.isBlank()) {
+            sb.append("\nSCHEME-LEVEL GENERAL INSTRUCTIONS (board-issued, apply to every\n")
+                    .append("decision below, e.g. accept ecf / ignore penalties):\n")
+                    .append(guidance.strip()).append('\n');
         }
         sb.append("\nLEARNER ANSWER:\n").append(context.answer().answerText());
         return sb.toString();

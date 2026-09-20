@@ -267,7 +267,8 @@ public class ContentController {
                         .map(c -> new ContentReviewService.PointCriteria(
                                 c.markPointId(), c.acceptanceCriteria()))
                         .toList();
-        return SchemeSummary.from(review.validateMarkScheme(id, criteria));
+        return SchemeSummary.from(review.validateMarkScheme(id, criteria,
+                request == null ? null : request.generalGuidance()));
     }
 
     @PostMapping("/mark-schemes/{id}/reject")
@@ -328,8 +329,11 @@ public class ContentController {
     /**
      * @param criteria acceptance-criteria authoring, applied atomically with validation;
      *                 null/absent = validate the scheme as-is
+     * @param generalGuidance scheme-level board instructions (V34, G-3: ecf / ignore
+     *                        rules); null/absent = leave any existing value untouched
      */
-    public record SchemeValidateRequest(List<PointCriteriaUpdate> criteria) {
+    public record SchemeValidateRequest(List<PointCriteriaUpdate> criteria,
+                                        String generalGuidance) {
     }
 
     public record PointCriteriaUpdate(@NotNull UUID markPointId,
