@@ -38,6 +38,9 @@ public class SimpleCitationResolver implements CitationResolver {
             case KNOWLEDGE_NODE -> String.format(Locale.ROOT, "Specification topic %s — %s",
                     item.nodeCode(), item.nodeTitle());
             case LEARNER_WORK -> "Your submitted answer";
+            case NOTE -> "Revision notes" + pageSuffix(item);
+            case TEXTBOOK -> "Textbook" + pageSuffix(item);
+            case CARD -> "Question card";
         };
     }
 

@@ -103,6 +103,9 @@ public class GroundedTutorGenerator implements TutorGenerator {
             case OTHER -> "(source document, p" + page + ") ";
             case KNOWLEDGE_NODE -> "(spec topic " + evidence.nodeCode() + ") ";
             case LEARNER_WORK -> "(the learner's submitted work) ";
+            case NOTE -> "(revision notes, p" + page + ") ";
+            case TEXTBOOK -> "(textbook, p" + page + ") ";
+            case CARD -> "(question card) ";
         };
     }
 
