@@ -15,21 +15,28 @@ import org.springframework.stereotype.Repository;
  * posture the knowledge-graph recursive CTEs use.
  *
  * <p>Embed-revision read filter (V33, plan §6): {@link #CURRENT_EMBED_REV} is the
- * single constant deciding which corpus generation serves. rev1 rows (all of
- * production today) carry embed_rev = 1; the R3 v2 ingest writes embed_rev = 2
- * rows and the cut-over is THIS constant flipping to 2 — rollback is flipping it
- * back. rev1 rows are never mutated in place; they are deleted at the R5
- * cut-over once the eval gate passes.</p>
+ * single constant deciding which corpus generation serves. rev1 rows (the 2,333
+ * legacy glmocr chunks) carry embed_rev = 1 and remain in place untouched; the
+ * corpus-v2 ingest writes embed_rev = 2 rows and the cut-over is THIS constant
+ * flipping to 2 — rollback is flipping it back. rev1 rows are never mutated in
+ * place; they are deleted at the R5 cut-over once the eval gate passes.</p>
  */
 @Repository
 public class ChunkVectorRepository {
 
     /**
-     * The corpus generation that serves (plan §6). 1 = rev1 (current production:
-     * 172 legacy docs, no headers/metadata). Flip to 2 only at the R3 cut-over,
-     * after the golden-set eval gates pass — never before.
+     * The corpus generation that serves (plan §6). 2 = corpus-v2 (atom-aligned,
+     * header-stamped, metadata-complete bridge ingest — the R3 corpus-v2 leg).
+     * FLIPPED 2026-09-20 (Task 32) after the offline eval gates passed on the
+     * frozen embed-bridge-v2 substrate: (G1) rev2 hit@10 9/9 vs rev1 0/9 on the
+     * rev2-covered gold subset, offline rev1 recomputation reconciled EXACTLY
+     * with CI run-004-a-r3 (FETCH 0/40; only the 4 enumerate_paper queries hit);
+     * (G2) 10/10 topical probes keyword-matched in rev2 top-10; (G3) 300/300
+     * chunks header+group-key complete. rev1 rows (2,333 legacy chunks) are
+     * never mutated in place — rollback is flipping this constant back to 1;
+     * rev1 retirement (deletion) stays gated at R5.
      */
-    public static final int CURRENT_EMBED_REV = 1;
+    public static final int CURRENT_EMBED_REV = 2;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
