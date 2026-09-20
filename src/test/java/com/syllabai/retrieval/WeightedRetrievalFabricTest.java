@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.tutor.EvidenceItem;
+import com.syllabai.tutor.ReciprocalRankFusion;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
