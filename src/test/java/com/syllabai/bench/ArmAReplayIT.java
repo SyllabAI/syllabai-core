@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.syllabai.assessment.ExamPaper;
+import com.syllabai.content.ChunkVectorRepository;
 import com.syllabai.content.EmbeddingProvider;
 import com.syllabai.curriculum.CurriculumVersion;
 import com.syllabai.curriculum.Subject;
@@ -180,24 +181,28 @@ class ArmAReplayIT {
                 """, DOC_ROW_S, DOC_S, DOC_S, "{}");
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
-                    token_estimate, created_at)
-                values (?, ?, 0, ?, ?::jsonb, 16, now())
-                """, ROW_V_0, DOC_ROW_V, CONTENT_A, "[]");
+                    token_estimate, embed_rev, created_at)
+                values (?, ?, 0, ?, ?::jsonb, 16, ?, now())
+                """, ROW_V_0, DOC_ROW_V, CONTENT_A, "[]",
+                ChunkVectorRepository.CURRENT_EMBED_REV);
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
-                    token_estimate, created_at)
-                values (?, ?, 1, ?, ?::jsonb, 16, now())
-                """, ROW_V_1, DOC_ROW_V, CONTENT_B, "[]");
+                    token_estimate, embed_rev, created_at)
+                values (?, ?, 1, ?, ?::jsonb, 16, ?, now())
+                """, ROW_V_1, DOC_ROW_V, CONTENT_B, "[]",
+                ChunkVectorRepository.CURRENT_EMBED_REV);
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
-                    token_estimate, created_at)
-                values (?, ?, 2, ?, ?::jsonb, 16, now())
-                """, ROW_V_2, DOC_ROW_V, CONTENT_A + " (tail)", "[]");
+                    token_estimate, embed_rev, created_at)
+                values (?, ?, 2, ?, ?::jsonb, 16, ?, now())
+                """, ROW_V_2, DOC_ROW_V, CONTENT_A + " (tail)", "[]",
+                ChunkVectorRepository.CURRENT_EMBED_REV);
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, element_ids,
-                    token_estimate, created_at)
-                values (?, ?, 0, ?, ?::jsonb, 16, now())
-                """, ROW_S_0, DOC_ROW_S, CONTENT_A, "[]");
+                    token_estimate, embed_rev, created_at)
+                values (?, ?, 0, ?, ?::jsonb, 16, ?, now())
+                """, ROW_S_0, DOC_ROW_S, CONTENT_A, "[]",
+                ChunkVectorRepository.CURRENT_EMBED_REV);
     }
 
     @Test
