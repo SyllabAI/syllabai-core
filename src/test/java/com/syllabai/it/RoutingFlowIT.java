@@ -137,10 +137,10 @@ class RoutingFlowIT {
         // one paperless PAST_PAPER question mapped to the topic (disjoint bank subset, R3 finding)
         jdbc.update("""
                 insert into questions (id, question_type, stem, marks, difficulty, expected_time_seconds,
-                                       provenance, active, version, created_at)
+                                       primary_topic_node_id, provenance, active, version, created_at)
                 values (?, 'STRUCTURED', 'Paperless bank question about electrolysis.', 4, 3, 60,
-                        'PAST_PAPER', true, 1, now())
-                """, Q_PAPERLESS);
+                        ?, 'PAST_PAPER', true, 1, now())
+                """, Q_PAPERLESS, TOPIC_NODE);
         topicMapping(TOPIC_PAPERLESS, Q_PAPERLESS, TOPIC_NODE);
     }
 
@@ -155,17 +155,22 @@ class RoutingFlowIT {
 
     private void question(UUID id, UUID versionId, UUID paperId, String externalRef,
                           String stem, int marks) {
-        question(id, versionId, paperId, externalRef, stem, marks, true);
+        question(id, versionId, paperId, externalRef, stem, marks, true, TOPIC_NODE);
     }
 
     private void question(UUID id, UUID versionId, UUID paperId, String externalRef,
                           String stem, int marks, boolean active) {
+        question(id, versionId, paperId, externalRef, stem, marks, active, TOPIC_NODE);
+    }
+
+    private void question(UUID id, UUID versionId, UUID paperId, String externalRef,
+                          String stem, int marks, boolean active, UUID primaryTopic) {
         jdbc.update("""
                 insert into questions (id, external_ref, question_type, stem, marks, difficulty,
-                                       expected_time_seconds, provenance, active, version,
-                                       exam_paper_id, created_at)
-                values (?, ?, 'STRUCTURED', ?, ?, 3, 90, 'PAST_PAPER', ?, 1, ?, now())
-                """, id, externalRef, stem, marks, active, paperId);
+                                       expected_time_seconds, primary_topic_node_id, provenance,
+                                       active, version, exam_paper_id, created_at)
+                values (?, ?, 'STRUCTURED', ?, ?, 3, 90, ?, 'PAST_PAPER', ?, 1, ?, now())
+                """, id, externalRef, stem, marks, primaryTopic, active, paperId);
         jdbc.update("""
                 insert into question_versions (id, question_id, version, stem, marks, difficulty,
                                                expected_time_seconds, validation_state, created_at)
