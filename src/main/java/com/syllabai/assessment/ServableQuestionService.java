@@ -1,12 +1,20 @@
 package com.syllabai.assessment;
 
+import com.syllabai.assessment.dto.QuestionTopicTaxonomyView;
 import com.syllabai.assessment.dto.StudentQuestionView;
+import com.syllabai.knowledge.KnowledgeEdge;
+import com.syllabai.knowledge.KnowledgeEdgeRepository;
+import com.syllabai.knowledge.KnowledgeGraphService;
+import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,16 +47,28 @@ public class ServableQuestionService {
     private final QuestionVersionRepository questionVersions;
     private final ExamPaperRepository examPapers;
     private final SmeQuestionSpecPointRepository specPoints;
+    private final QuestionTopicRepository topicMappings;
+    private final KnowledgeNodeRepository knowledgeNodes;
+    private final KnowledgeEdgeRepository knowledgeEdges;
+    private final KnowledgeGraphService knowledgeGraph;
     private final ServableQuestionSpec servable = new ServableQuestionSpec();
 
     public ServableQuestionService(QuestionRepository questions,
                                    QuestionVersionRepository questionVersions,
                                    ExamPaperRepository examPapers,
-                                   SmeQuestionSpecPointRepository specPoints) {
+                                   SmeQuestionSpecPointRepository specPoints,
+                                   QuestionTopicRepository topicMappings,
+                                   KnowledgeNodeRepository knowledgeNodes,
+                                   KnowledgeEdgeRepository knowledgeEdges,
+                                   KnowledgeGraphService knowledgeGraph) {
         this.questions = questions;
         this.questionVersions = questionVersions;
         this.examPapers = examPapers;
         this.specPoints = specPoints;
+        this.topicMappings = topicMappings;
+        this.knowledgeNodes = knowledgeNodes;
+        this.knowledgeEdges = knowledgeEdges;
+        this.knowledgeGraph = knowledgeGraph;
     }
 
     /** servable questions mapped to a topic (primary or question_topics), difficulty-ordered */
@@ -119,6 +139,148 @@ public class ServableQuestionService {
         return activeByTopic(topicNodeId).size();
     }
 
+    /**
+     * The servable-question taxonomy (session-112): sections → topics with the
+     * question counts the exam-questions browser sidebar and the practice topic
+     * picker render. Computed under the SAME servability boundary as every list
+     * path (this service is the one owner of that rule — the taxonomy cannot
+     * drift from what {@code GET /api/v1/questions?topicNodeId=} actually serves).
+     *
+     * <p>A question counts under a topic when the topic list would serve it
+     * there: PRIMARY mapping or any secondary {@code question_topics} mapping,
+     * deduped per question — so the sidebar count is exactly the length of the
+     * list a click loads. {@code rootId}, when given, scopes the taxonomy to a
+     * subject's PART_OF subtree (unknown roots 404 exactly like the question
+     * list); without it the taxonomy spans every subject with servable
+     * questions.</p>
+     *
+     * <p>Grouping rides the knowledge graph: each counted topic node is grouped
+     * under its PART_OF parent (the section — a UNIT node on 4CH1). Structural
+     * duplicate PART_OF edges exist (the seed wrote several); a topic with
+     * several distinct parents is grouped under the deterministically-lowest
+     * parent id so the response is stable. Topics with no PART_OF parent, or
+     * mapped to nodes missing from the graph, are not browsable and are skipped
+     * — the taxonomy is the shape of what can be practised, not the syllabus.</p>
+     */
+    public QuestionTopicTaxonomyView taxonomy(UUID rootId) {
+        // subject scope first: unknown root 404s here, before any question work
+        Set<UUID> scope = rootId == null ? null
+                : new HashSet<>(knowledgeGraph.subtreeIds(rootId));
+
+        List<Question> candidates = filterBlockedPapers(questions.findAllActive());
+        Map<UUID, QuestionVersion> currentByQuestion = currentVersions(candidates);
+
+        List<Question> servableQuestions = candidates.stream()
+                .filter(q -> servable.isSatisfiedBy(q, currentByQuestion.get(q.id())))
+                .toList();
+
+        // topic reachability per question: primary mapping first, then every
+        // secondary question_topics mapping, deduped per (question, node)
+        Map<UUID, Set<UUID>> topicsByQuestion = new HashMap<>();
+        for (Question q : servableQuestions) {
+            if (q.primaryTopicNodeId() != null) {
+                topicsByQuestion.computeIfAbsent(q.id(), k -> new LinkedHashSet<>())
+                        .add(q.primaryTopicNodeId());
+            }
+        }
+        if (!servableQuestions.isEmpty()) {
+            for (QuestionTopic mapping : topicMappings.findByQuestionIdIn(
+                    servableQuestions.stream().map(Question::id).toList())) {
+                topicsByQuestion.computeIfAbsent(mapping.questionId(), k -> new LinkedHashSet<>())
+                        .add(mapping.nodeId());
+            }
+        }
+
+        // per-topic census, scope-filtered — int[]{total, mcq, structured}
+        Map<UUID, int[]> countsByTopic = new HashMap<>();
+        for (Question q : servableQuestions) {
+            for (UUID nodeId : topicsByQuestion.getOrDefault(q.id(), Set.of())) {
+                if (scope != null && !scope.contains(nodeId)) {
+                    continue;
+                }
+                int[] counts = countsByTopic.computeIfAbsent(nodeId, k -> new int[3]);
+                counts[0]++;
+                if (q.type() == Question.Type.MCQ_SINGLE) {
+                    counts[1]++;
+                } else if (q.type() == Question.Type.STRUCTURED) {
+                    counts[2]++;
+                }
+            }
+        }
+        if (countsByTopic.isEmpty()) {
+            return new QuestionTopicTaxonomyView(List.of());
+        }
+
+        // node metadata for the counted topics…
+        Map<UUID, KnowledgeNode> nodeById = new HashMap<>();
+        for (KnowledgeNode node : knowledgeNodes.findAllById(countsByTopic.keySet())) {
+            nodeById.put(node.id(), node);
+        }
+        // …and their PART_OF parents (deduped against duplicate structural edges)
+        Map<UUID, UUID> parentByTopic = new HashMap<>();
+        for (KnowledgeEdge edge : knowledgeEdges.findPartOfEdgesFrom(countsByTopic.keySet())) {
+            if (edge.relationType() != com.syllabai.knowledge.RelationType.PART_OF) {
+                continue; // the query filters this; the guard documents the contract
+            }
+            parentByTopic.merge(edge.sourceId(), edge.targetId(),
+                    (a, b) -> a.compareTo(b) < 0 ? a : b);
+        }
+        Map<UUID, KnowledgeNode> parentById = new HashMap<>();
+        for (KnowledgeNode node : knowledgeNodes.findAllById(parentByTopic.values())) {
+            parentById.put(node.id(), node);
+        }
+
+        // group topics under their section, both code-ordered (deterministic)
+        Map<UUID, List<QuestionTopicTaxonomyView.Topic>> topicsBySection = new LinkedHashMap<>();
+        for (Map.Entry<UUID, int[]> entry : countsByTopic.entrySet()) {
+            KnowledgeNode topic = nodeById.get(entry.getKey());
+            if (topic == null) {
+                continue; // mapping to a node outside the graph cannot be browsed
+            }
+            KnowledgeNode section = parentById.get(parentByTopic.get(entry.getKey()));
+            if (section == null) {
+                continue; // no PART_OF parent: not browsable from a section sidebar
+            }
+            int[] counts = entry.getValue();
+            topicsBySection.computeIfAbsent(section.id(), k -> new ArrayList<>())
+                    .add(new QuestionTopicTaxonomyView.Topic(topic.id(), topic.code(),
+                            topic.title(), counts[0], counts[1], counts[2]));
+        }
+        List<QuestionTopicTaxonomyView.Section> sections = topicsBySection.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(
+                        Comparator.comparing(id -> parentById.get(id).code())))
+                .map(e -> {
+                    KnowledgeNode section = parentById.get(e.getKey());
+                    return new QuestionTopicTaxonomyView.Section(section.id(), section.code(),
+                            section.title(),
+                            e.getValue().stream()
+                                    .sorted(Comparator.comparing(QuestionTopicTaxonomyView.Topic::code))
+                                    .toList());
+                })
+                .toList();
+        return new QuestionTopicTaxonomyView(sections);
+    }
+
+    /**
+     * Current (highest-version) version per structured question, one batched
+     * query — the fetch strategy every list-shaped path already uses.
+     */
+    private Map<UUID, QuestionVersion> currentVersions(Collection<Question> candidates) {
+        List<UUID> structuredIds = candidates.stream()
+                .filter(q -> q.type() == Question.Type.STRUCTURED)
+                .map(Question::id)
+                .toList();
+        Map<UUID, QuestionVersion> currentByQuestion = new HashMap<>();
+        if (!structuredIds.isEmpty()) {
+            questionVersions.findWithPartsByQuestionIdsIn(structuredIds).stream()
+                    .collect(Collectors.groupingBy(QuestionVersion::questionId))
+                    .forEach((questionId, versions) -> versions.stream()
+                            .max(Comparator.comparingInt(QuestionVersion::version))
+                            .ifPresent(current -> currentByQuestion.put(questionId, current)));
+        }
+        return currentByQuestion;
+    }
+
     /** V20: drop questions whose paper is REJECTED/FLAGGED (paper-level integrity gate) */
     private List<Question> filterBlockedPapers(List<Question> candidates) {
         Set<UUID> blocked = new HashSet<>(examPapers.findIdsBlockingServing());
@@ -142,18 +304,7 @@ public class ServableQuestionService {
      * versions lookup that made the unscoped surface a ~1,800-query N+1.
      */
     private List<StudentQuestionView> projectAll(List<Question> candidates) {
-        List<UUID> structuredIds = candidates.stream()
-                .filter(q -> q.type() == Question.Type.STRUCTURED)
-                .map(Question::id)
-                .toList();
-        Map<UUID, QuestionVersion> currentByQuestion = new HashMap<>();
-        if (!structuredIds.isEmpty()) {
-            questionVersions.findWithPartsByQuestionIdsIn(structuredIds).stream()
-                    .collect(Collectors.groupingBy(QuestionVersion::questionId))
-                    .forEach((questionId, versions) -> versions.stream()
-                            .max(Comparator.comparingInt(QuestionVersion::version))
-                            .ifPresent(current -> currentByQuestion.put(questionId, current)));
-        }
+        Map<UUID, QuestionVersion> currentByQuestion = currentVersions(candidates);
         Map<UUID, List<String>> codes = specPointCodes(
                 candidates.stream().map(Question::id).toList());
         return candidates.stream()

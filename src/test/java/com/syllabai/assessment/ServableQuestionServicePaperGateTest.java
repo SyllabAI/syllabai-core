@@ -31,8 +31,16 @@ class ServableQuestionServicePaperGateTest {
     private final ExamPaperRepository examPapers = mock(ExamPaperRepository.class);
     private final com.syllabai.sme.SmeQuestionSpecPointRepository specPoints =
             mock(com.syllabai.sme.SmeQuestionSpecPointRepository.class);
+    private final QuestionTopicRepository topicMappings = mock(QuestionTopicRepository.class);
+    private final com.syllabai.knowledge.KnowledgeNodeRepository knowledgeNodes =
+            mock(com.syllabai.knowledge.KnowledgeNodeRepository.class);
+    private final com.syllabai.knowledge.KnowledgeEdgeRepository knowledgeEdges =
+            mock(com.syllabai.knowledge.KnowledgeEdgeRepository.class);
+    private final com.syllabai.knowledge.KnowledgeGraphService knowledgeGraph =
+            mock(com.syllabai.knowledge.KnowledgeGraphService.class);
     private final ServableQuestionService service =
-            new ServableQuestionService(questions, questionVersions, examPapers, specPoints);
+            new ServableQuestionService(questions, questionVersions, examPapers, specPoints,
+                    topicMappings, knowledgeNodes, knowledgeEdges, knowledgeGraph);
 
     private Question structuredQuestion(UUID paperId) {
         Question question = mock(Question.class);

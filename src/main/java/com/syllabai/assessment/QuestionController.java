@@ -1,6 +1,7 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.MarkSchemeRevealView;
+import com.syllabai.assessment.dto.QuestionTopicTaxonomyView;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.shared.NotFoundException;
 import java.util.List;
@@ -46,6 +47,18 @@ public class QuestionController {
             return servableQuestions.activeWithin(knowledgeGraph.subtreeIds(rootId));
         }
         return servableQuestions.allActive();
+    }
+
+    /**
+     * The servable-question taxonomy (session-112): sections → topics with
+     * counts, the shape the exam-questions browser sidebar and the practice
+     * topic picker render. Counts follow the same servability + topic-reachability
+     * rule as {@link #list} — a topic's count is the length of its list.
+     * {@code rootId} scopes to a subject's subtree (unknown roots 404 like list).
+     */
+    @GetMapping("/topics")
+    public QuestionTopicTaxonomyView topics(@RequestParam(required = false) UUID rootId) {
+        return servableQuestions.taxonomy(rootId);
     }
 
     @GetMapping("/{id}")
