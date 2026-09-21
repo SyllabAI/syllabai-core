@@ -61,9 +61,19 @@ public record LearnerProperties(
         }
     }
 
-    public record DecayJob(boolean enabled, String cron, Duration idleGracePeriod) {
+    /**
+     * @param checkCron      how often the run-if-missed checker ticks (session-114;
+     *                       was a single 03:00 cron that slept through on the free
+     *                       tier). Every tick runs the batch iff the current
+     *                       window's ledger row is absent.
+     * @param windowHourUtc  the UTC hour the nightly window opens (default 3 —
+     *                       the historical fire time, kept as the window anchor)
+     */
+    public record DecayJob(boolean enabled, String checkCron, int windowHourUtc,
+                           Duration idleGracePeriod) {
         public DecayJob {
-            if (cron == null || cron.isBlank()) cron = "0 0 3 * * *";
+            if (checkCron == null || checkCron.isBlank()) checkCron = "0 */15 * * * *";
+            if (windowHourUtc < 0 || windowHourUtc > 23) windowHourUtc = 3;
             if (idleGracePeriod == null) idleGracePeriod = Duration.ofDays(2);
         }
     }
@@ -72,6 +82,6 @@ public record LearnerProperties(
         if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1);
         if (decay == null) decay = new Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6);
         if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5);
-        if (decayJob == null) decayJob = new DecayJob(false, "0 0 3 * * *", Duration.ofDays(2));
+        if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
     }
 }

@@ -200,8 +200,12 @@ syllabai:
       select-if-not-held: 0.1
       active-threshold: 0.5
     decay-job:
-      enabled: false   # enable in production profile (nightly 03:00)
-      cron: "0 0 3 * * *"
+      enabled: false   # enable in production profile (nightly window opens 03:00 UTC)
+      # run-if-missed checker (session-114): every tick runs the batch iff the
+      # current window's decay_job_runs ledger row is absent — any wake completes
+      # the nightly promise (replaces the single 03:00 cron the free tier slept through)
+      check-cron: "0 */15 * * * *"
+      window-hour-utc: 3
       idle-grace-period: 48h
 
   storage:
