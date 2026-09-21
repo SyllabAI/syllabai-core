@@ -192,6 +192,49 @@ class ServableQuestionTaxonomyTest {
         assertThat(b.questionCount()).isEqualTo(2);
         assertThat(b.mcqCount()).isEqualTo(1);
         assertThat(b.structuredCount()).isEqualTo(1);
+
+        // session-116 deduped census: the badges sum to 5 because mcqB and
+        // structuredAB each appear under two topics — but the section and view
+        // totals count each DISTINCT question once (3), which is what the
+        // sidebar total renders
+        assertThat(section.distinctQuestionCount()).isEqualTo(3);
+        assertThat(view.totalDistinctQuestions()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a question spanning two sections counts once per section, once in the total")
+    void crossSectionQuestionDeduped() {
+        UUID section1 = UUID.randomUUID();
+        UUID section2 = UUID.randomUUID();
+        UUID topicInS1 = UUID.randomUUID();
+        UUID topicInS2 = UUID.randomUUID();
+        when(examPapers.findIdsBlockingServing()).thenReturn(List.of());
+
+        Question crossSection = mcq(topicInS1);              // primary in S1
+        Question s2Only = mcq(topicInS2);                     // primary in S2
+        when(questions.findAllActive()).thenReturn(List.of(crossSection, s2Only));
+        // crossSection also reachable from the S2 topic (secondary mapping)
+        when(topicMappings.findByQuestionIdIn(anyCollection())).thenReturn(List.of(
+                new QuestionTopic(crossSection, topicInS2, false)));
+
+        wireGraph(
+                List.of(node(section1, "4CH1-S1", "Principles of chemistry", NodeType.UNIT),
+                        node(section2, "4CH1-S2", "Inorganic chemistry", NodeType.UNIT)),
+                List.of(node(topicInS1, "4CH1-S1-a", "States of matter", NodeType.TOPIC),
+                        node(topicInS2, "4CH1-S2-b", "Group 1", NodeType.TOPIC)),
+                List.of(under(topicInS1, section1), under(topicInS2, section2)));
+
+        QuestionTopicTaxonomyView view = service.taxonomy(null);
+
+        // per-topic badges stay reachable counts: crossSection counts under BOTH topics
+        assertThat(find(view, "4CH1-S1-a").orElseThrow().questionCount()).isEqualTo(1);
+        assertThat(find(view, "4CH1-S2-b").orElseThrow().questionCount()).isEqualTo(2);
+        // each section dedupes within itself: S2 holds {crossSection, s2Only} = 2
+        assertThat(view.sections()).extracting(
+                        QuestionTopicTaxonomyView.Section::distinctQuestionCount)
+                .containsExactly(1, 2); // code-ordered S1, S2
+        // the view total counts crossSection ONCE, globally: {crossSection, s2Only}
+        assertThat(view.totalDistinctQuestions()).isEqualTo(2);
     }
 
     @Test

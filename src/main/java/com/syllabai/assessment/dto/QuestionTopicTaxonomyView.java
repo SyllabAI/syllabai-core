@@ -21,15 +21,27 @@ import java.util.UUID;
  * version + paper integrity gate) by {@link com.syllabai.assessment.ServableQuestionService}
  * — the one owner of that rule, so the taxonomy cannot drift from serving.</p>
  *
+ * <p>Because a multi-topic question legitimately appears under every topic it
+ * tests, summing the per-topic badges double-counts it (the session-116
+ * "more questions than the SME bank" confusion). The view therefore also
+ * carries <em>deduped</em> census numbers: each section's
+ * {@code distinctQuestionCount} (a question counts once per section however
+ * many of that section's topics map to it) and the view's
+ * {@code totalDistinctQuestions} (once across the whole taxonomy) — the
+ * numbers the sidebar total renders, while the per-topic badges keep the
+ * click-invariant above.</p>
+ *
  * <p>Topics with zero servable questions do not appear: the taxonomy is the
  * shape of what can be practised, not the shape of the syllabus. Sections are
  * code-ordered, topics within a section code-ordered — deterministic like every
  * other read model.</p>
  */
-public record QuestionTopicTaxonomyView(List<Section> sections) {
+public record QuestionTopicTaxonomyView(List<Section> sections, int totalDistinctQuestions) {
 
-    /** one syllabus section (UNIT node) with its question-bearing topics */
-    public record Section(UUID nodeId, String code, String title, List<Topic> topics) {
+    /** one syllabus section (UNIT node) with its question-bearing topics; the
+     *  distinct count dedupes a question across the section's topics */
+    public record Section(UUID nodeId, String code, String title,
+                          int distinctQuestionCount, List<Topic> topics) {
     }
 
     /** one browsable topic node with its servable-question census */

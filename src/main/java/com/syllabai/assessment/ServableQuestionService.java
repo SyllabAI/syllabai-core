@@ -208,7 +208,7 @@ public class ServableQuestionService {
             }
         }
         if (countsByTopic.isEmpty()) {
-            return new QuestionTopicTaxonomyView(List.of());
+            return new QuestionTopicTaxonomyView(List.of(), 0);
         }
 
         // node metadata for the counted topics…
@@ -230,19 +230,53 @@ public class ServableQuestionService {
             parentById.put(node.id(), node);
         }
 
+        // browsable topic -> its section: the same two guards the grouping
+        // below has always applied (node in the graph + PART_OF parent in the
+        // graph), extracted once so the deduped census and the grouping can
+        // never disagree on what is browsable
+        Map<UUID, UUID> sectionByTopic = new HashMap<>();
+        for (Map.Entry<UUID, int[]> entry : countsByTopic.entrySet()) {
+            if (!nodeById.containsKey(entry.getKey())) {
+                continue; // mapping to a node outside the graph cannot be browsed
+            }
+            UUID parent = parentByTopic.get(entry.getKey());
+            if (parent == null || !parentById.containsKey(parent)) {
+                continue; // no PART_OF parent: not browsable from a section sidebar
+            }
+            sectionByTopic.put(entry.getKey(), parent);
+        }
+
+        // deduped census (session-116): a question mapped to several browsable
+        // topics counts ONCE per section and once in the view total — the
+        // sidebar's per-topic badges stay reachable counts (badge == list
+        // length on click), the section/view totals are the deduped numbers
+        // that kill the sum-the-sidebar double-counting confusion
+        Map<UUID, Set<UUID>> questionsBySection = new HashMap<>();
+        Set<UUID> distinctQuestions = new HashSet<>();
+        for (Question q : servableQuestions) {
+            for (UUID nodeId : topicsByQuestion.getOrDefault(q.id(), Set.of())) {
+                if (scope != null && !scope.contains(nodeId)) {
+                    continue;
+                }
+                UUID sectionId = sectionByTopic.get(nodeId);
+                if (sectionId == null) {
+                    continue; // not browsable: the per-topic census drops it too
+                }
+                questionsBySection.computeIfAbsent(sectionId, k -> new HashSet<>()).add(q.id());
+                distinctQuestions.add(q.id());
+            }
+        }
+
         // group topics under their section, both code-ordered (deterministic)
         Map<UUID, List<QuestionTopicTaxonomyView.Topic>> topicsBySection = new LinkedHashMap<>();
         for (Map.Entry<UUID, int[]> entry : countsByTopic.entrySet()) {
+            UUID sectionId = sectionByTopic.get(entry.getKey());
+            if (sectionId == null) {
+                continue; // not browsable (the guards above)
+            }
             KnowledgeNode topic = nodeById.get(entry.getKey());
-            if (topic == null) {
-                continue; // mapping to a node outside the graph cannot be browsed
-            }
-            KnowledgeNode section = parentById.get(parentByTopic.get(entry.getKey()));
-            if (section == null) {
-                continue; // no PART_OF parent: not browsable from a section sidebar
-            }
             int[] counts = entry.getValue();
-            topicsBySection.computeIfAbsent(section.id(), k -> new ArrayList<>())
+            topicsBySection.computeIfAbsent(sectionId, k -> new ArrayList<>())
                     .add(new QuestionTopicTaxonomyView.Topic(topic.id(), topic.code(),
                             topic.title(), counts[0], counts[1], counts[2]));
         }
@@ -253,12 +287,13 @@ public class ServableQuestionService {
                     KnowledgeNode section = parentById.get(e.getKey());
                     return new QuestionTopicTaxonomyView.Section(section.id(), section.code(),
                             section.title(),
+                            questionsBySection.getOrDefault(e.getKey(), Set.of()).size(),
                             e.getValue().stream()
                                     .sorted(Comparator.comparing(QuestionTopicTaxonomyView.Topic::code))
                                     .toList());
                 })
                 .toList();
-        return new QuestionTopicTaxonomyView(sections);
+        return new QuestionTopicTaxonomyView(sections, distinctQuestions.size());
     }
 
     /**
