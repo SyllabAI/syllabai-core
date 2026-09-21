@@ -224,6 +224,25 @@ class StudentSmartMarkServiceTest {
     }
 
     @Test
+    @DisplayName("the feedback actions are transactional — LAZY scheme points need a session (OSIV off)")
+    void feedbackActionsAreTransactional() throws Exception {
+        // production 500s (session-113 E2E): explainFeedback/improvementPlan read
+        // the scheme's LAZY points collection and the part's prompt outside any
+        // session when unannotated — LazyInitializationException behind the
+        // generic 500 handler. The annotation IS the fix; this guard keeps it.
+        assertThat(StudentSmartMarkService.class
+                .getMethod("explainFeedback", UUID.class, UUID.class, UUID.class)
+                .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
+                .as("explainFeedback must run in a transaction")
+                .isTrue();
+        assertThat(StudentSmartMarkService.class
+                .getMethod("improvementPlan", UUID.class, UUID.class, UUID.class)
+                .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
+                .as("improvementPlan must run in a transaction")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("non-structured attempts are a 400")
     void mcqAttemptIsBadRequest() {
         Question mcq = new Question("sme-eq-1-1-q4", Question.Type.MCQ_SINGLE, "", 1, 3, 120,

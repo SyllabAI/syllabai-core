@@ -176,7 +176,14 @@ public class StudentSmartMarkService {
      * from the accepted Smart Mark result. Deterministic guard: an accepted
      * result must exist (409 otherwise); the LLM explains decisions, it never
      * makes them.
+     *
+     * <p>Transactional like {@link #smartMarkAttempt}: the marking context is
+     * read through LAZY relations (the scheme's points collection, the part's
+     * prompt) and OSIV is off — outside a session the projection would die on
+     * LazyInitializationException (production 500s, first exercised by the
+     * session-113 E2E probe).</p>
      */
+    @Transactional
     public StudentSmartMarkViews.FeedbackExplanationView explainFeedback(
             UUID learnerId, UUID attemptId, UUID partId) {
         FeedbackSource source = loadFeedbackSource(learnerId, attemptId, partId);
@@ -196,7 +203,11 @@ public class StudentSmartMarkService {
      * was missing from the student's answer and one concrete step per missing
      * point. Coaching, never answer-writing: the prompt forbids producing a
      * finished answer or dumping the scheme.
+     *
+     * <p>Transactional for the same LAZY-relation reason as
+     * {@link #explainFeedback}.</p>
      */
+    @Transactional
     public StudentSmartMarkViews.ImprovementPlanView improvementPlan(
             UUID learnerId, UUID attemptId, UUID partId) {
         FeedbackSource source = loadFeedbackSource(learnerId, attemptId, partId);
