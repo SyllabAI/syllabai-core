@@ -281,10 +281,13 @@ public class StudentSmartMarkService {
             for (Map<String, Object> entry : result.breakdown()) {
                 UUID pointId = UUID.fromString(String.valueOf(entry.get("markPointId")));
                 MarkPoint point = byId.get(pointId);
+                int pointMarks = point == null ? 0 : point.marks();
+                int awardedMarks = awardedMarks(entry, pointMarks);
                 breakdown.add(new StudentSmartMarkViews.PointDecisionView(
                         String.valueOf(entry.get("ref")),
-                        point == null ? null : point.text(),
-                        point == null ? 0 : point.marks(),
+                        point == null ? String.valueOf(entry.get("ref")) : pointLabel(point),
+                        pointMarks,
+                        awardedMarks,
                         Boolean.TRUE.equals(entry.get("awarded")),
                         String.valueOf(entry.getOrDefault("evidence", "")),
                         String.valueOf(entry.getOrDefault("rationale", ""))));
@@ -302,6 +305,43 @@ public class StudentSmartMarkService {
                 result.validationPassed(),
                 result.failureReason(),
                 List.copyOf(breakdown));
+    }
+
+    /**
+     * v1.0/v1.1 result rows carry boolean-only decisions (whole-point semantics);
+     * v1.2 rows carry explicit partial {@code marksAwarded}. Read the explicit
+     * value when present, fall back to boolean × point marks otherwise.
+     */
+    private static int awardedMarks(Map<String, Object> entry, int pointMarks) {
+        Object explicit = entry.get("marksAwarded");
+        if (explicit instanceof Number n) {
+            return Math.max(0, Math.min(n.intValue(), pointMarks));
+        }
+        return Boolean.TRUE.equals(entry.get("awarded")) ? pointMarks : 0;
+    }
+
+    /**
+     * Compact, scheme-leak-safe label for one mark point: the first meaningful
+     * line of the scheme text with markdown decorations stripped, capped at 90
+     * characters. The Smart Mark flow deliberately does NOT reveal the scheme —
+     * the full text (model answers, teaching notes) stays server-side and feeds
+     * only the explain/improve generations.
+     */
+    static String pointLabel(MarkPoint point) {
+        String text = point.text() == null ? "" : point.text();
+        for (String line : text.split("\\R")) {
+            String cleaned = line.replaceAll("^[-*+>\\s]+", "")
+                    .replaceAll("\\*+", "")
+                    .replaceAll("<sub>[^<]*</sub>|<sup>[^<]*</sup>", "")
+                    .replaceAll("\\s+", " ")
+                    .trim();
+            if (cleaned.isEmpty() || cleaned.startsWith("[Total")
+                    || cleaned.matches("^\\[.*\\]$")) {
+                continue;
+            }
+            return cleaned.length() > 90 ? cleaned.substring(0, 89) + "…" : cleaned;
+        }
+        return String.valueOf(point.ref());
     }
 
     // ── generation ───────────────────────────────────────────────────────
@@ -330,12 +370,19 @@ public class StudentSmartMarkService {
         return """
                 You are an exam tutor explaining a marking result to an IGCSE student.
                 You are given the question part, the student's answer, and the final
-                per-mark-point decisions produced by the marking pipeline. For each
-                mark point, explain why it was or was not awarded, quoting the
-                student's own words as evidence. Never change a mark decision, never
-                invent mark points, never add requirements beyond the provided
-                decisions. Be specific, encouraging and concise (under 220 words).
-                Plain text; short paragraphs; no markdown headings.
+                per-mark-point decisions (including partial marks) produced by the
+                marking pipeline. Structure your explanation EXACTLY like this:
+                1. One opening sentence: the marks earned out of the marks possible.
+                2. One short paragraph per mark point, in the order given, opening
+                   with the point's marks (e.g. \"b: 1 of 3\") — say what earned
+                   the credit (quoting the student's own words) and, for lost
+                   marks, exactly which sub-point content was missing.
+                3. If nothing was earned on a point, one sentence naming the
+                   specific missing content — never a generic fact dump.
+                Never change a mark decision, never invent mark points, never add
+                requirements beyond the provided decisions. Be specific and
+                encouraging. Under 200 words. Plain text; short paragraphs; no
+                markdown headings.
                 """;
     }
 
@@ -351,14 +398,21 @@ public class StudentSmartMarkService {
         return """
                 You are an exam coach helping an IGCSE student improve a marked answer.
                 You receive the question part, the student's answer, and the final
-                per-mark-point decisions. For every NOT-awarded mark point, describe
-                what was missing from the student's answer and give one concrete,
-                actionable step toward earning that mark next time. Coach — do NOT
-                write a finished answer for the student, do NOT quote the mark scheme
-                verbatim, do NOT change any mark decision. If every point was
-                awarded, give one examiner-technique tip to make the answer
-                examiner-proof instead. Keep under 220 words. Plain text; short
-                paragraphs; no markdown headings.
+                per-mark-point decisions (including partial marks). Structure your
+                coaching EXACTLY like this:
+                1. One opening sentence naming the marks still available (the gap
+                   between marks earned and marks possible).
+                2. For every point that lost marks — whole or partial — one short
+                   paragraph: what the student wrote vs. what the examiner needed
+                   for the missing sub-point, then ONE concrete actionable step
+                   phrased so the student could earn it next time. Stay tied to
+                   the missing sub-points; no general topic summaries, no facts
+                   the missing marks do not depend on.
+                3. If every mark was awarded, give one examiner-technique tip to
+                   make the answer examiner-proof instead.
+                Coach — do NOT write a finished answer for the student, do NOT
+                quote the mark scheme verbatim, do NOT change any mark decision.
+                Under 200 words. Plain text; short paragraphs; no markdown headings.
                 """;
     }
 
@@ -382,10 +436,11 @@ public class StudentSmartMarkService {
         for (Map<String, Object> entry : source.result().breakdown()) {
             UUID pointId = UUID.fromString(String.valueOf(entry.get("markPointId")));
             MarkPoint point = byId.get(pointId);
-            boolean awarded = Boolean.TRUE.equals(entry.get("awarded"));
+            int pointMarks = point == null ? 0 : point.marks();
+            int earned = awardedMarks(entry, pointMarks);
             sb.append("- ref=").append(entry.get("ref"))
-                    .append(" marks=").append(point == null ? 0 : point.marks())
-                    .append(" awarded=").append(awarded).append('\n');
+                    .append(" marks earned=").append(earned)
+                    .append(" of ").append(pointMarks).append('\n');
             if (point != null) {
                 sb.append("  point: ").append(point.text()).append('\n');
             }

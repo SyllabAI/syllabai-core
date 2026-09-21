@@ -9,10 +9,11 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
- * Total awarded marks must respect the scheme's own ceiling: sum of awarded points
- * (points are atomic) can never exceed the sum of in-scope point marks, and if the
- * part carries an extracted mark total, that bounds it too. Guards against a
- * hallucinating model awarding more than the paper allows.
+ * Total awarded marks must respect the scheme's own ceiling: the sum of per-point
+ * awarded marks (partial credit since v3 — each allocation clamped to its point's
+ * worth) can never exceed the sum of in-scope point marks, and if the part carries
+ * an extracted mark total, that bounds it too. Guards against a hallucinating
+ * model awarding more than the paper allows.
  *
  * <p>Registered as a bean so the production pipeline's injected validator chain
  * is non-empty (§23 factory wiring).</p>
@@ -32,10 +33,14 @@ public class MarkSumMarkingValidator implements MarkingValidator {
                 .collect(Collectors.toMap(MarkPoint::id, p -> p));
 
         int awarded = candidate.allocations().stream()
-                .filter(MarkingCandidate.Allocation::awarded)
                 .mapToInt(a -> {
                     MarkPoint point = byId.get(a.markPointId());
-                    return point == null ? 0 : point.marks();
+                    if (point == null) {
+                        return 0;
+                    }
+                    // per-point clamp first: an over-award on one point must not
+                    // eat the part budget of the others
+                    return Math.max(0, Math.min(a.marksAwarded(), point.marks()));
                 })
                 .sum();
 

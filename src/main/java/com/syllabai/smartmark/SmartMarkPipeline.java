@@ -91,13 +91,16 @@ public class SmartMarkPipeline {
         int awarded = 0;
         for (MarkingCandidate.Allocation allocation : candidate.allocations()) {
             MarkPoint point = byId.get(allocation.markPointId());
-            if (allocation.awarded()) {
-                awarded += point.marks();
-            }
+            // per-point partial marks (v3): a multi-mark point may award a subset —
+            // clamp defensively so a candidate can never exceed the point's worth
+            int resolved = point == null ? 0
+                    : Math.min(allocation.marksAwarded(), point.marks());
+            awarded += Math.max(0, resolved);
             breakdown.add(Map.ofEntries(
                     Map.entry("markPointId", allocation.markPointId().toString()),
                     Map.entry("ref", String.valueOf(allocation.ref())),
                     Map.entry("marks", point.marks()),
+                    Map.entry("marksAwarded", Math.max(0, resolved)),
                     Map.entry("awarded", allocation.awarded()),
                     Map.entry("evidence", String.valueOf(allocation.evidence())),
                     Map.entry("rationale", String.valueOf(allocation.rationale()))));
@@ -111,6 +114,7 @@ public class SmartMarkPipeline {
                         Map.entry("markPointId", p.id().toString()),
                         Map.entry("ref", String.valueOf(p.ref())),
                         Map.entry("marks", p.marks()),
+                        Map.entry("marksAwarded", 0),
                         Map.entry("awarded", false),
                         Map.entry("evidence", ""),
                         Map.entry("rationale", "blank answer: deterministic zero")))

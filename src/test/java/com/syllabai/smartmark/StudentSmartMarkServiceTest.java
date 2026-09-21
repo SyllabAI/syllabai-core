@@ -147,10 +147,13 @@ class StudentSmartMarkServiceTest {
         assertThat(part.marksAwarded()).isEqualTo(1);
         assertThat(part.authoritative()).isFalse(); // no κ evaluation — honest provisional
         assertThat(part.breakdown()).hasSize(2);
-        assertThat(part.breakdown().get(0).pointText()).isEqualTo("state the salt");
+        assertThat(part.breakdown().get(0).pointLabel()).isEqualTo("state the salt");
+        assertThat(part.breakdown().get(0).marksAwarded()).isEqualTo(1);
+        assertThat(part.breakdown().get(0).marks()).isEqualTo(1);
         assertThat(part.breakdown().get(0).awarded()).isTrue();
         assertThat(part.breakdown().get(0).evidence()).isEqualTo("sodium chloride");
         assertThat(part.breakdown().get(1).awarded()).isFalse();
+        assertThat(part.breakdown().get(1).marksAwarded()).isZero();
         // one engine: the student pass routed through the same markAnswer the
         // teacher queue calls (event publication lives inside the real service)
         verify(smartMarkService).markAnswer(answerA.id());
@@ -164,6 +167,51 @@ class StudentSmartMarkServiceTest {
         var view = service("VALIDATED_ONLY").smartMarkAttempt(LEARNER, attempt.id());
 
         assertThat(view.parts().get(0).authoritative()).isTrue();
+    }
+
+    @Test
+    @DisplayName("v1.2 partial-marks rows project marksAwarded; the scheme blob never leaks")
+    void partialMarksProjectWithoutSchemeLeak() {
+        // the operator scenario shape: ONE 3-mark compound point whose text is the
+        // whole scheme blob (model answer + teaching notes); the result row records
+        // a partial award of 1 of 3
+        MarkPoint compound = new MarkPoint(scheme, partA, "b", 1,
+                "i) The word equation for this reaction is:\n"
+                        + "- Zinc + hydrochloric acid \u2192 Zinc chloride + hydrogen; **[1 mark]**\n"
+                        + "ii) The test is:\n- Lit splint; **[1 mark]**\n"
+                        + "- Burns with squeaky pop; **[1 mark]**\n**[Total: 3 marks] **\n\n"
+                        + "- *A metal will react with an acid to form a salt and hydrogen gas*\n"
+                        + "- *MASH*\n- *Hydrogen is flammable*",
+                3, List.of(), 1.0);
+        TestIds.withId(compound, UUID.randomUUID());
+        scheme.addPoint(compound);
+
+        SmartMarkResult partial = new SmartMarkResult(answerA, "test-model", 1, 0.9, true,
+                List.of(Map.ofEntries(
+                        Map.entry("markPointId", compound.id().toString()),
+                        Map.entry("ref", "b"),
+                        Map.entry("marks", 3),
+                        Map.entry("marksAwarded", 1),
+                        Map.entry("awarded", true),
+                        Map.entry("evidence", "makes a squeaky pop sound"),
+                        Map.entry("rationale", "squeaky pop earned; reactants and splint missed"))),
+                null, "{}");
+        TestIds.withId(partial, UUID.randomUUID());
+        when(smartMarkService.markAnswer(answerA.id())).thenReturn(partial);
+
+        var view = service("VALIDATED_ONLY").smartMarkAttempt(LEARNER, attempt.id());
+
+        var part = view.parts().get(0);
+        assertThat(part.marksAwarded()).isEqualTo(1);
+        assertThat(part.breakdown()).hasSize(1);   // the partial result row's own breakdown
+        var row = part.breakdown().get(0);
+        assertThat(row.marksAwarded()).isEqualTo(1);
+        assertThat(row.marks()).isEqualTo(3);
+        // label = first meaningful line only — the model answer and the teaching
+        // notes (MASH, "Hydrogen is flammable") must NOT reach the learner view
+        assertThat(row.pointLabel()).isEqualTo("i) The word equation for this reaction is:");
+        assertThat(row.pointLabel()).doesNotContain("Zinc + hydrochloric acid");
+        assertThat(row.pointLabel()).doesNotContain("MASH");
     }
 
     @Test

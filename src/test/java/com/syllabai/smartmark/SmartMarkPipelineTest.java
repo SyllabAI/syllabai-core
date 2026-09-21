@@ -106,9 +106,9 @@ class SmartMarkPipelineTest {
     @DisplayName("accepted candidate awards validated point marks with evidence")
     void acceptedCandidateAwards() {
         generator = ctx -> new MarkingCandidate("test-model", List.of(
-                new MarkingCandidate.Allocation(pointA.id(), "1-a", true,
+                new MarkingCandidate.Allocation(pointA.id(), "1-a", 1,
                         "iron(III) oxide", "names the oxide"),
-                new MarkingCandidate.Allocation(pointB.id(), "1-a", false, "", "not mentioned")),
+                new MarkingCandidate.Allocation(pointB.id(), "1-a", 0, "", "not mentioned")),
                 0.85, "raw");
         var decision = pipeline.run(new MarkingContext(answer, part,
                 scheme, List.of(pointA, pointB)));
@@ -123,7 +123,7 @@ class SmartMarkPipelineTest {
     @DisplayName("coverage violation (undecided point) rejects the candidate")
     void coverageViolationRejects() {
         generator = ctx -> new MarkingCandidate("test-model", List.of(
-                new MarkingCandidate.Allocation(pointA.id(), "1-a", true, "x", "y")),
+                new MarkingCandidate.Allocation(pointA.id(), "1-a", 1, "x", "y")),
                 0.9, "raw");
         var decision = pipeline.run(new MarkingContext(answer, part,
                 scheme, List.of(pointA, pointB)));
@@ -137,8 +137,8 @@ class SmartMarkPipelineTest {
     void boundsViolationRejects() {
         UUID invented = UUID.randomUUID();
         generator = ctx -> new MarkingCandidate("test-model", List.of(
-                new MarkingCandidate.Allocation(invented, "??", true, "x", "y"),
-                new MarkingCandidate.Allocation(pointB.id(), "1-a", false, "", "")),
+                new MarkingCandidate.Allocation(invented, "??", 1, "x", "y"),
+                new MarkingCandidate.Allocation(pointB.id(), "1-a", 0, "", "")),
                 0.9, "raw");
         var decision = pipeline.run(new MarkingContext(answer, part,
                 scheme, List.of(pointA, pointB)));
@@ -172,12 +172,97 @@ class SmartMarkPipelineTest {
         scheme.addPoint(big);
 
         generator = ctx -> new MarkingCandidate("test-model", List.of(
-                new MarkingCandidate.Allocation(big.id(), "q-a", true, "x", "y")),
+                new MarkingCandidate.Allocation(big.id(), "q-a", 5, "x", "y")),
                 0.9, "raw");
         var decision = pipeline.run(new MarkingContext(a2, p2, scheme, List.of(big)));
         // part marks 1, scheme ceiling 5 -> bound 1; awarded 5 > 1 -> reject
         assertThat(decision.accepted()).isFalse();
         assertThat(decision.failureReason()).contains("exceeds scheme bound");
+    }
+
+    @Test
+    @DisplayName("operator scenario 2026-09-21: partial credit on a 3-mark compound point")
+    void compoundPointAwardsPartialCredit() {
+        // sme-eq-2-4-reactivity-series-q4-s part b: ONE 3-mark point bundling
+        // word-equation [1] + lit splint [1] + squeaky pop [1]. The learner wrote
+        // "i) zinc chloride + hydrogen ii) makes a squeaky pop sound when burned"
+        // — squeaky pop earned, reactants and splint missed: 1 of 3, never 0 or 3.
+        Question question = new Question("q-4s", Question.Type.STRUCTURED, "stem", 3, 3, 240,
+                "State", TOPIC, Question.Provenance.PAST_PAPER);
+        TestIds.withId(question, UUID.randomUUID());
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 3, 3, 240,
+                "State", QuestionVersion.ValidationState.VALIDATED, "doc", 0.9, "test");
+        TestIds.withId(version, UUID.randomUUID());
+        QuestionPart partB = new QuestionPart(version, "b", "part b", "State", 3, 0);
+        TestIds.withId(partB, UUID.randomUUID());
+        version.addPart(partB);
+        Attempt attempt = new Attempt(LEARNER, question, null, false, null,
+                5000L, 4, false, false, "test");
+        TestIds.withId(attempt, UUID.randomUUID());
+        Answer answer = new Answer(attempt, partB,
+                "i) zinc chloride + hydrogen\nii) makes a squeaky pop sound when burned");
+        TestIds.withId(answer, UUID.randomUUID());
+
+        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        TestIds.withId(scheme, UUID.randomUUID());
+        MarkPoint compound = new MarkPoint(scheme, partB, "b", 0,
+                "i) The word equation for this reaction is:\n"
+                        + "- Zinc + hydrochloric acid → Zinc chloride + hydrogen; [1 mark]\n"
+                        + "ii) The test is:\n"
+                        + "- Lit splint; [1 mark]\n- Burns with squeaky pop; [1 mark]\n"
+                        + "[Total: 3 marks]",
+                3, List.of(), 0.9);
+        TestIds.withId(compound, UUID.randomUUID());
+        scheme.addPoint(compound);
+
+        generator = ctx -> new MarkingCandidate("test-model", List.of(
+                new MarkingCandidate.Allocation(compound.id(), "b", 1,
+                        "makes a squeaky pop sound",
+                        "squeaky pop sub-point earned; word-equation reactants and lit splint missed")),
+                0.9, "raw");
+        var decision = pipeline.run(new MarkingContext(answer, partB, scheme, List.of(compound)));
+
+        assertThat(decision.accepted()).isTrue();
+        assertThat(decision.marksAwarded()).isEqualTo(1);
+        assertThat(decision.breakdown()).hasSize(1);
+        assertThat(decision.breakdown().get(0).get("marksAwarded")).isEqualTo(1);
+        assertThat(decision.breakdown().get(0).get("marks")).isEqualTo(3);
+        assertThat(decision.breakdown().get(0).get("awarded")).isEqualTo(true);
+    }
+
+    @Test
+    @DisplayName("an over-award on one point clamps to the point's worth, never rejects")
+    void overAwardClampsToPointWorth() {
+        Question question = new Question("q-3", Question.Type.STRUCTURED, "stem", 3, 3, 240,
+                "State", TOPIC, Question.Provenance.PAST_PAPER);
+        TestIds.withId(question, UUID.randomUUID());
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 3, 3, 240,
+                "State", QuestionVersion.ValidationState.VALIDATED, "doc", 0.9, "test");
+        TestIds.withId(version, UUID.randomUUID());
+        QuestionPart p3 = new QuestionPart(version, "a", "part a", "State", 3, 0);
+        TestIds.withId(p3, UUID.randomUUID());
+        version.addPart(p3);
+        Attempt attempt = new Attempt(LEARNER, question, null, false, null,
+                5000L, 4, false, false, "test");
+        TestIds.withId(attempt, UUID.randomUUID());
+        Answer a3 = new Answer(attempt, p3, "answer");
+        TestIds.withId(a3, UUID.randomUUID());
+
+        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        TestIds.withId(scheme, UUID.randomUUID());
+        MarkPoint triple = new MarkPoint(scheme, p3, "q-a", 0, "three sub-points", 3, List.of(), 0.9);
+        TestIds.withId(triple, UUID.randomUUID());
+        scheme.addPoint(triple);
+
+        // model claims 7 of 3 — an arithmetic slip, clamped to 3, still accepted
+        generator = ctx -> new MarkingCandidate("test-model", List.of(
+                new MarkingCandidate.Allocation(triple.id(), "q-a", 7, "x", "over-claimed")),
+                0.9, "raw");
+        var decision = pipeline.run(new MarkingContext(a3, p3, scheme, List.of(triple)));
+
+        assertThat(decision.accepted()).isTrue();
+        assertThat(decision.marksAwarded()).isEqualTo(3);
+        assertThat(decision.breakdown().get(0).get("marksAwarded")).isEqualTo(3);
     }
 
     @Test

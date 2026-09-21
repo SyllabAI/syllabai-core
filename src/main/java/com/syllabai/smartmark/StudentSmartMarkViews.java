@@ -45,11 +45,20 @@ public final class StudentSmartMarkViews {
             List<PointDecisionView> breakdown) {
     }
 
-    /** one mark point's award decision joined with its scheme text */
+    /**
+     * one mark point's award decision joined with its scheme text. The point
+     * text never leaves the backend in full — the no-reveal Smart Mark flow
+     * shows only a compact {@code pointLabel} (first meaningful line of the
+     * scheme text), so the model answer and teaching notes cannot leak through
+     * the breakdown the way the full text would (operator scenario 2026-09-21:
+     * a 3-mark compound point rendered its whole scheme blob as "feedback").
+     * Partial credit: {@code marksAwarded} may sit between 0 and {@code marks}.
+     */
     public record PointDecisionView(
             String ref,
-            String pointText,
+            String pointLabel,
             int marks,
+            int marksAwarded,
             boolean awarded,
             /** shortest verbatim quote from the learner answer that justified the decision */
             String evidence,

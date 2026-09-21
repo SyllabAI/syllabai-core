@@ -29,7 +29,7 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "smart_mark_results")
 public class SmartMarkResult {
 
-    public static final String PIPELINE_VERSION = "1.1.0";
+    public static final String PIPELINE_VERSION = "1.2.0";
 
     @Id
     @Column(name = "id")
@@ -58,8 +58,9 @@ public class SmartMarkResult {
     private boolean validationPassed;
 
     /**
-     * Per-mark-point decision: {markPointId, ref, marks, awarded(bool), evidence,
-     * rationale} — the explainable part of §15.
+     * Per-mark-point decision: {markPointId, ref, marks, marksAwarded(0..marks,
+     * partial credit since pipeline 1.2.0), awarded(bool, derived — any marks
+     * earned), evidence, rationale} — the explainable part of §15.
      */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "breakdown", columnDefinition = "jsonb")

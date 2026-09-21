@@ -65,7 +65,7 @@ class SmartMarkServiceTest {
             questionTopics, evidencePublisher,
             new SmartMarkPipeline(
                     ctx -> new MarkingCandidate("test-model", ctx.points().stream()
-                            .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), false,
+                            .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), 0,
                                     "", "nothing earned"))
                             .toList(), 0.5, "raw"),
                     List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
@@ -267,7 +267,7 @@ class SmartMarkServiceTest {
                 questionTopics, evidencePublisher,
                 new SmartMarkPipeline(
                         ctx -> new MarkingCandidate("test-model", ctx.points().stream()
-                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), true,
+                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), p.marks(),
                                         "quoted learner text", "earned"))
                                 .toList(), 0.9, "raw"),
                         List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
