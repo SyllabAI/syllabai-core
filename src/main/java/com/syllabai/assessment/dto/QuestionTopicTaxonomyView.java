@@ -31,21 +31,33 @@ import java.util.UUID;
  * numbers the sidebar total renders, while the per-topic badges keep the
  * click-invariant above.</p>
  *
+ * <p>Session-121 family counts: learner surfaces serve WHOLE SME questions
+ * ({@code GET /api/v1/questions/families}), so the same two census shapes are
+ * mirrored at family granularity — a topic's {@code familyCount} is exactly
+ * the length of its whole-question list (the demo's sidebar invariant), and
+ * the section/view totals dedupe families across topics the same way the row
+ * census does. Additive fields: the row counts above keep their meaning for
+ * the flat list and its consumers.</p>
+ *
  * <p>Topics with zero servable questions do not appear: the taxonomy is the
  * shape of what can be practised, not the shape of the syllabus. Sections are
  * code-ordered, topics within a section code-ordered — deterministic like every
  * other read model.</p>
  */
-public record QuestionTopicTaxonomyView(List<Section> sections, int totalDistinctQuestions) {
+public record QuestionTopicTaxonomyView(List<Section> sections, int totalDistinctQuestions,
+                                        int totalDistinctFamilies) {
 
     /** one syllabus section (UNIT node) with its question-bearing topics; the
-     *  distinct count dedupes a question across the section's topics */
+     *  distinct counts dedupe a question — and a whole-question family — across
+     *  the section's topics */
     public record Section(UUID nodeId, String code, String title,
-                          int distinctQuestionCount, List<Topic> topics) {
+                          int distinctQuestionCount, int distinctFamilyCount,
+                          List<Topic> topics) {
     }
 
     /** one browsable topic node with its servable-question census */
     public record Topic(UUID nodeId, String code, String title,
-                       int questionCount, int mcqCount, int structuredCount) {
+                       int questionCount, int mcqCount, int structuredCount,
+                       int familyCount) {
     }
 }

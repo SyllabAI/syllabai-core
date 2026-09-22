@@ -1,6 +1,7 @@
 package com.syllabai.assessment;
 
 import com.syllabai.assessment.dto.MarkSchemeRevealView;
+import com.syllabai.assessment.dto.QuestionFamilyView;
 import com.syllabai.assessment.dto.QuestionTopicTaxonomyView;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.shared.NotFoundException;
@@ -47,6 +48,25 @@ public class QuestionController {
             return servableQuestions.activeWithin(knowledgeGraph.subtreeIds(rootId));
         }
         return servableQuestions.allActive();
+    }
+
+    /**
+     * Whole-question families (session-121): the demo's serving unit — the
+     * same scoping params as {@link #list}, but rows reassembled into WHOLE
+     * SME questions (stimulus + every part together, SME page order) so a
+     * part can never serve without its family. Learner surfaces should
+     * prefer this list; the flat list stays for row-scoped consumers.
+     */
+    @GetMapping("/families")
+    public List<QuestionFamilyView> families(@RequestParam(required = false) UUID topicNodeId,
+                                             @RequestParam(required = false) UUID rootId) {
+        if (topicNodeId != null) {
+            return servableQuestions.familiesByTopic(topicNodeId);
+        }
+        if (rootId != null) {
+            return servableQuestions.familiesWithin(knowledgeGraph.subtreeIds(rootId));
+        }
+        return servableQuestions.allFamilies();
     }
 
     /**

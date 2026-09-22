@@ -1,5 +1,6 @@
 package com.syllabai.assessment;
 
+import com.syllabai.assessment.dto.QuestionFamilyView;
 import com.syllabai.assessment.dto.QuestionTopicTaxonomyView;
 import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.knowledge.KnowledgeEdge;
@@ -52,6 +53,7 @@ public class ServableQuestionService {
     private final KnowledgeEdgeRepository knowledgeEdges;
     private final KnowledgeGraphService knowledgeGraph;
     private final ServableQuestionSpec servable = new ServableQuestionSpec();
+    private final QuestionFamilyAssembler families = new QuestionFamilyAssembler();
 
     public ServableQuestionService(QuestionRepository questions,
                                    QuestionVersionRepository questionVersions,
@@ -79,6 +81,29 @@ public class ServableQuestionService {
     /** all servable questions, difficulty-ordered */
     public List<StudentQuestionView> allActive() {
         return projectAll(filterBlockedPapers(questions.findAllActive()));
+    }
+
+    /**
+     * The WHOLE-question view of a topic (session-121): the same servable rows
+     * {@link #activeByTopic} serves, reassembled into SME questions — stimulus
+     * and every part together, SME page order — the demo's serving logic,
+     * server-side (the family rule lives in {@link QuestionFamilyAssembler},
+     * its one owner). Row lists stay available for the flat consumers
+     * (CL part pickers, teacher surfaces); learner surfaces should prefer
+     * this so a part can never serve without its family.
+     */
+    public List<QuestionFamilyView> familiesByTopic(UUID topicNodeId) {
+        return families.assemble(activeByTopic(topicNodeId));
+    }
+
+    /** the WHOLE-question view of a subject subtree (session-56 scope, session-121 families) */
+    public List<QuestionFamilyView> familiesWithin(java.util.Collection<UUID> nodeIds) {
+        return families.assemble(activeWithin(nodeIds));
+    }
+
+    /** the WHOLE-question view of the entire servable bank */
+    public List<QuestionFamilyView> allFamilies() {
+        return families.assemble(allActive());
     }
 
     /**
@@ -191,8 +216,16 @@ public class ServableQuestionService {
             }
         }
 
-        // per-topic census, scope-filtered — int[]{total, mcq, structured}
+        // per-topic census, scope-filtered — int[]{total, mcq, structured}; the
+        // family census rides the same loop (Set per topic, deduped by the
+        // family key — the SAME key /families groups by, so a topic's
+        // familyCount is exactly its whole-question list length)
         Map<UUID, int[]> countsByTopic = new HashMap<>();
+        Map<UUID, Set<String>> familyKeysByTopic = new HashMap<>();
+        Map<UUID, String> familyByQuestion = new HashMap<>();
+        for (Question q : servableQuestions) {
+            familyByQuestion.put(q.id(), families.familyKey(q.externalRef(), q.id()));
+        }
         for (Question q : servableQuestions) {
             for (UUID nodeId : topicsByQuestion.getOrDefault(q.id(), Set.of())) {
                 if (scope != null && !scope.contains(nodeId)) {
@@ -205,10 +238,12 @@ public class ServableQuestionService {
                 } else if (q.type() == Question.Type.STRUCTURED) {
                     counts[2]++;
                 }
+                familyKeysByTopic.computeIfAbsent(nodeId, k -> new LinkedHashSet<>())
+                        .add(familyByQuestion.get(q.id()));
             }
         }
         if (countsByTopic.isEmpty()) {
-            return new QuestionTopicTaxonomyView(List.of(), 0);
+            return new QuestionTopicTaxonomyView(List.of(), 0, 0);
         }
 
         // node metadata for the counted topics…
@@ -250,9 +285,13 @@ public class ServableQuestionService {
         // topics counts ONCE per section and once in the view total — the
         // sidebar's per-topic badges stay reachable counts (badge == list
         // length on click), the section/view totals are the deduped numbers
-        // that kill the sum-the-sidebar double-counting confusion
+        // that kill the sum-the-sidebar double-counting confusion. The
+        // session-121 family census mirrors the same dedup at whole-question
+        // granularity, over the same browsability boundary
         Map<UUID, Set<UUID>> questionsBySection = new HashMap<>();
         Set<UUID> distinctQuestions = new HashSet<>();
+        Map<UUID, Set<String>> familiesBySection = new HashMap<>();
+        Set<String> distinctFamilies = new HashSet<>();
         for (Question q : servableQuestions) {
             for (UUID nodeId : topicsByQuestion.getOrDefault(q.id(), Set.of())) {
                 if (scope != null && !scope.contains(nodeId)) {
@@ -264,6 +303,9 @@ public class ServableQuestionService {
                 }
                 questionsBySection.computeIfAbsent(sectionId, k -> new HashSet<>()).add(q.id());
                 distinctQuestions.add(q.id());
+                String familyKey = familyByQuestion.get(q.id());
+                familiesBySection.computeIfAbsent(sectionId, k -> new HashSet<>()).add(familyKey);
+                distinctFamilies.add(familyKey);
             }
         }
 
@@ -278,7 +320,8 @@ public class ServableQuestionService {
             int[] counts = entry.getValue();
             topicsBySection.computeIfAbsent(sectionId, k -> new ArrayList<>())
                     .add(new QuestionTopicTaxonomyView.Topic(topic.id(), topic.code(),
-                            topic.title(), counts[0], counts[1], counts[2]));
+                            topic.title(), counts[0], counts[1], counts[2],
+                            familyKeysByTopic.getOrDefault(entry.getKey(), Set.of()).size()));
         }
         List<QuestionTopicTaxonomyView.Section> sections = topicsBySection.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(
@@ -288,12 +331,14 @@ public class ServableQuestionService {
                     return new QuestionTopicTaxonomyView.Section(section.id(), section.code(),
                             section.title(),
                             questionsBySection.getOrDefault(e.getKey(), Set.of()).size(),
+                            familiesBySection.getOrDefault(e.getKey(), Set.of()).size(),
                             e.getValue().stream()
                                     .sorted(Comparator.comparing(QuestionTopicTaxonomyView.Topic::code))
                                     .toList());
                 })
                 .toList();
-        return new QuestionTopicTaxonomyView(sections, distinctQuestions.size());
+        return new QuestionTopicTaxonomyView(sections, distinctQuestions.size(),
+                distinctFamilies.size());
     }
 
     /**
