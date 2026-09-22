@@ -29,7 +29,15 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "smart_mark_results")
 public class SmartMarkResult {
 
-    public static final String PIPELINE_VERSION = "1.2.0";
+    /**
+     * Run-row calibration marker. 1.2.0 = prompt v3 partial marks (ad44cee).
+     * 1.2.1 = scaled completion budget + self-forensic truncated refusals
+     * (d2849fc, G-4 round watch item: the flat 800-token cap deterministically
+     * starved the heaviest compound points — same model and prompt now complete;
+     * refusal rows carry the raw output). Pairing/threshold semantics unchanged
+     * throughout the 1.2.x line.
+     */
+    public static final String PIPELINE_VERSION = "1.2.1";
 
     @Id
     @Column(name = "id")
