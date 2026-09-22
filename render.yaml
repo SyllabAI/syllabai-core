@@ -7,7 +7,13 @@
 #
 # Cold starts are accepted per ADR-009 (free tier spins down on idle);
 # the web client surfaces honest "backend unavailable" states, it does not
-# hang silently.
+# hang silently. 2026-09-23 update: the web client now (a) caches content GETs
+# in localStorage so repeat visits never wake this instance, (b) fires ONE
+# health request per browser session on the login screen so the boot overlaps
+# credential typing, and (c) shows an honest "waking up" banner on slow first
+# requests. DO NOT add an uptime pinger to keep this service awake — Render's
+# ToS prohibits defeating spin-down that way and it risks account suspension;
+# the 750 free instance-hours/month are ample for the pilot's real traffic.
 
 services:
   - type: web
@@ -17,6 +23,9 @@ services:
     region: frankfurt
     healthCheckPath: /actuator/health
     autoDeploy: true
+    # PR preview environments would each run another free instance around the
+    # clock and silently eat the 750 instance-hours/month budget — off.
+    previewsEnabled: false
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod

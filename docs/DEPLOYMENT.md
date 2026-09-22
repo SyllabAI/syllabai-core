@@ -133,10 +133,12 @@ the two web items remain pending the `SYLLABAI_CORS_ORIGINS` setting — see
 
 ## 4. Operational notes
 
-- **Cold starts** (Render free tier): the first request after idle can take
-  ~30–60 s. The web client surfaces "backend unavailable" honestly rather
-  than spinning forever; retake students tolerate this — document it in the
-  pilot onboarding message.
+- **Cold starts** (Render free tier): the instance spins down after ~15 min
+  idle and the next request pays a full JVM + Spring boot. Mitigations landed
+  2026-09-23 (see "Free-tier load strategy" below) — the visible worst case
+  for a waking request is now an honest "waking up" banner in the web client
+  while the request completes, typically well under a minute with AppCDS.
+  Retake students tolerate this — document it in the pilot onboarding message.
 - **Nightly decay**: the `prod` profile enables the Ebbinghaus decay job
   (`application-prod.yml`). No cron config needed — it self-schedules.
 - **Backups**: Neon free tier retains 7 days of PITR. The only irreplaceable
@@ -145,7 +147,71 @@ the two web items remain pending the `SYLLABAI_CORS_ORIGINS` setting — see
 - **Scaling guard**: the pilot is ~50 students. Nothing here needs a paid
   tier; do not "fix" load with money before Cycle-1 evidence says so.
 
+### Free-tier load strategy (2026-09-23)
+
+The complaint was "Render takes lots of time to load" and the worry was
+blowing the monthly free limit / losing the account. What was done — and the
+ground rules:
+
+**Web client (syllabai-web):**
+1. Content GETs (subjects, knowledge tree, question lists, prerequisites,
+   concept-graph edges, exam-paper browse/detail) are cached in localStorage
+   (stale-while-revalidate, 6 h TTL). A returning student's repeat visit
+   paints from cache and **never wakes the sleeping instance** — the single
+   biggest saver of instance-hours. Teacher content mutations
+   (validate/place/reject/flag/topic-map/activate) drop the cache.
+2. Identical in-flight GETs are de-duplicated (one network round-trip even
+   under React StrictMode double-mounts).
+3. ONE unauthenticated `GET /actuator/health` per browser session, fired when
+   a human lands on the login screen — the boot happens while they type
+   credentials. Tied to a real page view, guarded by sessionStorage.
+4. Requests slower than 3 s (with no recent success) raise an honest
+   "server waking up (free tier)" banner; the first dropped connection on a
+   cold GET is retried once automatically.
+5. Per-user read models (state, attempts, recommendations, knowledge graph,
+   smart lesson, tutor/CLA) are NEVER cached — they must reflect live evidence.
+
+**Core (syllabai-core):**
+1. `application-prod.yml`: response compression for JSON (question payloads
+   are large), banner off, graceful shutdown inside Render's SIGTERM window.
+2. Dockerfile: `-XX:+AutoCreateSharedArchive` AppCDS — first boot after a
+   deploy dumps a class archive; every subsequent WAKE of the same container
+   maps it and skips much of class loading/verification. Non-fatal by design
+   (missing/corrupt archive = regenerate; SIGKILL = no archive, old behavior).
+3. `render.yaml`: `previewsEnabled: false` — PR previews would each run a
+   free instance around the clock and silently eat the budget.
+
+**Ground rules (the "don't get banned" part):**
+- **NEVER add an uptime pinger / keep-alive cron / 5-minute health timer.**
+  Render's Terms of Service prohibit artificially defeating free-tier
+  spin-down; services kept perpetually awake that way risk account
+  suspension. The ONLY sanctioned scheduled wake is the web repo's
+  once-daily Vercel cron (`/api/cron/keep-alive`, 02:50 UTC) covering the
+  03:00 UTC decay window — one bounded wake a day (~15–30
+  instance-hours/month) with a documented functional purpose; do not extend
+  it or add others. Since V38 (session-114) the decay pass is ledger-guarded
+  (checked every 15 min, runs iff the window's `decay_job_runs` row is
+  absent), so even a missed keep-alive costs schedule precision, not
+  correctness — any next wake completes the night. Availability monitoring (6-hourly probe) lives in the
+  public `SyllabAI/syllabai-ops` repo — that cadence reports on real
+  availability and must not creep up into keep-alive territory.
+- **Budget math:** free tier = 750 instance-hours/month. One continuously
+  awake instance would burn ~730 h — right at the edge, which is exactly why
+  pingers are both prohibited and pointless. Real pilot traffic (dozens of
+  students, sessions spread over the day) plus the daily decay-window wake
+  lands far below the cap; the web client's content cache keeps idle
+  browsing off the instance entirely.
+- **Region:** keep the Neon project near `frankfurt` (the Render region) —
+  Flyway's migrations (V1–V38 today) run their checksum validation at every
+  boot and pay the round-trip latency to the database on each one.
+
 ## 5. Pilot monitoring (added 2026-09-13, session-58)
+
+> **Moved 2026-09-16 (session 77):** the `pilot-monitor.yml` workflow left
+> this repo's `.github/workflows/` and now lives in the public
+> `SyllabAI/syllabai-ops` repo (byte-identical probe, same 6-hourly + weekly
+> crons) — private-repo Actions minutes were quota-dead since 2026-09-15.
+> The description below is preserved for the operational contract.
 
 Minimum operational monitoring, per the session-57/58 pilot-readiness
 conditions. No new observability system — it rides existing capability

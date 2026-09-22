@@ -1,4 +1,24 @@
 # Production profile (Render): nightly decay job on, stricter logging.
+#
+# Free-tier cold-boot economics (2026-09-23): the instance spins down after
+# 15 min idle and every wake re-pays JVM boot + Flyway + Spring context on a
+# 0.1-CPU instance. The settings below are the safe subset of boot/wire
+# optimizations — measured-risk items (lazy bean init that would move
+# boot failures into first requests) are deliberately excluded: the app is
+# designed to fail FAST at boot (blank JWT, campaign identity), visibly.
+spring:
+  main:
+    banner-mode: "off"           # no ANSI art on a cold boot; trivial but free
+  lifecycle:
+    timeout-per-shutdown-phase: 20s   # stay under Render's SIGTERM window
+
+server:
+  shutdown: graceful             # in-flight pilot requests finish on redeploy/spin-down
+  compression:
+    enabled: true                # question/paper JSON payloads are large and gzip
+    mime-types: application/json,text/plain,text/html,text/css,application/javascript
+    min-response-size: 1024      # default 2KB — drop to catch mid-size JSON too
+
 syllabai:
   learner:
     decay-job:

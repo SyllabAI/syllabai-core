@@ -22,7 +22,21 @@
 #   Xss512k                  ~30-40 threads (Tomcat + Hikari + virtual threads)
 #   ExitOnOutOfMemoryError   future thrash fails FAST and visibly in the log
 #                            instead of stalling silently to a port-scan timeout
-# Sum of maxima ~513 MB, realistic committed RSS ~430-450 MB < 512 MB cgroup.
+#   AutoCreateSharedArchive  AppCDS: the FIRST boot after a deploy runs at
+#   + SharedArchiveFile      normal speed and dumps a class-data archive to
+#                            /tmp at clean JVM exit; every subsequent WAKE of
+#                            the same container maps it and skips a large
+#                            chunk of class loading/verification — typically
+#                            the single biggest saving available on a 0.1-CPU
+#                            instance where wakes are the common case and
+#                            redeploys are rare. Non-fatal by design: a
+#                            missing/corrupt/stale archive is regenerated at
+#                            the next exit, and SIGKILL simply means "no
+#                            archive this time" (current behaviour). The two
+#                            flags can be deleted with no other change.
+# Sum of maxima ~513 MB, realistic committed RSS ~430-450 MB < 512 MB cgroup
+# (the CDS archive adds a shared, mostly file-backed mapping on top — pages
+# are evictable under pressure and shared across the process).
 
 FROM maven:3.9.16-eclipse-temurin-25 AS build
 WORKDIR /app
@@ -47,4 +61,6 @@ ENTRYPOINT ["java", \
   "-XX:TieredStopAtLevel=1", \
   "-Xss512k", \
   "-XX:+ExitOnOutOfMemoryError", \
+  "-XX:+AutoCreateSharedArchive", \
+  "-XX:SharedArchiveFile=/tmp/syllabai-appcds.jsa", \
   "-jar", "app.jar"]
