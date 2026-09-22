@@ -287,4 +287,43 @@ class SmartMarkPipelineTest {
         assertThat(decision.accepted()).isFalse();
         assertThat(decision.failureReason()).isEqualTo("NO_SCHEME_POINTS");
     }
+
+    @Test
+    @DisplayName("a refusal carrying raw output persists it — the row is self-forensic")
+    void refusalWithRawOutputKeepsTheRawText() {
+        generator = ctx -> {
+            throw new CandidateGenerationException(
+                    CandidateGenerationException.Reason.TRUNCATED_OUTPUT,
+                    "generator completion hit the token budget (finish_reason=length)",
+                    null, "{\"confidence\": 0.9, \"alloc");
+        };
+        var decision = pipeline.run(new MarkingContext(answer, part,
+                scheme, List.of(pointA, pointB)));
+
+        assertThat(decision.accepted()).isFalse();
+        assertThat(decision.marksAwarded()).isZero();
+        assertThat(decision.failureReason()).isEqualTo("TRUNCATED_OUTPUT");
+        // the raw text survives into the persisted audit fields (2026-09-22 G-4
+        // finding: refusal rows used to lose the output entirely, making the
+        // failure diagnosable only from server logs)
+        assertThat(pipeline.candidateRawOutput(decision))
+                .isEqualTo("{\"confidence\": 0.9, \"alloc");
+        assertThat(pipeline.candidateModelId(decision)).isNull();
+        assertThat(pipeline.candidateConfidence(decision)).isNull();
+    }
+
+    @Test
+    @DisplayName("a refusal without raw output persists no raw — legacy shape unchanged")
+    void refusalWithoutRawOutputStaysNull() {
+        generator = ctx -> {
+            throw new CandidateGenerationException(
+                    CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE, "chain down", null);
+        };
+        var decision = pipeline.run(new MarkingContext(answer, part,
+                scheme, List.of(pointA, pointB)));
+
+        assertThat(decision.accepted()).isFalse();
+        assertThat(decision.failureReason()).isEqualTo("PROVIDER_UNAVAILABLE");
+        assertThat(pipeline.candidateRawOutput(decision)).isNull();
+    }
 }

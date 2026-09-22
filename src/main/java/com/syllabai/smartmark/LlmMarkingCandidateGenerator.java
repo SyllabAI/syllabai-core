@@ -43,6 +43,23 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
     private static final Logger log = LoggerFactory.getLogger(LlmMarkingCandidateGenerator.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /*
+     * Completion budget (G-4 round 2026-09-22, UNPARSEABLE_OUTPUT_INVESTIGATION):
+     * the marking call previously pinned a flat 800-token cap. The deployed
+     * default model is a REASONING model — reasoning tokens share the completion
+     * budget with the visible JSON — and prompt v3 asks it to assess every
+     * sub-point of a compound point independently. The round's only refusal (the
+     * reasoning-heaviest compound point, a 5-mark "explain why" with the largest
+     * single scheme-point text) REPRODUCED on re-run: reasoning + JSON cannot
+     * reliably fit 800 for such points, so the budget now scales with the
+     * in-scope point marks and every completion's stop cause is inspected (a
+     * budget-truncated completion refuses as TRUNCATED_OUTPUT carrying the raw
+     * text, not as a generic parse failure).
+     */
+    private static final int BASE_COMPLETION_BUDGET = 800;
+    private static final int COMPLETION_BUDGET_PER_MARK = 400;
+    private static final int MAX_COMPLETION_BUDGET = 4_000;
+
     private final LlmProvider chain;
 
     public LlmMarkingCandidateGenerator(LlmProvider chain) {
@@ -61,14 +78,54 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
         LlmResponse response;
         try {
             response = chain.generate(LlmRequest.withOptions(
-                    systemPrompt(), userPrompt(context), 0.1, 800));
+                    systemPrompt(), userPrompt(context), 0.1,
+                    completionBudget(context.points())));
         } catch (LlmProviderException e) {
             throw new CandidateGenerationException(
                     CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,
                     "LLM chain failed during marking: " + e.getMessage(), e);
         }
 
+        if (isTruncationFinish(response.finishReason())) {
+            // the completion hit the token cap mid-flight: whatever text arrived is
+            // an incomplete payload, not a candidate — refuse with the raw text
+            // attached so the row is self-forensic (never silently re-marked)
+            throw new CandidateGenerationException(
+                    CandidateGenerationException.Reason.TRUNCATED_OUTPUT,
+                    "generator completion hit the token budget (finish_reason="
+                            + response.finishReason() + ")",
+                    null, response.text());
+        }
+
         return parse(response.text(), context, response.model());
+    }
+
+    /**
+     * Completion budget for one marking call: the flat historical floor plus
+     * headroom per in-scope point mark (compound multi-mark points need
+     * reasoning + per-sub-point rationale space), capped so a pathological
+     * scheme cannot balloon the call.
+     */
+    static int completionBudget(List<MarkPoint> points) {
+        int totalMarks = 0;
+        for (MarkPoint point : points) {
+            totalMarks += Math.max(1, point.marks());
+        }
+        return Math.min(BASE_COMPLETION_BUDGET + COMPLETION_BUDGET_PER_MARK * totalMarks,
+                MAX_COMPLETION_BUDGET);
+    }
+
+    /**
+     * OpenAI-compatible truncation stop causes (normalized lower-case): the
+     * completion was cut by the token budget. {@code max_tokens} covers the
+     * Google GenAI spelling of the same cause.
+     */
+    static boolean isTruncationFinish(String finishReason) {
+        if (finishReason == null) {
+            return false;
+        }
+        String normalized = finishReason.strip().toLowerCase();
+        return normalized.equals("length") || normalized.equals("max_tokens");
     }
 
     String systemPrompt() {
@@ -128,13 +185,13 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
         } catch (Exception e) {
             throw new CandidateGenerationException(
                     CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT,
-                    "generator output is not valid JSON", e);
+                    "generator output is not valid JSON", e, raw);
         }
         JsonNode allocations = root.get("allocations");
         if (allocations == null || !allocations.isArray()) {
             throw new CandidateGenerationException(
                     CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT,
-                    "generator output missing allocations array", null);
+                    "generator output missing allocations array", null, raw);
         }
         Map<UUID, MarkPoint> pointsById = context.points().stream()
                 .collect(java.util.stream.Collectors.toMap(MarkPoint::id, p -> p));

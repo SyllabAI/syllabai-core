@@ -142,7 +142,8 @@ public class SpringAiChatModelAdapter implements LlmProvider {
                     effectiveModel,
                     latencyMs,
                     usage == null ? null : usage.getPromptTokens(),
-                    usage == null ? null : usage.getCompletionTokens());
+                    usage == null ? null : usage.getCompletionTokens(),
+                    finishReasonOf(response));
         } catch (LlmProviderException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -237,5 +238,18 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         }
         AssistantMessage message = response.getResult().getOutput();
         return message.getText() == null ? "" : message.getText();
+    }
+
+    /**
+     * Provider-reported stop cause, null-safe (some SDK paths return a response
+     * without generation metadata). Never interpreted here — surfaced for callers
+     * whose domain semantics distinguish truncated completions.
+     */
+    private static String finishReasonOf(ChatResponse response) {
+        if (response == null || response.getResult() == null
+                || response.getResult().getMetadata() == null) {
+            return null;
+        }
+        return response.getResult().getMetadata().getFinishReason();
     }
 }

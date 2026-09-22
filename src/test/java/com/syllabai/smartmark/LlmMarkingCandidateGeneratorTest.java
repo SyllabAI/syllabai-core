@@ -1,6 +1,7 @@
 package com.syllabai.smartmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.MarkPoint;
@@ -9,6 +10,8 @@ import com.syllabai.assessment.Question;
 import com.syllabai.assessment.QuestionPart;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.TestIds;
+import com.syllabai.infrastructure.llm.FakeLlmProvider;
+import com.syllabai.infrastructure.llm.LlmResponse;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -121,6 +124,105 @@ class LlmMarkingCandidateGeneratorTest {
                 """.formatted(context.points().get(0).id()), context, "test-model");
         assertThat(candidate.allocations().get(0).marksAwarded()).isZero();
         assertThat(candidate.allocations().get(0).awarded()).isFalse();
+    }
+
+    // ── completion budget + truncation observability (G-4 round 2026-09-22) ────
+    //
+    // The round's only UNPARSEABLE_OUTPUT (the reasoning-heaviest 5-mark compound
+    // point) REPRODUCED on re-run: a reasoning model shares the completion budget
+    // between reasoning and the visible JSON, and a flat 800 cap starves exactly
+    // the heaviest judgments. The budget now scales with point marks, and a
+    // budget-truncated completion refuses as TRUNCATED_OUTPUT with the raw text
+    // attached instead of a generic parse failure with no forensic trace.
+
+    @Test
+    @DisplayName("completion budget scales with point marks; flat 800 floor kept as base")
+    void completionBudgetScalesWithPointMarks() {
+        assertThat(LlmMarkingCandidateGenerator.completionBudget(List.of())).isEqualTo(800);
+        assertThat(LlmMarkingCandidateGenerator.completionBudget(
+                context(null, 1).points())).isEqualTo(1_200);
+        // the round's refused shape: one 5-mark compound point
+        assertThat(LlmMarkingCandidateGenerator.completionBudget(
+                context(null, 5).points())).isEqualTo(2_800);
+        // pathological scheme cannot balloon the call
+        assertThat(LlmMarkingCandidateGenerator.completionBudget(
+                context(null, 9).points())).isEqualTo(4_000);
+    }
+
+    @Test
+    @DisplayName("propose sends the scaled budget, not the starved flat 800")
+    void proposeRequestsScaledBudget() {
+        MarkingContext ctx = context(null, 5);
+        FakeLlmProvider chain = FakeLlmProvider.named("groq").respondsWith("""
+                {"confidence": 0.9, "allocations": [{"markPointId": "%s", "ref": "1-a",
+                 "marksAwarded": 2, "evidence": "x", "rationale": "r"}]}
+                """.formatted(ctx.points().get(0).id()));
+        LlmMarkingCandidateGenerator scaled = new LlmMarkingCandidateGenerator(chain);
+
+        scaled.propose(ctx);
+
+        assertThat(chain.lastRequest().maxTokens()).isEqualTo(2_800);
+        assertThat(chain.lastRequest().temperature()).isEqualTo(0.1);
+    }
+
+    @Test
+    @DisplayName("a budget-truncated completion refuses as TRUNCATED_OUTPUT carrying the raw text")
+    void truncatedCompletionRefusesWithRawOutput() {
+        MarkingContext ctx = context(null, 5);
+        FakeLlmProvider chain = FakeLlmProvider.named("groq").respondsWith(new LlmResponse(
+                "{\"confidence\": 0.9, \"allocations\": [{\"markPointId\"",
+                "groq", "fake-model", 5L, 10, 10, "length"));
+        LlmMarkingCandidateGenerator truncated = new LlmMarkingCandidateGenerator(chain);
+
+        assertThatThrownBy(() -> truncated.propose(ctx))
+                .isInstanceOf(CandidateGenerationException.class)
+                .satisfies(e -> {
+                    var refusal = (CandidateGenerationException) e;
+                    assertThat(refusal.reason())
+                            .isEqualTo(CandidateGenerationException.Reason.TRUNCATED_OUTPUT);
+                    assertThat(refusal.rawOutput())
+                            .startsWith("{\"confidence\": 0.9");
+                });
+    }
+
+    @Test
+    @DisplayName("max_tokens finish reason counts as truncation; stop finishes parse normally")
+    void onlyTruncationFinishRefusesEarly() {
+        assertThat(LlmMarkingCandidateGenerator.isTruncationFinish("length")).isTrue();
+        assertThat(LlmMarkingCandidateGenerator.isTruncationFinish("MAX_TOKENS")).isTrue();
+        assertThat(LlmMarkingCandidateGenerator.isTruncationFinish("stop")).isFalse();
+        assertThat(LlmMarkingCandidateGenerator.isTruncationFinish(null)).isFalse();
+        assertThat(LlmMarkingCandidateGenerator.isTruncationFinish("")).isFalse();
+
+        // a genuinely finished completion parses even when the finish reason is present
+        MarkingContext ctx = context(null, 1);
+        FakeLlmProvider chain = FakeLlmProvider.named("groq").respondsWith(new LlmResponse("""
+                {"confidence": 0.9, "allocations": [{"markPointId": "%s", "ref": "1-a",
+                 "marksAwarded": 1, "evidence": "x", "rationale": "r"}]}
+                """.formatted(ctx.points().get(0).id()),
+                "groq", "fake-model", 5L, 10, 10, "stop"));
+        LlmMarkingCandidateGenerator stopped = new LlmMarkingCandidateGenerator(chain);
+
+        assertThat(stopped.propose(ctx).allocations()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("an unparseable (non-truncated) refusal carries the raw output too")
+    void parseRefusalCarriesRawOutput() {
+        MarkingContext ctx = context(null, 1);
+        FakeLlmProvider chain = FakeLlmProvider.named("groq")
+                .respondsWith("the model rambled without any JSON object at all");
+        LlmMarkingCandidateGenerator rambling = new LlmMarkingCandidateGenerator(chain);
+
+        assertThatThrownBy(() -> rambling.propose(ctx))
+                .isInstanceOf(CandidateGenerationException.class)
+                .satisfies(e -> {
+                    var refusal = (CandidateGenerationException) e;
+                    assertThat(refusal.reason())
+                            .isEqualTo(CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT);
+                    assertThat(refusal.rawOutput())
+                            .isEqualTo("the model rambled without any JSON object at all");
+                });
     }
 
     private static MarkingContext context(String guidance) {

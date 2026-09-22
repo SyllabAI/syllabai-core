@@ -70,7 +70,15 @@ public class SmartMarkPipeline {
             candidate = generator.propose(context);
         } catch (CandidateGenerationException e) {
             log.info("candidate generation failed: {} ({})", e.getMessage(), e.reason());
-            return Decision.rejected(e.reason().name(), null);
+            // self-forensic refusals: when the generator carried raw provider output
+            // (e.g. a budget-truncated completion), persist it for audit instead of
+            // discarding it — the failure row then explains itself without server
+            // logs (G-4 round 2026-09-22 finding). The decision stays rejected
+            // either way: fail-closed semantics are untouched.
+            return e.rawOutput() == null
+                    ? Decision.rejected(e.reason().name(), null)
+                    : Decision.rejected(e.reason().name(),
+                            new MarkingCandidate(null, List.of(), null, e.rawOutput()));
         }
 
         List<String> violations = new java.util.ArrayList<>();
