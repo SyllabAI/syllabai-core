@@ -242,4 +242,90 @@ class TeacherMarkingServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("no paired");
     }
+
+    // ── κ pairing convention pin (G-4 agent calibration round, 2026-09-22) ──
+    //
+    // The release gate measures agreement under ONE binarization: the smart
+    // side pairs by the breakdown's `awarded` boolean — ANY credit on a
+    // (possibly compound) mark point pairs as 1 — and the human side clamps
+    // any non-zero per-point decision to 1. The 2026-09-22 agent calibration
+    // round measured the SAME frozen blind judgments as κ=0.31 under a strict
+    // "fully earned" re-reading vs κ=1.00 under this production convention
+    // (n=25): on compound multi-mark points a convention mismatch is the
+    // difference between a spurious gate FAIL and a pass. These tests pin the
+    // convention so the pairing cannot silently drift before or after the
+    // operator's human reference round (runbook ADDENDUM: any credit = 1).
+
+    @Test
+    @DisplayName("κ convention pin: partial credit on a compound point pairs as smart=1 (any credit = 1)")
+    void partialCreditOnCompoundPointPairsAsOne() {
+        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        MarkPoint compound = new MarkPoint(scheme, part, "1-x", 2,
+                "compound point bundling three sub-items", 3, List.of(), 0.9);
+        TestIds.withId(compound, UUID.randomUUID());
+
+        // smart: the compound point is awarded with PARTIAL credit (1 of 3 marks)
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("markPointId", compound.id().toString());
+        entry.put("ref", "1-x");
+        entry.put("marks", 3);
+        entry.put("marksAwarded", 1);
+        entry.put("awarded", true);
+        SmartMarkResult smart = new SmartMarkResult(answer, "test-model", 1, 0.9, true,
+                List.of(entry), null, "raw");
+        TestIds.withId(smart, UUID.randomUUID());
+        when(smartMarkResults.findLatest(answer.id())).thenReturn(Optional.of(smart));
+
+        // human: the learner earned ANY credit on the point → 1 (pinned marker convention)
+        HumanMark human = new HumanMark(answer, MARKER, 1,
+                Map.of(compound.id().toString(), 1), "method mark earned");
+        TestIds.withId(human, UUID.randomUUID());
+        when(humanMarks.findAllByOrderByCreatedAtAsc()).thenReturn(List.of(human));
+
+        SmartMarkAgreementEvaluation evaluation = service.evaluateAgreement(null, MARKER);
+
+        // the pair is (1,1): partial credit MUST pair as agreement — a pairing
+        // that required the point FULLY earned (awarded && marksAwarded == marks)
+        // would flip this to (0,1) and corrupt the gate row
+        assertThat(evaluation.sampleSize()).isEqualTo(1);
+        assertThat(evaluation.observedAgreement()).isEqualTo(1.0);
+        assertThat(evaluation.kappa()).isCloseTo(1.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(evaluation.passed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("κ convention pin: the same partial credit under a strict 'fully earned' human reading pairs as honest disagreement")
+    void strictFullyEarnedHumanReadingPairsAsDisagreement() {
+        MarkScheme scheme = new MarkScheme(version, "1", "ms", "test");
+        MarkPoint compound = new MarkPoint(scheme, part, "1-x", 0,
+                "compound point bundling three sub-items", 3, List.of(), 0.9);
+        TestIds.withId(compound, UUID.randomUUID());
+
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("markPointId", compound.id().toString());
+        entry.put("ref", "1-x");
+        entry.put("marks", 3);
+        entry.put("marksAwarded", 1);
+        entry.put("awarded", true);
+        SmartMarkResult smart = new SmartMarkResult(answer, "test-model", 1, 0.9, true,
+                List.of(entry), null, "raw");
+        TestIds.withId(smart, UUID.randomUUID());
+        when(smartMarkResults.findLatest(answer.id())).thenReturn(Optional.of(smart));
+
+        // human marks 0 because the point was not FULLY earned — the WRONG
+        // convention for this gate (runbook ADDENDUM pins any credit = 1).
+        // The pairing must record the disagreement honestly — it may never
+        // normalize the human side toward the smart side or vice versa.
+        HumanMark human = new HumanMark(answer, MARKER, 0,
+                Map.of(compound.id().toString(), 0), "not fully earned");
+        TestIds.withId(human, UUID.randomUUID());
+        when(humanMarks.findAllByOrderByCreatedAtAsc()).thenReturn(List.of(human));
+
+        SmartMarkAgreementEvaluation evaluation = service.evaluateAgreement(null, MARKER);
+
+        assertThat(evaluation.sampleSize()).isEqualTo(1);
+        assertThat(evaluation.observedAgreement()).isZero();
+        assertThat(evaluation.kappa()).isCloseTo(0.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(evaluation.passed()).isFalse();
+    }
 }
