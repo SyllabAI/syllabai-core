@@ -174,10 +174,22 @@ ground rules:
 **Core (syllabai-core):**
 1. `application-prod.yml`: response compression for JSON (question payloads
    are large), banner off, graceful shutdown inside Render's SIGTERM window.
-2. Dockerfile: `-XX:+AutoCreateSharedArchive` AppCDS — first boot after a
-   deploy dumps a class archive; every subsequent WAKE of the same container
-   maps it and skips much of class loading/verification. Non-fatal by design
-   (missing/corrupt archive = regenerate; SIGKILL = no archive, old behavior).
+2. Dockerfile: AppCDS with a BUILD-TIME TRAINING RUN (session-122) — the
+   image boots the real app once during `docker build` (DB pointed at an
+   unreachable localhost socket, Flyway off, Hibernate bootstrapped without
+   a live connection, exit right after context refresh) and bakes the class
+   archive into the image layer at `/app/cds/app.jsa`. `start.sh` pre-seeds
+   `/tmp/syllabai-appcds.jsa` from the baked copy on every container start,
+   so EVERY wake maps the archive — including the first boot after a deploy.
+   This replaced the runtime-only `-XX:+AutoCreateSharedArchive` dump
+   (session-121), which never engaged: a spin-down that does not end in an
+   orderly JVM exit writes no archive, and the measured cold wake on that
+   build (2026-09-23 15:52 UTC) was 184.6 s — at/above the 105–175 s
+   pre-AppCDS baseline. Any clean runtime exit still re-dumps a
+   full-coverage archive over the /tmp copy (top-up). Non-fatal at every
+   step: the training run is timeout/||-guarded (verified: the dump is
+   written even on non-zero JVM exits), a missing/corrupt archive just means
+   no CDS.
 3. `render.yaml`: `previewsEnabled: false` — PR previews would each run a
    free instance around the clock and silently eat the budget.
 
@@ -186,15 +198,30 @@ ground rules:
   Render's Terms of Service prohibit artificially defeating free-tier
   spin-down; services kept perpetually awake that way risk account
   suspension. The ONLY sanctioned scheduled wake is the web repo's
-  once-daily Vercel cron (`/api/cron/keep-alive`, 02:50 UTC) covering the
-  03:00 UTC decay window — one bounded wake a day (~15–30
-  instance-hours/month) with a documented functional purpose; do not extend
-  it or add others. Since V38 (session-114) the decay pass is ledger-guarded
-  (checked every 15 min, runs iff the window's `decay_job_runs` row is
-  absent), so even a missed keep-alive costs schedule precision, not
-  correctness — any next wake completes the night. Availability monitoring (6-hourly probe) lives in the
-  public `SyllabAI/syllabai-ops` repo — that cadence reports on real
-  availability and must not creep up into keep-alive territory.
+  once-daily Vercel cron (`/api/cron/keep-alive`, now `"0 3 * * *"`) that
+  wakes the instance inside the 03:00 UTC decay window — one bounded wake a
+  day (~15–30 instance-hours/month) with a documented functional purpose;
+  do not extend it or add others. Since V38 (session-114) the decay pass is
+  ledger-guarded (checked every 15 min, runs iff the window's
+  `decay_job_runs` row is absent), so even a missed keep-alive costs
+  schedule precision, not correctness — any next wake completes the night.
+  Availability monitoring (6-hourly probe) lives in the public
+  `SyllabAI/syllabai-ops` repo — that cadence reports on real availability
+  and must not creep up into keep-alive territory.
+- **Why the keep-alive cron moved from `"50 2 * * *"` to `"0 3 * * *"`
+  (session-122):** Vercel Hobby cron jobs trigger once per day WITHIN THE
+  SCHEDULED HOUR — the minute field is not honored (documented Hobby
+  limitation, re-verified against 2026-09 platform docs). A fire anywhere in
+  02:00–02:44 wakes the instance for only Render's ~15 min of idle budget,
+  so it sleeps again before the 03:00 checker tick. Measured: all three
+  windows since V38 (Sept 21–23) executed as CATCH_UP ~2 h late via the
+  (itself 3–5 h queue-delayed) pilot-monitor probe, not via the keep-alive.
+  Scheduling the wake inside the 03:00 hour lands it after the window
+  anchor: the first checker tick after the boot completes the window —
+  typically executed 03:03–03:20. `SCHEDULED` (rather than `CATCH_UP`) needs
+  the instance up before 03:00:00 sharp, which within-the-hour semantics
+  cannot target; the ledger's `executed_at` is the source of truth for the
+  t1 audit either way.
 - **Budget math:** free tier = 750 instance-hours/month. One continuously
   awake instance would burn ~730 h — right at the edge, which is exactly why
   pingers are both prohibited and pointless. Real pilot traffic (dozens of
