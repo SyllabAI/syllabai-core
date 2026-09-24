@@ -15,6 +15,19 @@
 
 set -u
 
+# Observability (session-123): one boot-log line stating whether the baked
+# archive made it into this container, so the Render log alone resolves the
+# baked-vs-absent fork (the 2026-09-24 measured cold wake, ~177 s, is
+# statistically indistinguishable from the pre-AppCDS baseline — we could not
+# tell from timing whether the archive is mapping at all). Combined with
+# -Xlog:cds=info below (prints "Opened archive ..." on a successful map, or
+# the reason it didn't), every wake now self-reports its CDS status.
+if [ -s /app/cds/app.jsa ]; then
+  echo "AppCDS baked archive present: $(du -h /app/cds/app.jsa 2>/dev/null | cut -f1) (/app/cds/app.jsa)"
+else
+  echo "AppCDS baked archive ABSENT in this image — wake boots without CDS (non-fatal)"
+fi
+
 # Pre-seed the ephemeral archive from the baked one (once per container).
 if [ -s /app/cds/app.jsa ] && [ ! -s /tmp/syllabai-appcds.jsa ]; then
   cp /app/cds/app.jsa /tmp/syllabai-appcds.jsa 2>/dev/null || \
@@ -22,6 +35,7 @@ if [ -s /app/cds/app.jsa ] && [ ! -s /tmp/syllabai-appcds.jsa ]; then
 fi
 
 exec java \
+  -Xlog:cds=info \
   -XX:MaxRAMPercentage=42 \
   -XX:MaxMetaspaceSize=160m \
   -XX:ReservedCodeCacheSize=48m \
