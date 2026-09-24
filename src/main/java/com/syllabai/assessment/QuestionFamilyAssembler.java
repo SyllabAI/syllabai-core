@@ -101,11 +101,18 @@ public class QuestionFamilyAssembler {
 
         List<QuestionFamilyView> units = new ArrayList<>(byFamily.size());
         Map<String, RefParse> parseByFamily = new HashMap<>();
+        // first-seen position of each family — the deterministic tie-break for
+        // equal (source, qNum): input order, never the family KEY, which for
+        // non-corpus rows is the RANDOM row UUID (the serving order flipped
+        // run-to-run with fresh UUIDs — CI 36011306580)
+        Map<String, Integer> firstSeen = new HashMap<>();
+        int seenIdx = 0;
         for (Map.Entry<String, List<RowWithParse>> entry : byFamily.entrySet()) {
             List<RowWithParse> bucket = entry.getValue();
             // every member of a family shares source and qNum by construction —
             // keep one parse for the page-order sort below
             parseByFamily.put(entry.getKey(), bucket.get(0).parse());
+            firstSeen.put(entry.getKey(), seenIdx++);
             bucket.sort(Comparator.comparingInt(
                     r -> memberRank(entry.getKey(), r.parse.suffix())));
             List<StudentQuestionView> parts = bucket.stream().map(r -> r.row).toList();
@@ -120,11 +127,14 @@ public class QuestionFamilyAssembler {
                     parts));
         }
 
-        // SME page order: source topic, then question number (qN = 0-based order)
+        // SME page order: source topic, then question number (qN = 0-based order),
+        // then input order — the key (a random UUID for non-corpus rows) is the
+        // LAST resort only, never a serving-order decision
         units.sort(Comparator
                 .comparing((QuestionFamilyView u) -> parseByFamily.get(u.key()).source(),
                         QuestionFamilyAssembler::compareSource)
                 .thenComparingLong(u -> parseByFamily.get(u.key()).qNum())
+                .thenComparingInt(u -> firstSeen.getOrDefault(u.key(), Integer.MAX_VALUE))
                 .thenComparing(QuestionFamilyView::key));
         return units;
     }
