@@ -371,22 +371,28 @@ class MarkingQueueFlowIT {
         // CI has no LLM provider — the BLANK answer is the deterministic
         // smart-mark path (validates to 0 marks without a provider call)
         UUID smartStays = submitAnswer(paper, "");
-        UUID overridden = submitAnswer(paper, "");
-        UUID humanMarked = submitAnswer(paper, "the correct content");
+        UUID reMarked = submitAnswer(paper, "");
+        UUID humanOnly = submitAnswer(paper, "the correct content");
 
         JsonNode batch = post("/api/v1/teacher/marking/smart-mark-batch", teacher,
-                "{\"answerIds\":[\"" + smartStays + "\",\"" + overridden + "\"]}");
+                "{\"answerIds\":[\"" + smartStays + "\",\"" + reMarked + "\"]}");
         assertThat(batch.get("marked").asInt()).isEqualTo(2);
 
-        // human decisions: first mark over a smart mark = OVERRIDDEN,
-        // first mark on a never-smart-marked answer = HUMAN_MARKED
+        // state machine (TeacherMarkingService): the human mark is an OVERRIDE
+        // only when the attempt's evidence has ALREADY fired (revising) — and
+        // pre-gate smart marks are provisional, so they fire no evidence. The
+        // production OVERRIDDEN shape (smart-then-human, both attached) needs
+        // an attempt completed once first: human #1 completes + fires evidence
+        // (HUMAN_MARKED), human #2 revises (OVERRIDDEN, newest-wins).
         Map<String, Integer> decisions = new LinkedHashMap<>();
         decisions.put(paper.scheme().points().get(0).id().toString(), 1);
         var principal = teacher();
-        markingService.recordHumanMark(overridden, principal.user().id(),
-                1, decisions, "it-override");
-        markingService.recordHumanMark(humanMarked, principal.user().id(),
+        markingService.recordHumanMark(humanOnly, principal.user().id(),
                 1, decisions, "it-first-mark");
+        markingService.recordHumanMark(reMarked, principal.user().id(),
+                1, decisions, "it-first-mark");
+        markingService.recordHumanMark(reMarked, principal.user().id(),
+                2, decisions, "it-re-mark");
 
         // THE 2026-09-24 production incident, pinned: queue-v2 assembles its
         // latest-run/latest-mark maps by run.answerId() on runs/marks read
@@ -400,22 +406,24 @@ class MarkingQueueFlowIT {
         assertThat(stays.get("answer").get("latestSmartMark").get("marksAwarded").asInt())
                 .isZero();
         assertThat(stays.get("answer").get("latestHumanMark").isNull()).isTrue();
-        assertThat(itemFor(smartQueue, overridden)).isNull();
-        assertThat(itemFor(smartQueue, humanMarked)).isNull();
+        assertThat(itemFor(smartQueue, reMarked)).isNull();
+        assertThat(itemFor(smartQueue, humanOnly)).isNull();
 
         JsonNode humanQueue = get("/api/v1/teacher/marking/queue-v2?state=HUMAN_MARKED", teacher);
-        JsonNode first = itemFor(humanQueue, humanMarked);
+        JsonNode first = itemFor(humanQueue, humanOnly);
         assertThat(first).isNotNull();
         assertThat(first.get("answer").get("latestHumanMark").isNull()).isFalse();
         assertThat(first.get("answer").get("latestSmartMark").isNull()).isTrue();
+        assertThat(itemFor(humanQueue, reMarked)).isNull();
 
         JsonNode overriddenQueue = get("/api/v1/teacher/marking/queue-v2?state=OVERRIDDEN", teacher);
-        JsonNode both = itemFor(overriddenQueue, overridden);
+        JsonNode both = itemFor(overriddenQueue, reMarked);
         assertThat(both).isNotNull();
         assertThat(both.get("answer").get("latestSmartMark").isNull()).isFalse();
         assertThat(both.get("answer").get("latestHumanMark").isNull()).isFalse();
+        // newest-wins: the OVERRIDDEN item carries the REVISION, not mark #1
         assertThat(both.get("answer").get("latestHumanMark").get("marksAwarded").asInt())
-                .isEqualTo(1);
+                .isEqualTo(2);
     }
 
     // ── the §7 review-queue v3 over real ingested content ───────────────
