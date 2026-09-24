@@ -479,6 +479,48 @@ class TeacherMarkingQueueServiceTest {
     }
 
     @Test
+    @DisplayName("queue with ZERO paper rows (all question-bank): the unfiled group renders and the immutable empty paper map is never queried with a null key")
+    void markingQueueAllBankQueueRendersUnfiledGroup() {
+        // Production defect (2026-09-24, layer 3): SMART_MARKED was the ONLY
+        // state whose queue held zero paper rows -> paperIds empty -> `papers`
+        // = immutable Map.of() -> the unfiled group's papers.get(null) NPEed.
+        // Every other state had >=1 paper row -> Collectors.toMap HashMap ->
+        // get(null) returns null. The mixed-queue regression above exercises
+        // only the HashMap branch; this one pins the Map.of() branch. It also
+        // only became reachable AFTER the detached-lazy lookup fix (that
+        // exception fired earlier in the assembly and masked this one).
+        BankFix bank = bankFix();
+        Answer bankA = bankAnswer(bank, BASE.minus(10, ChronoUnit.MINUTES), "a");
+        bankA.smartMarked(1);
+        Answer bankB = bankAnswer(bank, BASE.minus(5, ChronoUnit.MINUTES), "b");
+        bankB.smartMarked(0);
+
+        when(answers.findByMarkingState(Answer.MarkingState.SMART_MARKED))
+                .thenReturn(List.of(bankA, bankB));
+        lenient().when(smartMarkResults.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(humanMarks.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(users.findAllById(anyCollection())).thenReturn(List.of());
+
+        var view = service.markingQueue(Answer.MarkingState.SMART_MARKED);
+
+        assertThat(view.groups()).hasSize(1);
+        assertThat(view.groups().get(0).paperId()).isNull();
+        assertThat(view.groups().get(0).paperTitle()).isNull();
+        assertThat(view.groups().get(0).paperCode()).isNull();
+        assertThat(view.groups().get(0).count()).isEqualTo(2);
+        assertThat(view.items()).hasSize(2);
+        assertThat(view.items()).allSatisfy(it -> {
+            assertThat(it.paperId()).isNull();
+            assertThat(it.paperTitle()).isNull();
+            assertThat(it.answer().markingState()).isEqualTo("SMART_MARKED");
+        });
+        // all-bank queue: the paper lookup must never be called at all
+        verify(examPapers, never()).findAllById(anyCollection());
+    }
+
+    @Test
     @DisplayName("throughput with question-bank pending answers: honest counts, no null id reaches the paper lookup")
     void throughputNullPaperAnswersCountWithoutCrash() {
         PaperFix fix = paperFix(UUID.randomUUID(), "Chemistry Paper 1");

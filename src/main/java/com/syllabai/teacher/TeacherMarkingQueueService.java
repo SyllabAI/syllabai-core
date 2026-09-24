@@ -155,7 +155,14 @@ public class TeacherMarkingQueueService {
         List<MarkingGroupView> groupViews = new ArrayList<>(groups.size());
         for (List<Answer> group : groups) {
             UUID paperId = group.get(0).attempt().question().examPaperId();
-            ExamPaper paper = papers.get(paperId);
+            // paperId is null for the unfiled (question-bank) group BY DESIGN —
+            // and when the queue holds ZERO paper rows, `papers` is the immutable
+            // Map.of() above, whose get(null) NPEs (immutable maps reject null
+            // key queries; a state whose answers are ALL bank answers 500ed
+            // exactly there — SMART_MARKED 2026-09-24, exposed once the detached
+            // lazy lookups stopped throwing first). The unfiled group's paper
+            // context is null by definition: skip the lookup entirely.
+            ExamPaper paper = paperId == null ? null : papers.get(paperId);
             Instant oldestAt = group.get(0).attempt().createdAt();
             groupViews.add(new MarkingGroupView(
                     paperId,
