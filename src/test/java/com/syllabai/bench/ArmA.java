@@ -37,12 +37,13 @@ import java.util.Map;
  * {@code document_chunks.chunk_index = ordinal}). Boundary audit reuses
  * {@link ArmB#audit} verbatim: every returned hit is checked against the
  * loader's paper-state map; any non-VALIDATED hit is a recorded
- * VALIDATION_BOUNDARY_VIOLATION finding. The production vector surface
- * predates T-C05 (the VALIDATED predicate exists on the lexical
- * serving-eligible surface only), so the served view is expected to surface
- * the finding; the {@link #compliantView post-hoc VALIDATED-only view} is the
- * evaluation view comparable with arm B's compliant scope. Neither view is a
- * promotion claim.</p>
+ * VALIDATION_BOUNDARY_VIOLATION finding. Since the T-C20 closure the
+ * production surface itself is VALIDATED-only ({@code searchServingEligible}),
+ * so the served view is expected to carry ZERO violations — any violation is
+ * a regression, never a finding; the historical run-004-a record (pre-gate)
+ * surfaced the finding and is preserved. The {@link #compliantView post-hoc
+ * VALIDATED-only view} remains as the independent cross-check evaluation
+ * view. Neither view is a promotion claim.</p>
  */
 public final class ArmA {
 
@@ -92,11 +93,11 @@ public final class ArmA {
 
     /**
      * Post-hoc VALIDATED-only view: the served ranked list filtered to
-     * VALIDATED-paper chunks, order preserved. This is the run-001 B-proxy
-     * {@code validated_only} discipline — an EVALUATION view for comparability
-     * with arm B's compliant scope, NOT a serving simulation (a compliant
-     * vector surface would re-rank within the compliant corpus and is not
-     * implemented here; the T-C05 closure is a registered follow-up).
+     * VALIDATED-paper chunks, order preserved. The run-001 B-proxy
+     * {@code validated_only} discipline — retained post-T-C20 as the
+     * INDEPENDENT CROSS-CHECK of the serving-eligible production surface
+     * (agreement expected; disagreement is itself a defect signal). Not a
+     * promotion claim.
      */
     public static AResult compliantView(AResult served, Map<String, String> paperStateByDocumentId) {
         List<String> refs = new ArrayList<>();

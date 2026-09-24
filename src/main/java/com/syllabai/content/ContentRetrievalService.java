@@ -26,11 +26,18 @@ public class ContentRetrievalService {
     }
 
     /**
-     * Curriculum-scoped vector search (T-C07): only chunks whose document
-     * resolves into {@code scope}'s curriculum version are eligible. Null
-     * scope is rejected before anything runs — retrieval never serves
-     * unscoped, and an unresolvable curriculum is the caller's refusal, not
-     * a wildcard here.
+     * Curriculum-scoped, VALIDATED-only vector search (T-C07 + T-C05/T-C20):
+     * only chunks whose document resolves into {@code scope}'s curriculum
+     * version are eligible, and only from a {@code VALIDATED} paper (paper
+     * branch) or a {@code VALIDATED} document (knowledge-layer subject
+     * branch) — the same serving-eligible boundary the lexical arm enforces
+     * via {@link ChunkLexicalRepository#searchServingEligible}. Null scope is
+     * rejected before anything runs — retrieval never serves unscoped, and an
+     * unresolvable curriculum is the caller's refusal, not a wildcard here.
+     *
+     * <p>The neutral {@link ChunkVectorRepository#search} remains the
+     * benchmark/audit surface (T-C13 arm replay); this serving path is the
+     * VALIDATED-only surface the T-C20 closure owns.</p>
      */
     public List<ChunkHit> search(String query, Document.Kind kind, CurriculumScope scope, int limit) {
         if (query == null || query.isBlank()) {
@@ -51,6 +58,7 @@ public class ContentRetrievalService {
             throw new IllegalStateException("embedding provider " + embedding.model()
                     + " returned an inconsistent query vector");
         }
-        return vectors.search(queryVector, kind, scope.curriculumVersionId(), boundedLimit);
+        return vectors.searchServingEligible(queryVector, kind, scope.curriculumVersionId(),
+                boundedLimit);
     }
 }

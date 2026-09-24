@@ -37,8 +37,9 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * fabric ({@code com.syllabai.retrieval.RetrievalFabric}, the registered
  * "port + 4 adapters, ZERO consumers" gap, now closed): explicit composition
  * of the two recorded arms — {@code PgVectorRetrievalProvider} (arm A path:
- * ContentVectorRetriever → ContentRetrievalService → ChunkVectorRepository.search,
- * pgvector cosine over V11 vector(768), T-C07 scope, cosine floor 0.15,
+ * ContentVectorRetriever → ContentRetrievalService →
+ * ChunkVectorRepository.searchServingEligible (T-C20), pgvector cosine over V11
+ * vector(768), T-C07 scope, cosine floor 0.15,
  * kind-agnostic) and {@code Bm25Retriever} (arm B path: T-C14 Postgres FTS
  * ts_rank_cd over V28 content_tsv, T-C07 scope + T-C05 VALIDATED serving) —
  * fused by the shipped {@code ReciprocalRankFusion} (k=60), rank-only,
@@ -46,7 +47,11 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * embed-backfill-snap-001 artifact carries both chunk and gold query vectors
  * (compute-once-freeze-forever, sessions 92/94/96).
  *
- * <p>Dual view (honesty rules, §10 ruling 1):</p>
+ * <p>Dual view (honesty rules, §10 ruling 1) — <em>T-C20 UPDATE: the production
+ * vector surface is now itself VALIDATED-only (searchServingEligible), so on any
+ * re-record the SERVED view is expected to carry ZERO violations and to agree
+ * with the COMPLIANT view; the recorded run-005-c predates that gate and is
+ * preserved unchanged:</em></p>
  * <ul>
  *   <li><strong>SERVED view (production truth, ALL denominator):</strong> the
  *   fabric under {@code BoundaryPolicy.allowAll()} over the components exactly
