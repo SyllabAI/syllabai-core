@@ -15,6 +15,7 @@ import com.syllabai.teacher.dto.TeacherViews;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -216,7 +217,11 @@ public class TeacherMarkingQueueService {
         }
         List<PendingPaperView> leaders = pendingByPaper.entrySet().stream()
                 .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed()
-                        .thenComparing(Map.Entry.comparingByKey()))
+                        // paperId is nullable (question-bank answers) — null-safe key
+                        // tie-break, unfiled bucket last; never a bare natural-order
+                        // compare on the nullable key
+                        .thenComparing(Map.Entry.comparingByKey(
+                                Comparator.nullsLast(Comparator.naturalOrder()))))
                 .limit(5)
                 .map(e -> {
                     ExamPaper p = paperLookup.get(e.getKey());
