@@ -250,7 +250,7 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
         int end = raw.lastIndexOf('}');
         if (start < 0 || end <= start) throw new CandidateGenerationException(
                 CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT,
-                "no JSON object in output", null);
+                "no JSON object in output", null, raw);
         return raw.substring(start, end + 1);
     }
 
