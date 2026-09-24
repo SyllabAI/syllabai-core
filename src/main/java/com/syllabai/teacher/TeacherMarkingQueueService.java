@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -87,9 +88,14 @@ public class TeacherMarkingQueueService {
             return new MarkingQueueView(state.name(), List.of(), List.of());
         }
 
-        // paper context in one lookup
+        // paper context in one lookup. Question-bank (SME) questions carry NO
+        // paper — examPaperId is null by design — so nulls are filtered before
+        // the repository call (findAllById rejects null elements). Their answers
+        // still group under the null paperId below; the view layer renders that
+        // group as the unfiled bucket (paper == null branches).
         Set<UUID> paperIds = queue.stream()
                 .map(a -> a.attempt().question().examPaperId())
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         Map<UUID, ExamPaper> papers = paperIds.isEmpty()
                 ? Map.of()
@@ -135,8 +141,13 @@ public class TeacherMarkingQueueService {
             if (byOldest != 0) return byOldest;
             int bySize = Integer.compare(g2.size(), g1.size());
             if (bySize != 0) return bySize;
-            return g1.get(0).attempt().question().examPaperId()
-                    .compareTo(g2.get(0).attempt().question().examPaperId());
+            // paperId is nullable (question-bank questions) — null-safe tie-break,
+            // unfiled groups last; never a bare compareTo on a possibly-null id
+            UUID p1 = g1.get(0).attempt().question().examPaperId();
+            UUID p2 = g2.get(0).attempt().question().examPaperId();
+            if (p1 != null && p2 != null) return p1.compareTo(p2);
+            if (p1 == null && p2 == null) return 0;
+            return p1 == null ? 1 : -1;
         });
 
         List<MarkingQueueItem> items = new ArrayList<>(queue.size());
@@ -193,6 +204,7 @@ public class TeacherMarkingQueueService {
         if (!pending.isEmpty()) {
             Set<UUID> ids = pending.stream()
                     .map(a -> a.attempt().question().examPaperId())
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             paperLookup = examPapers.findAllById(ids).stream()
                     .collect(Collectors.toMap(ExamPaper::id, p -> p));
