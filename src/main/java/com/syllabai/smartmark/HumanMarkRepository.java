@@ -2,6 +2,7 @@ package com.syllabai.smartmark;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,8 +35,12 @@ public interface HumanMarkRepository extends JpaRepository<HumanMark, UUID> {
     /**
      * Marking throughput lane (sprint 2 §6): every human mark for a batch of
      * answers in ONE query, oldest first — the caller keeps the newest per
-     * answer in memory. Read-only.
+     * answer in memory. Read-only. The answer association is fetched eagerly:
+     * open-in-view is OFF and the caller keys its map by mark.answerId() on a
+     * DETACHED entity — an uninitialized lazy proxy would throw there
+     * (HUMAN_MARKED / OVERRIDDEN queues 500ed, 2026-09-24).
      */
+    @EntityGraph(attributePaths = {"answer"})
     @Query("""
             select h from HumanMark h
             where h.answer.id in :answerIds

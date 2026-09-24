@@ -59,7 +59,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * success preserved, no gate weakened; (4) throughput metrics that count what
  * happened (state mix, 24h human-mark window, oldest pending age); (5) the v3
  * review queue carrying the §7 signals and rank reasons over real ingested
- * content, deterministically ordered.</p>
+ * content, deterministically ordered; (6) the marked-state v2 queues
+ * (SMART_MARKED / HUMAN_MARKED / OVERRIDDEN) rendering with the latest smart
+ * run and human mark attached — assembled from DETACHED reads (open-in-view
+ * off), the 2026-09-24 production 500.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("it")
@@ -345,6 +348,74 @@ class MarkingQueueFlowIT {
         assertThat(leaders.size()).isEqualTo(1);
         assertThat(leaders.get(0).get("paperId").asText())
                 .isEqualTo(paperA.paperId().toString());
+    }
+
+    /** the item of `queue` whose answerId matches, or null */
+    private JsonNode itemFor(JsonNode queue, UUID answerId) {
+        for (JsonNode it : queue.get("items")) {
+            if (it.get("answer").get("answerId").asText().equals(answerId.toString())) {
+                return it;
+            }
+        }
+        return null;
+    }
+
+    // ── marked-state queues: detached-safe assembly of runs + marks ─────
+
+    @Test
+    @DisplayName("SMART_MARKED / HUMAN_MARKED / OVERRIDDEN queues render with marks attached")
+    void markedStateQueuesRenderMarks() throws Exception {
+        String teacher = teacherToken();
+        MarkablePaper paper = ingestAndValidate("4MQ0/5C");
+
+        // CI has no LLM provider — the BLANK answer is the deterministic
+        // smart-mark path (validates to 0 marks without a provider call)
+        UUID smartStays = submitAnswer(paper, "");
+        UUID overridden = submitAnswer(paper, "");
+        UUID humanMarked = submitAnswer(paper, "the correct content");
+
+        JsonNode batch = post("/api/v1/teacher/marking/smart-mark-batch", teacher,
+                "{\"answerIds\":[\"" + smartStays + "\",\"" + overridden + "\"]}");
+        assertThat(batch.get("marked").asInt()).isEqualTo(2);
+
+        // human decisions: first mark over a smart mark = OVERRIDDEN,
+        // first mark on a never-smart-marked answer = HUMAN_MARKED
+        Map<String, Integer> decisions = new LinkedHashMap<>();
+        decisions.put(paper.scheme().points().get(0).id().toString(), 1);
+        var principal = teacher();
+        markingService.recordHumanMark(overridden, principal.user().id(),
+                1, decisions, "it-override");
+        markingService.recordHumanMark(humanMarked, principal.user().id(),
+                1, decisions, "it-first-mark");
+
+        // THE 2026-09-24 production incident, pinned: queue-v2 assembles its
+        // latest-run/latest-mark maps by run.answerId() on runs/marks read
+        // OUTSIDE any transaction (open-in-view is off) — an uninitialized
+        // lazy answer proxy there 500ed every marked state while PENDING
+        // (empty maps) worked. The batches must fetch the answer association.
+        JsonNode smartQueue = get("/api/v1/teacher/marking/queue-v2?state=SMART_MARKED", teacher);
+        JsonNode stays = itemFor(smartQueue, smartStays);
+        assertThat(stays).isNotNull();
+        assertThat(stays.get("answer").get("latestSmartMark").isNull()).isFalse();
+        assertThat(stays.get("answer").get("latestSmartMark").get("marksAwarded").asInt())
+                .isZero();
+        assertThat(stays.get("answer").get("latestHumanMark").isNull()).isTrue();
+        assertThat(itemFor(smartQueue, overridden)).isNull();
+        assertThat(itemFor(smartQueue, humanMarked)).isNull();
+
+        JsonNode humanQueue = get("/api/v1/teacher/marking/queue-v2?state=HUMAN_MARKED", teacher);
+        JsonNode first = itemFor(humanQueue, humanMarked);
+        assertThat(first).isNotNull();
+        assertThat(first.get("answer").get("latestHumanMark").isNull()).isFalse();
+        assertThat(first.get("answer").get("latestSmartMark").isNull()).isTrue();
+
+        JsonNode overriddenQueue = get("/api/v1/teacher/marking/queue-v2?state=OVERRIDDEN", teacher);
+        JsonNode both = itemFor(overriddenQueue, overridden);
+        assertThat(both).isNotNull();
+        assertThat(both.get("answer").get("latestSmartMark").isNull()).isFalse();
+        assertThat(both.get("answer").get("latestHumanMark").isNull()).isFalse();
+        assertThat(both.get("answer").get("latestHumanMark").get("marksAwarded").asInt())
+                .isEqualTo(1);
     }
 
     // ── the §7 review-queue v3 over real ingested content ───────────────
