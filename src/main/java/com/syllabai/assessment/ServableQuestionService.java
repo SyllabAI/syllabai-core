@@ -112,8 +112,13 @@ public class ServableQuestionService {
      * lists for questions without mappings (e.g. the seed MCQs). Each ref
      * carries the mapping role and the spec point's official applicability
      * verbatim (nullable); the view derives its bare-code list from these.
+     *
+     * <p>Shared projection since T-C28: the exam-paper detail surface
+     * ({@code ExamPaperController}) reuses this exact method so every
+     * question-carrying payload speaks the same spec-point dialect — no
+     * second SQL contract, no divergent ordering rules.</p>
      */
-    private Map<UUID, List<StudentQuestionView.SpecPointRef>> specPointRefs(Collection<UUID> questionIds) {
+    public Map<UUID, List<StudentQuestionView.SpecPointRef>> specPointRefs(Collection<UUID> questionIds) {
         Map<UUID, List<StudentQuestionView.SpecPointRef>> byQuestion = new HashMap<>();
         if (questionIds.isEmpty()) {
             return byQuestion;
