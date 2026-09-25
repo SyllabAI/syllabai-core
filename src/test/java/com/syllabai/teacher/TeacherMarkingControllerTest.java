@@ -242,7 +242,8 @@ class TeacherMarkingControllerTest {
                         SmartMarkAgreementEvaluation.SCOPE_PAPER, paperId, 5, 0.9, 0.95, 0.6,
                         MARKER));
 
-        var view = controller.evaluateKappa(MARKER, paperId);
+        var view = controller.evaluateKappa(MARKER,
+                new TeacherMarkingController.KappaScopeRequest(paperId));
 
         verify(teacherMarkingService).evaluateAgreement(paperId, MARKER);
         assertThat(view.scope()).isEqualTo("PAPER");
