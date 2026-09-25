@@ -119,7 +119,13 @@ public class TeacherMarkingController {
     }
 
     private static String paperTitle(Map<UUID, ExamPaper> papers, Answer a) {
-        ExamPaper paper = papers.get(a.attempt().question().examPaperId());
+        UUID paperId = a.attempt().question().examPaperId();
+        if (paperId == null) {
+            // question-bank answer: no paper context BY DESIGN (session-119
+            // null-safety law) — immutable JDK maps reject a null key lookup
+            return null;
+        }
+        ExamPaper paper = papers.get(paperId);
         return paper == null ? null : paper.title();
     }
 
