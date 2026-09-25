@@ -87,12 +87,14 @@ class NextBestActionServiceTest {
     }
 
     private static NodeView node(UUID id, String code, String type, String title) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, List.of());
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                List.of());
     }
 
     private static NodeView node(UUID id, String code, String type, String title,
                                  List<NodeView> children) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, children);
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                children);
     }
 
     private void givenTree() {

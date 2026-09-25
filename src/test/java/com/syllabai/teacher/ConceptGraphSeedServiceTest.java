@@ -212,6 +212,52 @@ class ConceptGraphSeedServiceTest {
     }
 
     @Test
+    @DisplayName("T-C24: spec-point nodes carry the snapshot applicability verbatim; every other row stays null")
+    void applicabilityLandsOnCreatedSpecPoints() {
+        service.activate(UUID.randomUUID());
+
+        KnowledgeNode sp = nodeByCode.get("4CH1-1.1");
+        assertThat(sp.applicability()).isNotNull();
+        assertThat(sp.applicability())
+                .containsEntry("papers", List.of("1C", "2C"))
+                .containsEntry("double_award_shared", true);
+        KnowledgeNode cPoint = nodeByCode.get("4CH1-3.7C");
+        assertThat(cPoint.applicability())
+                .containsEntry("papers", List.of("2C"))
+                .containsEntry("double_award_shared", false);
+
+        // the store scopes spec points only — root, structure and concept rows stay null
+        assertThat(nodeByCode.get("4CH1").applicability()).isNull();
+        assertThat(nodeByCode.get("4CH1-CON-COVALENT-BOND").applicability()).isNull();
+        // the create path sets the field BEFORE the single save: one saved id per node, not two
+        assertThat(everSavedNodeIds).hasSize(1 + 4 + 28 + 182 + 12 + 113);
+    }
+
+    @Test
+    @DisplayName("T-C24: a pre-V39 spec-point row is backfilled on reuse; the next run writes nothing")
+    void applicabilityBackfillIsOneTimeAndIdempotent() {
+        // a spec-point row from a pre-V39 seed: correct provenance, null applicability
+        knowledgeNodes.save(new KnowledgeNode("4CH1-1.1", NodeType.SUBTOPIC,
+                "recall that the universe is made of matter", "pre-V39 row (null applicability)",
+                KnowledgeNode.ValidationStatus.VALIDATED,
+                ConceptGraphSeedService.STRUCTURE_PROVENANCE, "prior-run"));
+
+        service.activate(UUID.randomUUID());
+
+        // the same canonical row (same seed provenance — no re-seed) now carries the scope object
+        assertThat(nodeByCode.get("4CH1-1.1").applicability())
+                .containsEntry("papers", List.of("1C", "2C"))
+                .containsEntry("double_award_shared", true);
+
+        // re-run: content-equal applicability ⇒ zero writes, graph state byte-stable
+        Map<String, KnowledgeNode> firstNodes = Map.copyOf(nodeByCode);
+        int savedNodes = everSavedNodeIds.size();   // a re-save would mint a fresh id (TestIds)
+        service.activate(UUID.randomUUID());
+        assertThat(everSavedNodeIds).hasSize(savedNodes);
+        assertThat(nodeByCode).isEqualTo(firstNodes);
+    }
+
+    @Test
     @DisplayName("Case C: a pre-existing canonical concept is reused, not duplicated")
     void canonicalIdentityReused() {
         // a canonical concept row already exists with the seed provenance

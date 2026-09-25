@@ -87,7 +87,8 @@ class ClassAnalyticsServiceTest {
 
     private NodeView node(UUID id, String code, String type, String title,
                           List<NodeView> children) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, children);
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                children);
     }
 
     /** the 4CH1-shaped tree: root → section → topics (+misconception under A) */
@@ -304,7 +305,8 @@ class ClassAnalyticsServiceTest {
                 user(learner1, "Alpha One"), user(learner2, "Beta Two")));
         when(servableQuestions.activeByTopic(topicA)).thenReturn(List.of(
                 new StudentQuestionView(UUID.randomUUID(), "q1", "STRUCTURED", "stem", 5, 2,
-                        300, "command", topicA, null, List.of(), List.of(), List.of())));
+                        300, "command", topicA, null, List.of(), List.of(), List.of(),
+                        List.of())));
         when(graph.prerequisiteChain(topicA)).thenReturn(List.of(
                 new PrerequisiteView(topicB, "4CH1-1.2", "TOPIC", "Moles", 1)));
 

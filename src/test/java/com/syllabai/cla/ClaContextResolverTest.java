@@ -86,11 +86,13 @@ class ClaContextResolverTest {
     }
 
     private static NodeView node(UUID id, String code, String type, String title) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, List.of());
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                List.of());
     }
 
     private static NodeView node(UUID id, String code, String type, String title, List<NodeView> children) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, children);
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                children);
     }
 
     @Test
@@ -195,7 +197,7 @@ class ClaContextResolverTest {
         // gate must still 404 it (indistinguishable from unknown)
         UUID conceptId = UUID.randomUUID();
         NodeView suggested = new NodeView(conceptId, "CONCEPT-x", "CONCEPT",
-                "retrieval-graph concept", null, "SUGGESTED", null, List.of());
+                "retrieval-graph concept", null, "SUGGESTED", null, null, List.of());
         NodeView topic = node(TOPIC, "IALCHEM2018-U1-T3", "TOPIC",
                 "Bonding and structure", List.of(suggested));
         NodeView unit = node(UNIT, "IALCHEM2018-U1", "UNIT", "Unit 1", List.of(topic));

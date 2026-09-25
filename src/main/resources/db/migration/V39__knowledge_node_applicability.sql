@@ -1,0 +1,31 @@
+-- V39: knowledge_nodes.applicability — the official paper/unit/tier scope of a
+-- specification point reaches the serving layer (T-C24, Phase 2 step 1).
+--
+-- ADR-026 gave questions a fail-closed mapping to spec-point knowledge nodes
+-- (question_spec_points, V30), and the learner question view already carries
+-- the mapped codes (specPointCodes). What it does NOT carry is the scope data
+-- the official curriculum attaches to each point: which papers assess it,
+-- whether it is shared with Science Double Award, and the official rule text.
+-- That data exists in the pinned 4CH1 snapshot
+-- (concept-graph/specification_points.yaml — byte-verbatim from
+-- syllabai-resources, SHA-pinned by ConceptGraphSnapshotLoader) on all 182
+-- points, but the loader's SpecPoint record dropped it on the floor and no
+-- column could hold it. Downstream this is the difference between "this
+-- question maps to 4CH1-1.1" and "this question maps to 4CH1-1.1, which is
+-- assessed in Papers 1C+2C and shared with 4SD0" — the substrate for
+-- paper/unit/tier scoping in the learner surfaces (demo-proven pattern).
+--
+-- The column is a nullable jsonb and stays UNVALIDATED-agnostic: it is a
+-- verbatim passthrough of the store's own object (papers[], rule,
+-- double_award_shared for 4CH1; the shape is the store's business, not the
+-- schema's). No CHECK, no interpretation — zero invention, same discipline as
+-- the pinned snapshot itself. Only seed-owned spec-point rows are populated
+-- (ConceptGraphSeedService); every other node type leaves it NULL.
+--
+-- Backfill is seed-side, not here: the SQL file cannot read the classpath
+-- YAML, and the seed is the single idempotent writer for these rows. First
+-- re-activation after this migration backfills the already-seeded serving DB
+-- in one transaction and logs the count; subsequent runs are no-ops.
+
+alter table knowledge_nodes
+    add column applicability jsonb;

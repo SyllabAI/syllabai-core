@@ -107,12 +107,14 @@ public class ServableQuestionService {
     }
 
     /**
-     * Curriculum codes per question id (ADR-026): PRIMARY mappings first, then
-     * SECONDARY, each code-ordered — one batched query, empty lists for
-     * questions without mappings (e.g. the seed MCQs).
+     * Curriculum refs per question id (ADR-026 + T-C24): PRIMARY mappings
+     * first, then SECONDARY, each code-ordered — one batched query, empty
+     * lists for questions without mappings (e.g. the seed MCQs). Each ref
+     * carries the mapping role and the spec point's official applicability
+     * verbatim (nullable); the view derives its bare-code list from these.
      */
-    private Map<UUID, List<String>> specPointCodes(Collection<UUID> questionIds) {
-        Map<UUID, List<String>> byQuestion = new HashMap<>();
+    private Map<UUID, List<StudentQuestionView.SpecPointRef>> specPointRefs(Collection<UUID> questionIds) {
+        Map<UUID, List<StudentQuestionView.SpecPointRef>> byQuestion = new HashMap<>();
         if (questionIds.isEmpty()) {
             return byQuestion;
         }
@@ -120,14 +122,15 @@ public class ServableQuestionService {
                 .findCodesByQuestionIdsIn(questionIds).stream()
                 .collect(Collectors.groupingBy(SmeQuestionSpecPointRepository.CodeProjection::getQuestionId));
         grouped.forEach((questionId, rows) -> {
-            List<String> codes = new ArrayList<>(rows.stream()
+            List<StudentQuestionView.SpecPointRef> refs = rows.stream()
                     .sorted(Comparator
                             .comparing((SmeQuestionSpecPointRepository.CodeProjection r) ->
                                     "PRIMARY".equals(r.getRole()) ? 0 : 1)
                             .thenComparing(SmeQuestionSpecPointRepository.CodeProjection::getCode))
-                    .map(SmeQuestionSpecPointRepository.CodeProjection::getCode)
-                    .toList());
-            byQuestion.put(questionId, codes);
+                    .map(r -> new StudentQuestionView.SpecPointRef(
+                            r.getCode(), r.getRole(), r.getApplicability()))
+                    .toList();
+            byQuestion.put(questionId, refs);
         });
         return byQuestion;
     }
@@ -150,8 +153,8 @@ public class ServableQuestionService {
                 .filter(q -> !paperBlocksServing(Set.of(), q.examPaperId()))
                 .map(q -> project(q, currentVersion(q.id())))
                 .filter(Objects::nonNull)
-                .map(v -> v.withSpecPointCodes(
-                        specPointCodes(List.of(v.id())).getOrDefault(v.id(), List.of())));
+                .map(v -> v.withSpecPoints(
+                        specPointRefs(List.of(v.id())).getOrDefault(v.id(), List.of())));
     }
 
     /** whether a question may still be served to learners (e.g. before recommending a retry) */
@@ -385,12 +388,12 @@ public class ServableQuestionService {
      */
     private List<StudentQuestionView> projectAll(List<Question> candidates) {
         Map<UUID, QuestionVersion> currentByQuestion = currentVersions(candidates);
-        Map<UUID, List<String>> codes = specPointCodes(
+        Map<UUID, List<StudentQuestionView.SpecPointRef>> refs = specPointRefs(
                 candidates.stream().map(Question::id).toList());
         return candidates.stream()
                 .map(q -> project(q, currentByQuestion.get(q.id())))
                 .filter(Objects::nonNull)
-                .map(v -> v.withSpecPointCodes(codes.getOrDefault(v.id(), List.of())))
+                .map(v -> v.withSpecPoints(refs.getOrDefault(v.id(), List.of())))
                 .toList();
     }
 

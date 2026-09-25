@@ -28,7 +28,7 @@ class QuestionFamilyAssemblerTest {
         return new StudentQuestionView(
                 UUID.randomUUID(), externalRef, type, "stem of " + externalRef, marks,
                 difficulty, 60, "State", UUID.randomUUID(), null,
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of());
     }
 
     private List<String> refs(List<QuestionFamilyView> units) {

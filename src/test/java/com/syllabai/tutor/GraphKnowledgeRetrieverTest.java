@@ -56,7 +56,7 @@ class GraphKnowledgeRetrieverTest {
                         "Formulae, Equations and Amount of Substance", 1)));
         when(graph.misconceptions(bondingId)).thenReturn(List.of(
                 new NodeView(moleMisconceptionId, "MIS-T1.1-01", "MISCONCEPTION",
-                        "Moles and grams are interchangeable", null, "UNVALIDATED", null,
+                        "Moles and grams are interchangeable", null, "UNVALIDATED", null, null,
                         List.of())));
     }
 

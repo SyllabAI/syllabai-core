@@ -229,7 +229,7 @@ class LearnerKnowledgeGraphServiceTest {
     private static NodeView node(UUID id, String code, String type, String title,
                                  String description, List<NodeView> children) {
         return new NodeView(id, code, type, title, description, "VALIDATED",
-                "test-provenance", children);
+                "test-provenance", null, children);
     }
 
     private static NodeWithStateView node(LearnerKnowledgeGraphView view, UUID id) {
