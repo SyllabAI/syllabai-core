@@ -490,6 +490,8 @@ class TeacherMarkingQueueServiceTest {
                 service.markingQueue(Answer.MarkingState.PENDING, 1, null);
         assertThat(onlyPage.size())
                 .isEqualTo(TeacherMarkingQueueService.DEFAULT_PAPER_GROUPS_PER_PAGE);
+    }
+
     // ---- question-bank (null examPaperId) answers: the unfiled group (regression) ----
     // Production defect (session 118): a SMART_MARKED answer on a question-bank
     // (SME) question — examPaperId null BY DESIGN — crashed queue-v2 with a 500:
