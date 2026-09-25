@@ -25,18 +25,35 @@ import org.springframework.stereotype.Repository;
 public class ChunkVectorRepository {
 
     /**
-     * The corpus generation that serves (plan §6). 2 = corpus-v2 (atom-aligned,
-     * header-stamped, metadata-complete bridge ingest — the R3 corpus-v2 leg).
-     * FLIPPED 2026-09-20 (Task 32) after the offline eval gates passed on the
-     * frozen embed-bridge-v2 substrate: (G1) rev2 hit@10 9/9 vs rev1 0/9 on the
+     * The corpus generation that serves (plan §6). FLIPPED BACK TO 1 on
+     * 2026-09-25 — the designed rollback posture this constant exists for —
+     * after the 0-hit serving anomaly investigation (TODO T-C23, evidence:
+     * syllabai repo {@code evidence/serving-0hit-anomaly-2026-09-25/REPORT.md}):
+     * the serving-eligible intersection went EMPTY at T-C20 closure (09-24)
+     * because the only VALIDATED papers point at rev1 documents (excluded by
+     * rev=2) while the entire rev2 corpus is born SUGGESTED (excluded by the
+     * T-C20 VALIDATED-only gate). The operator chose availability-now without
+     * manual paper review ("I dont want to manually sit and review papers. We
+     * have very less time"), so this rollback re-serves the VALIDATED rev1
+     * corpus. Honest trade-off, stated on the record: rev1 retrieval measured
+     * 0/9 hit@10 vs rev2 9/9 on the frozen gold subset (the eval gates in the
+     * history below) — this knowingly serves the weaker corpus and is INTERIM
+     * until rev2-era papers are teacher-validated, at which point this flips
+     * back to 2 (rev1 retirement stays gated at R5). Purely additive: the
+     * rev=2 serving set was empty, so no content loses visibility.
+     *
+     * <p>History: 2 = corpus-v2 (atom-aligned, header-stamped,
+     * metadata-complete bridge ingest — the R3 corpus-v2 leg). FLIPPED
+     * 2026-09-20 (Task 32) after the offline eval gates passed on the frozen
+     * embed-bridge-v2 substrate: (G1) rev2 hit@10 9/9 vs rev1 0/9 on the
      * rev2-covered gold subset, offline rev1 recomputation reconciled EXACTLY
      * with CI run-004-a-r3 (FETCH 0/40; only the 4 enumerate_paper queries hit);
      * (G2) 10/10 topical probes keyword-matched in rev2 top-10; (G3) 300/300
      * chunks header+group-key complete. rev1 rows (2,333 legacy chunks) are
-     * never mutated in place — rollback is flipping this constant back to 1;
-     * rev1 retirement (deletion) stays gated at R5.
+     * never mutated in place — rollback is flipping this constant; rev1
+     * retirement (deletion) stays gated at R5.</p>
      */
-    public static final int CURRENT_EMBED_REV = 2;
+    public static final int CURRENT_EMBED_REV = 1;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
