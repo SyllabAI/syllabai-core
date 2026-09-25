@@ -32,7 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
  * store's own codes, and every row is resolved by code — same code + same
  * provenance ⇒ reuse, same code + different provenance ⇒ loud conflict (the
  * {@code CurriculumIngestionService} contract). Re-running the seed with the
- * same snapshot is a structural no-op: the counts report reused rows.</p>
+ * same snapshot is a structural no-op: the counts report reused rows. The one
+ * deliberate exception (T-C24, V39) is the verbatim applicability column on
+ * spec-point nodes — written on create, content-equality-guarded on reuse
+ * (backfilling rows seeded before V39), never touching any other field.</p>
  *
  * <p>Statuses preserve the store's epistemic state (§8A.4 — validation never
  * erases provenance):
@@ -149,7 +152,7 @@ public class ConceptGraphSeedService {
             KnowledgeNode node = resolveNode(byCode, sp.code(), NodeType.SUBTOPIC,
                     bound(sp.wording(), 200), spDescription(sp),
                     KnowledgeNode.ValidationStatus.VALIDATED, STRUCTURE_PROVENANCE, activatedBy,
-                    counters);
+                    counters, sp.applicability());
             specPointNodes.put(sp.code(), node);
             attach(node, subsectionNodes.get(sp.subsectionCode()), "spec structure (spec point)",
                     STRUCTURE_PROVENANCE, KnowledgeNode.ValidationStatus.VALIDATED, activatedBy,
@@ -215,6 +218,11 @@ public class ConceptGraphSeedService {
                 snapshot.sections().size(), snapshot.subsections().size(),
                 snapshot.specPoints().size(), snapshot.practicals().size(),
                 snapshot.conceptNodes().size(), snapshot.validatedSemanticEdges().size());
+        if (counters.applicabilityWrites > 0) {
+            log.info("4CH1 concept graph seed: applicability present on {} spec-point node(s) "
+                            + "this run (T-C24 verbatim passthrough — create path and/or the one-time "
+                            + "backfill of rows seeded before V39)", counters.applicabilityWrites);
+        }
         return new SeedSummary(version.id(), subject.id(), root.id(),
                 snapshot.sections().size(), snapshot.subsections().size(),
                 snapshot.specPoints().size(), snapshot.practicals().size(),
@@ -287,6 +295,47 @@ public class ConceptGraphSeedService {
         counters.nodesCreated++;
         byCode.put(code, created);
         return created;
+    }
+
+    /**
+     * T-C24 overload: same idempotent resolution, plus the node's official
+     * applicability when the caller is a spec point. On create the field is
+     * set BEFORE the single save (a spec-point row is persisted exactly once);
+     * on reuse a content-equality guard makes the write a one-time idempotent
+     * backfill of rows seeded before V39 — the value is official-spec data
+     * from the SAME pinned snapshot commit, and no other field is ever
+     * touched (the reuse contract's only deliberate exception).
+     */
+    private KnowledgeNode resolveNode(Map<String, KnowledgeNode> byCode, String code,
+                                      NodeType type, String title, String description,
+                                      KnowledgeNode.ValidationStatus status, String provenance,
+                                      UUID activatedBy, Counters counters,
+                                      Map<String, Object> applicability) {
+        KnowledgeNode existing = byCode.get(code);
+        if (existing == null) {
+            existing = knowledgeNodes.findByCode(code).orElse(null);
+        }
+        if (existing != null) {
+            requireSeedNode(existing, code, provenance);
+            if (applicability != null && !applicability.equals(existing.applicability())) {
+                existing.setApplicability(applicability);
+                knowledgeNodes.save(existing);
+                counters.applicabilityWrites++;
+            }
+            counters.nodesReused++;
+            byCode.put(code, existing);
+            return existing;
+        }
+        KnowledgeNode created = new KnowledgeNode(
+                code, type, title, description, status, provenance, author(activatedBy));
+        if (applicability != null) {
+            created.setApplicability(applicability);
+            counters.applicabilityWrites++;
+        }
+        KnowledgeNode saved = knowledgeNodes.save(created);
+        counters.nodesCreated++;
+        byCode.put(code, saved);
+        return saved;
     }
 
     /**
@@ -392,6 +441,7 @@ public class ConceptGraphSeedService {
         int nodesReused;
         int edgeCreated;
         int edgesReused;
+        int applicabilityWrites;
     }
 
     /**

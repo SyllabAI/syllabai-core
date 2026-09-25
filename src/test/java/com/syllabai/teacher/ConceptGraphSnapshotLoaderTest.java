@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.teacher.ConceptGraphSnapshotLoader.ConceptGraphSnapshot;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,40 @@ class ConceptGraphSnapshotLoaderTest {
         assertThat(snapshot.anchorEdges()).hasSize(ConceptGraphSnapshotLoader.ANCHOR_EDGE_COUNT);
         assertThat(snapshot.validatedSemanticEdges())
                 .hasSize(ConceptGraphSnapshotLoader.VALIDATED_SEMANTIC_EDGE_COUNT);
+    }
+
+    @Test
+    @DisplayName("T-C24: applicability parses verbatim on every spec point — never invented, never dropped")
+    void applicabilityParsesVerbatim() {
+        ConceptGraphSnapshot snapshot = loader.load();
+
+        // all 182 points carry the store's scope object; the loader invents none
+        assertThat(snapshot.specPoints())
+                .allSatisfy(sp -> assertThat(sp.applicability()).isNotNull());
+
+        // 130 non-C points: both C papers, shared with Science Double Award — store values verbatim
+        assertThat(snapshot.specPoints().stream()
+                .filter(sp -> !sp.cPoint()).toList())
+                .hasSize(130)
+                .allSatisfy(sp -> assertThat(sp.applicability())
+                        .containsEntry("papers", List.of("1C", "2C"))
+                        .containsEntry("double_award_shared", true));
+
+        // the 52 C-suffixed points: Paper 2C only, NOT shared with 4SD0
+        assertThat(snapshot.specPoints().stream()
+                .filter(ConceptGraphSnapshot.SpecPoint::cPoint).toList())
+                .hasSize(52)
+                .allSatisfy(sp -> assertThat(sp.applicability())
+                        .containsEntry("papers", List.of("2C"))
+                        .containsEntry("double_award_shared", false));
+
+        // the rule text is the store's own words, byte-verbatim
+        ConceptGraphSnapshot.SpecPoint first = snapshot.specPoints().stream()
+                .filter(sp -> "4CH1-1.1".equals(sp.code())).findFirst().orElseThrow();
+        assertThat(first.applicability().get("rule")).isEqualTo(
+                "C-suffixed points are Chemistry-only content (not in Science Double Award) and "
+                        + "are assessed in Paper 2C only; non-C points are shared with 4SD0 and "
+                        + "assessed in both papers (PDF pages 7, 13, 14)");
     }
 
     @Test

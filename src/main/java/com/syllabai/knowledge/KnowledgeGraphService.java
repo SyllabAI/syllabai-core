@@ -202,6 +202,7 @@ public class KnowledgeGraphService {
 
         return new NodeView(node.id(), node.code(), node.nodeType().name(), node.title(),
                 node.description(), node.validationStatus().name(), node.provenance(),
+                node.applicability(),
                 List.copyOf(children));
     }
 }

@@ -8,7 +8,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * A node in the syllabus knowledge graph (Master Spec §7).
@@ -53,6 +56,18 @@ public class KnowledgeNode {
     @Column(name = "created_by", length = 100)
     private String createdBy;
 
+    /**
+     * Official paper/unit/tier scope of a specification point, verbatim from
+     * the pinned curriculum store (T-C24, V39) — for 4CH1:
+     * {@code papers[]}, {@code double_award_shared}, {@code rule}. NULL for
+     * every node the store does not attach an applicability to (only
+     * seed-owned spec-point rows carry it). Kept as the store's own object
+     * shape — no schema-level interpretation of the curriculum's business.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "applicability", columnDefinition = "jsonb")
+    private Map<String, Object> applicability;
+
     @Column(name = "version", nullable = false)
     private int version = 1;
 
@@ -94,6 +109,17 @@ public class KnowledgeNode {
     public String createdBy() { return createdBy; }
     public int version() { return version; }
     public Instant createdAt() { return createdAt; }
+    public Map<String, Object> applicability() { return applicability; }
+
+    /**
+     * Verbatim applicability write (T-C24): the seed's create path and its
+     * one-time idempotent backfill of already-seeded rows are the only
+     * callers — official-spec data from the pinned snapshot, never review
+     * workflow output.
+     */
+    public void setApplicability(Map<String, Object> applicability) {
+        this.applicability = applicability;
+    }
 
     /** §7 review workflow transitions (SUGGESTED → VALIDATED / back to UNVALIDATED). */
     public void validate() { this.validationStatus = ValidationStatus.VALIDATED; }

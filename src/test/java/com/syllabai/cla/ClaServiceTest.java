@@ -169,19 +169,19 @@ class ClaServiceTest {
         suggestedChild = UUID.randomUUID();
         NodeView subA = new NodeView(subtopicA, "IALCHEM2018-U1-T3.2", "SUBTOPIC",
                 "understand covalent bonding in terms of electrostatic attraction",
-                null, "VALIDATED", null, List.of());
+                null, "VALIDATED", null, null, List.of());
         NodeView subB = new NodeView(subtopicB, "IALCHEM2018-U1-T3.1", "SUBTOPIC",
                 "understand how ions are formed by electron loss or gain",
-                null, "VALIDATED", null, List.of());
+                null, "VALIDATED", null, null, List.of());
         NodeView suggested = new NodeView(suggestedChild, "CONCEPT-x", "CONCEPT",
-                "some retrieval-graph concept", null, "SUGGESTED", null, List.of());
+                "some retrieval-graph concept", null, "SUGGESTED", null, null, List.of());
         NodeView topic = new NodeView(TOPIC, "IALCHEM2018-U1-T3", "TOPIC",
-                "Bonding and structure", "Ionic and covalent bonding", "VALIDATED", null,
+                "Bonding and structure", "Ionic and covalent bonding", "VALIDATED", null, null,
                 List.of(subA, subB, suggested));
         NodeView unit = new NodeView(UUID.randomUUID(), "IALCHEM2018-U1", "UNIT", "Unit 1",
-                null, "VALIDATED", null, List.of(topic));
+                null, "VALIDATED", null, null, List.of(topic));
         return new NodeView(ROOT, "IALCHEM2018", "SUBJECT", "IAL Chemistry",
-                null, "VALIDATED", null, List.of(unit));
+                null, "VALIDATED", null, null, List.of(unit));
     }
 
     private void vectorReturns(EvidenceItem... items) {

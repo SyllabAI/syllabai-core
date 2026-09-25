@@ -79,12 +79,14 @@ class SmartLessonServiceTest {
     }
 
     private static NodeView node(UUID id, String code, String type, String title) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, List.of());
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                List.of());
     }
 
     private static NodeView node(UUID id, String code, String type, String title,
                                  List<NodeView> children) {
-        return new NodeView(id, code, type, title, null, "VALIDATED", null, children);
+        return new NodeView(id, code, type, title, null, "VALIDATED", null, null,
+                children);
     }
 
     private void givenTree() {
@@ -133,7 +135,7 @@ class SmartLessonServiceTest {
                         .mapToObj(i -> new StudentQuestionView(
                                 UUID.randomUUID(), "EXT-" + i, "STRUCTURED", "stem", 3,
                                 1 + i, 120, "State", topicId, null,
-                                List.of(), List.of(), List.of()))
+                                List.of(), List.of(), List.of(), List.of()))
                         .toList();
         when(servableQuestions.activeByTopic(topicId)).thenReturn(qs);
         // the advance walk precomputes counts with one batched activeWithin
@@ -146,7 +148,7 @@ class SmartLessonServiceTest {
         List<StudentQuestionView> qs = java.util.Arrays.stream(ids)
                 .map(id -> new StudentQuestionView(
                         id, "EXT-" + id.toString().substring(0, 8), "STRUCTURED",
-                        "stem", 3, 1, 120, "State", topicId, null, List.of(), List.of(), List.of()))
+                        "stem", 3, 1, 120, "State", topicId, null, List.of(), List.of(), List.of(), List.of()))
                 .toList();
         when(servableQuestions.activeByTopic(topicId)).thenReturn(qs);
         when(servableQuestions.activeWithin(any())).thenReturn(qs);
@@ -165,7 +167,7 @@ class SmartLessonServiceTest {
             List<StudentQuestionView> qs = java.util.stream.IntStream.range(0, count)
                     .mapToObj(i -> new StudentQuestionView(
                             UUID.randomUUID(), "EXT-" + i, "STRUCTURED", "stem", 3,
-                            1 + i, 120, "State", topicId, null, List.of(), List.of(), List.of()))
+                            1 + i, 120, "State", topicId, null, List.of(), List.of(), List.of(), List.of()))
                     .toList();
             when(servableQuestions.activeByTopic(topicId)).thenReturn(qs);
             all.addAll(qs);

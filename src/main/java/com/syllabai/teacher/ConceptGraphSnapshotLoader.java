@@ -118,7 +118,8 @@ public class ConceptGraphSnapshotLoader {
         /** One official specification point — the authoritative curriculum anchor. */
         public record SpecPoint(String code, String officialCode, String wording,
                                 String sectionCode, String subsectionCode,
-                                int ordering, int globalOrder, boolean cPoint, boolean practical) {
+                                int ordering, int globalOrder, boolean cPoint, boolean practical,
+                                Map<String, Object> applicability) {
         }
 
         /** One required practical (official spec content, anchored on its SP). */
@@ -299,9 +300,29 @@ public class ConceptGraphSnapshotLoader {
                     string(m.get("official_wording")), string(m.get("section")),
                     string(m.get("subsection")), intOf(m.get("ordering")),
                     intOf(m.get("global_order")), Boolean.TRUE.equals(m.get("c_point")),
-                    Boolean.TRUE.equals(m.get("practical"))));
+                    Boolean.TRUE.equals(m.get("practical")),
+                    applicabilityOf(m.get("applicability"))));
         }
         out.sort(Comparator.comparingInt(ConceptGraphSnapshot.SpecPoint::globalOrder));
+        return out;
+    }
+
+    /**
+     * Verbatim applicability passthrough (T-C24): the store's own object
+     * (papers / double_award_shared / rule for 4CH1), copied key-for-key —
+     * never interpreted, normalized, or defaulted. Absent/null stays null:
+     * the snapshot loader invents no scope for points the store leaves
+     * unscoped (all 182 pinned 4CH1 points carry it, but the loader must not
+     * depend on that).
+     */
+    private static Map<String, Object> applicabilityOf(Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : map.entrySet()) {
+            out.put(String.valueOf(e.getKey()), e.getValue());
+        }
         return out;
     }
 
