@@ -2,6 +2,7 @@ package com.syllabai.learner.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,12 @@ public record LearnerKnowledgeGraphView(
      * children before siblings; {@code childIds} preserves the tree order so
      * clients can rebuild nesting without a second call. {@code type} is the
      * KG node type (SUBJECT / UNIT / TOPIC / SUBTOPIC / MISCONCEPTION).
+     *
+     * <p>{@code applicability} (T-C28) is the node's official paper/unit/tier
+     * scope, passed through VERBATIM from the KG tree the service walks
+     * (T-C24, V39) — present on spec-point nodes, {@code null} on every other
+     * node. It is curriculum metadata, not learner state: clients render it
+     * or omit it, never derive it.</p>
      */
     public record NodeWithStateView(
             UUID id, String code, String type, String title, String description,
@@ -42,7 +49,8 @@ public record LearnerKnowledgeGraphView(
             Integer attempts, Integer correctCount, Instant lastPracticedAt,
             Double proceduralFluencyGap,
             Instant reviewDueAt, String reviewReason,
-            Double misconceptionProbability, Boolean misconceptionActive) {
+            Double misconceptionProbability, Boolean misconceptionActive,
+            Map<String, Object> applicability) {
     }
 
     /** A drawable prerequisite edge: {@code prerequisiteId} → {@code nodeId} (which requires it). */

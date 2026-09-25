@@ -1,6 +1,8 @@
 package com.syllabai.assessment;
 
+import com.syllabai.assessment.dto.StudentQuestionView;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Exam-paper browsing (Master Spec §6.5, §22). Any authenticated user may list/view;
  * serving individual questions remains the questions endpoints' responsibility.
+ *
+ * <p>Since T-C28 each paper question also carries its spec-point refs
+ * ({@code code + role + applicability}) from the SAME projection the learner
+ * question views use — the papers detail payload can therefore scope itself
+ * against the official assessment structure exactly like the topic lists,
+ * with the same honest-absent semantics (no mapping → empty list).</p>
  */
 @RestController
 @RequestMapping("/api/v1/exam-papers")
@@ -19,13 +27,16 @@ public class ExamPaperController {
     private final ExamPaperRepository examPapers;
     private final QuestionRepository questions;
     private final QuestionVersionRepository questionVersions;
+    private final ServableQuestionService servableQuestions;
 
     public ExamPaperController(ExamPaperRepository examPapers,
                                QuestionRepository questions,
-                               QuestionVersionRepository questionVersions) {
+                               QuestionVersionRepository questionVersions,
+                               ServableQuestionService servableQuestions) {
         this.examPapers = examPapers;
         this.questions = questions;
         this.questionVersions = questionVersions;
+        this.servableQuestions = servableQuestions;
     }
 
     @GetMapping
@@ -42,6 +53,8 @@ public class ExamPaperController {
                 .orElseThrow(() -> new com.syllabai.shared.NotFoundException("exam paper", id));
         List<Question> paperQuestions =
                 questions.findAllByExamPaperIdOrderByDifficultyAsc(id);
+        Map<UUID, List<StudentQuestionView.SpecPointRef>> refs = servableQuestions
+                .specPointRefs(paperQuestions.stream().map(Question::id).toList());
         return new PaperDetailView(
                 PaperView.from(paper),
                 paperQuestions.stream().map(q -> {
@@ -53,7 +66,10 @@ public class ExamPaperController {
                             q.provenance().name(),
                             latest == null ? null : latest.validationState().name(),
                             latest == null ? 0 : latest.parts().size(),
-                            latest == null ? null : latest.id());
+                            latest == null ? null : latest.id(),
+                            // honest absence: questions without a curriculum
+                            // mapping simply carry an empty list (T-C28)
+                            refs.getOrDefault(q.id(), List.of()));
                 }).toList());
     }
 
@@ -75,6 +91,7 @@ public class ExamPaperController {
 
     public record PaperQuestionView(UUID questionId, String externalRef, int marks,
                                     String provenance, String versionValidationState,
-                                    int partCount, UUID currentVersionId) {
+                                    int partCount, UUID currentVersionId,
+                                    List<StudentQuestionView.SpecPointRef> specPoints) {
     }
 }

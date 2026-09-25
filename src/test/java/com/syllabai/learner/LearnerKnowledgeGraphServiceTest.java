@@ -15,6 +15,7 @@ import com.syllabai.learner.dto.LearnerKnowledgeGraphView.PrerequisiteEdgeView;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,9 +50,16 @@ class LearnerKnowledgeGraphServiceTest {
     private final UUID topic1Id = UUID.randomUUID();
     private final UUID topic2Id = UUID.randomUUID();
     private final UUID topic3Id = UUID.randomUUID();
+    private final UUID specPointId = UUID.randomUUID();
     private final UUID misconceptionId = UUID.randomUUID();
 
     private final Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
+
+    /** the canonical 4CH1 applicability shape, verbatim from the resources YAML */
+    private static final Map<String, Object> SP_1_1C_APPLICABILITY = Map.of(
+            "papers", List.of("1C", "2C"),
+            "double_award_shared", true,
+            "rule", "C-suffixed points are Chemistry-only content (not in Science Double Award)");
 
     @Test
     @DisplayName("practised node carries stored + decayed mastery, band, attempts and fluency gap")
@@ -144,14 +152,36 @@ class LearnerKnowledgeGraphServiceTest {
         assertThat(view.asOf()).isNotNull();
 
         assertThat(view.nodes()).extracting(NodeWithStateView::id).containsExactly(
-                rootId, unit1Id, topic1Id, misconceptionId, topic2Id, unit2Id, topic3Id);
+                rootId, unit1Id, topic1Id, misconceptionId, specPointId, topic2Id, unit2Id, topic3Id);
 
         NodeWithStateView root = node(view, rootId);
         assertThat(root.childIds()).containsExactly(unit1Id, unit2Id);
         NodeWithStateView topic1 = node(view, topic1Id);
-        assertThat(topic1.childIds()).containsExactly(misconceptionId);
+        assertThat(topic1.childIds()).containsExactly(misconceptionId, specPointId);
         assertThat(topic1.type()).isEqualTo("TOPIC");
         assertThat(node(view, misconceptionId).type()).isEqualTo("MISCONCEPTION");
+    }
+
+    @Test
+    @DisplayName("a spec-point node rides its official applicability through verbatim; every other node carries null (T-C28)")
+    void specPointApplicabilityPassesThrough() {
+        LearnerKnowledgeGraphView view = graphForDefaultState();
+
+        NodeWithStateView specPoint = node(view, specPointId);
+        assertThat(specPoint.type()).isEqualTo("SUBTOPIC");
+        assertThat(specPoint.applicability())
+                .containsEntry("papers", List.of("1C", "2C"))
+                .containsEntry("double_award_shared", true)
+                .containsEntry("rule",
+                        "C-suffixed points are Chemistry-only content (not in Science Double Award)");
+
+        // curriculum metadata is NOT learner state — it appears only where the
+        // KG tree carries it, and no learner annotation ever invents it
+        for (NodeWithStateView n : view.nodes()) {
+            if (!n.id().equals(specPointId)) {
+                assertThat(n.applicability()).isNull();
+            }
+        }
     }
 
     @Test
@@ -166,7 +196,7 @@ class LearnerKnowledgeGraphServiceTest {
 
         LearnerKnowledgeGraphView view = service.graphFor(learnerId, rootId);
 
-        assertThat(view.nodes()).hasSize(7);
+        assertThat(view.nodes()).hasSize(8);
         for (NodeWithStateView n : view.nodes()) {
             assertThat(n.mastery()).isNull();
             assertThat(n.band()).isNull();
@@ -213,8 +243,11 @@ class LearnerKnowledgeGraphServiceTest {
     private NodeView defaultTree() {
         NodeView misconception = node(misconceptionId, "U1-T1-M1", "MISCONCEPTION",
                 "Moles and grams are interchangeable", null, List.of());
+        NodeView specPoint = node(specPointId, "4CH1-1.1c", "SUBTOPIC",
+                "Calculate reacting masses from equations", null,
+                SP_1_1C_APPLICABILITY, List.of());
         NodeView topic1 = node(topic1Id, "U1-T1", "TOPIC", "Formulae, Equations and Moles",
-                "desc-t1", List.of(misconception));
+                "desc-t1", List.of(misconception, specPoint));
         NodeView topic2 = node(topic2Id, "U1-T2", "TOPIC", "Bonding and Structure",
                 null, List.of());
         NodeView topic3 = node(topic3Id, "U2-T3", "TOPIC", "Energetics I", null, List.of());
@@ -228,8 +261,14 @@ class LearnerKnowledgeGraphServiceTest {
 
     private static NodeView node(UUID id, String code, String type, String title,
                                  String description, List<NodeView> children) {
+        return node(id, code, type, title, description, null, children);
+    }
+
+    private static NodeView node(UUID id, String code, String type, String title,
+                                 String description, Map<String, Object> applicability,
+                                 List<NodeView> children) {
         return new NodeView(id, code, type, title, description, "VALIDATED",
-                "test-provenance", null, children);
+                "test-provenance", applicability, children);
     }
 
     private static NodeWithStateView node(LearnerKnowledgeGraphView view, UUID id) {

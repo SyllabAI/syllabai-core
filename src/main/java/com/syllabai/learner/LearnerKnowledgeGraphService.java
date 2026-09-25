@@ -134,7 +134,10 @@ public class LearnerKnowledgeGraphService {
                 mastery, effective, band, attempts, correct, lastPracticed, fluencyGap,
                 review == null ? null : review.dueAt(),
                 review == null ? null : review.reason().name(),
-                misconceptionProbability, misconceptionActive);
+                misconceptionProbability, misconceptionActive,
+                // curriculum metadata rides along verbatim (T-C28) — never
+                // merged with, or overwritten by, any learner state below
+                node.applicability());
         out.add(view);
         byId.put(view.id(), view);
         for (NodeView child : node.children()) {
