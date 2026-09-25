@@ -40,7 +40,20 @@ public final class TeacherViews {
             UUID questionId, String questionExternalRef, String partLabel, String partPrompt,
             int partMarks, String answerText, String markingState,
             Integer marksAwarded, SmartMarkView latestSmartMark,
-            HumanMarkView latestHumanMark) {
+            HumanMarkView latestHumanMark,
+            UUID examPaperId, String paperTitle) {
+    }
+
+    /**
+     * Opt-in paged marking-queue envelope (G-5): returned by
+     * {@code GET /teacher/marking/answers} ONLY when page/size params are
+     * present — without them the endpoint keeps returning the plain
+     * {@link AnswerMarkingView} list, byte-compatible with the existing web
+     * client and the calibration harness. Counts are the database's, never
+     * estimates.
+     */
+    public record AnswerMarkingPageView(List<AnswerMarkingView> items, int page, int size,
+                                        long totalElements, int totalPages) {
     }
 
     public record SmartMarkView(UUID id, String pipelineVersion, String modelId,
@@ -68,6 +81,24 @@ public final class TeacherViews {
     }
 
     public static AnswerMarkingView answer(Answer a, String learnerDisplayName) {
+        return answer(a, learnerDisplayName, null, null, null);
+    }
+
+    public static AnswerMarkingView answer(Answer a, String learnerDisplayName,
+                                           SmartMarkResult smart, HumanMark human) {
+        return answer(a, learnerDisplayName, smart, human, null);
+    }
+
+    /**
+     * Full builder. Paper context (G-5): {@code examPaperId} is a Question
+     * column available from the already-loaded entity graph; the title comes
+     * from the caller's batched ExamPaper lookup. Both are nullable —
+     * SME question-bank answers have no paper row, and that absence is
+     * rendered honestly, never invented.
+     */
+    public static AnswerMarkingView answer(Answer a, String learnerDisplayName,
+                                           SmartMarkResult smart, HumanMark human,
+                                           String paperTitle) {
         Attempt attempt = a.attempt();
         Question question = attempt.question();
         QuestionPart part = a.questionPart();
@@ -75,16 +106,7 @@ public final class TeacherViews {
                 a.id(), attempt.id(), attempt.learnerId(), learnerDisplayName,
                 question.id(), question.externalRef(), part.label(), part.prompt(), part.marks(),
                 a.answerText(), a.markingState().name(), a.marksAwarded(),
-                null, null);
-    }
-
-    public static AnswerMarkingView answer(Answer a, String learnerDisplayName,
-                                           SmartMarkResult smart, HumanMark human) {
-        AnswerMarkingView base = answer(a, learnerDisplayName);
-        return new AnswerMarkingView(
-                base.answerId(), base.attemptId(), base.learnerId(), base.learnerDisplayName(),
-                base.questionId(), base.questionExternalRef(), base.partLabel(), base.partPrompt(),
-                base.partMarks(), base.answerText(), base.markingState(),
-                base.marksAwarded(), SmartMarkView.from(smart), HumanMarkView.from(human));
+                SmartMarkView.from(smart), HumanMarkView.from(human),
+                question.examPaperId(), paperTitle);
     }
 }

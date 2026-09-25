@@ -2,6 +2,8 @@ package com.syllabai.teacher;
 
 import com.syllabai.assessment.Answer;
 import com.syllabai.assessment.AnswerRepository;
+import com.syllabai.assessment.ExamPaper;
+import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
@@ -26,6 +28,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,6 +57,7 @@ public class TeacherMarkingController {
     private final HumanMarkRepository humanMarks;
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations;
     private final UserRepository users;
+    private final ExamPaperRepository examPapers;
 
     public TeacherMarkingController(AnswerRepository answers,
                                     SmartMarkService smartMarkService,
@@ -60,7 +66,8 @@ public class TeacherMarkingController {
                                     SmartMarkResultRepository smartMarkResults,
                                     HumanMarkRepository humanMarks,
                                     SmartMarkAgreementEvaluationRepository agreementEvaluations,
-                                    UserRepository users) {
+                                    UserRepository users,
+                                    ExamPaperRepository examPapers) {
         this.answers = answers;
         this.smartMarkService = smartMarkService;
         this.teacherMarkingService = teacherMarkingService;
@@ -69,49 +76,128 @@ public class TeacherMarkingController {
         this.humanMarks = humanMarks;
         this.agreementEvaluations = agreementEvaluations;
         this.users = users;
+        this.examPapers = examPapers;
     }
 
-    /** marking queue by state (PENDING / SMART_MARKED / HUMAN_MARKED / OVERRIDDEN) */
+    /** rows per marking-queue page when only `page` is given (G-5) */
+    static final int DEFAULT_ANSWER_PAGE_SIZE = 50;
+    /** hard bound on rows per marking-queue page (G-5) */
+    static final int MAX_ANSWER_PAGE_SIZE = 200;
+
+    /**
+     * Direct-call compatibility surface: the UNPAGED marking queue (the shape
+     * the web marking UI and the calibration harness read). Not a handler —
+     * the paginated {@link #queue(String, Integer, Integer)} owns the route.
+     */
+    public List<TeacherViews.AnswerMarkingView> queue(String state) {
+        return queueList(parseMarkingState(state));
+    }
+
+    private List<TeacherViews.AnswerMarkingView> queueList(Answer.MarkingState filter) {
+        List<Answer> queue = answers.findByMarkingState(filter);
+        // one batched identity lookup so the queue is self-contained (T-029:
+        // the teacher reads whose answer it is without a client-side join)
+        Map<UUID, String> names = learnerNames(
+                queue.stream().map(a -> a.attempt().learnerId()).collect(Collectors.toSet()));
+        Map<UUID, ExamPaper> papers = paperContext(queue);
+        return queue.stream()
+                .map(a -> TeacherViews.answer(a, names.get(a.attempt().learnerId()),
+                        null, null, paperTitle(papers, a)))
+                .toList();
+    }
+
+    /** batched paper titles for the queue rows (G-5); empty when no answer has a paper */
+    private Map<UUID, ExamPaper> paperContext(List<Answer> queue) {
+        Set<UUID> paperIds = queue.stream()
+                .map(a -> a.attempt().question().examPaperId())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        return paperIds.isEmpty()
+                ? Map.of()
+                : examPapers.findAllById(paperIds).stream()
+                        .collect(Collectors.toMap(ExamPaper::id, p -> p));
+    }
+
+    private static String paperTitle(Map<UUID, ExamPaper> papers, Answer a) {
+        ExamPaper paper = papers.get(a.attempt().question().examPaperId());
+        return paper == null ? null : paper.title();
+    }
+
+    /**
+     * Marking queue by state with OPT-IN pagination (G-5, the F-161 class-C
+     * note). Without page/size params the response is the plain
+     * AnswerMarkingView list — the unchanged contract. With page and/or size
+     * present the response is an {@link TeacherViews.AnswerMarkingPageView}
+     * envelope: the same read model under a TOTAL order (createdAt asc, then
+     * id asc — stable page boundaries while rows move through states), sliced
+     * by the database's own count, never an estimate. Rows-per-page bounds:
+     * 1..200, default 50.
+     */
     @GetMapping("/answers")
-    public List<TeacherViews.AnswerMarkingView> queue(
-            @RequestParam(defaultValue = "PENDING") String state) {
-        Answer.MarkingState filter;
+    public Object queue(@RequestParam(defaultValue = "PENDING") String state,
+                        @RequestParam(required = false) Integer page,
+                        @RequestParam(required = false) Integer size) {
+        Answer.MarkingState filter = parseMarkingState(state);
+        if (page == null && size == null) {
+            return queueList(filter);
+        }
+        int p = page == null ? 0 : page;
+        int s = size == null ? DEFAULT_ANSWER_PAGE_SIZE : size;
+        if (p < 0) {
+            throw new BadRequestException("page must be >= 0");
+        }
+        if (s < 1 || s > MAX_ANSWER_PAGE_SIZE) {
+            throw new BadRequestException("size must be between 1 and " + MAX_ANSWER_PAGE_SIZE);
+        }
+        Page<Answer> result = answers.findPageByMarkingState(filter,
+                PageRequest.of(p, s, Sort.by(Sort.Order.asc("createdAt"),
+                        Sort.Order.asc("id"))));
+        Map<UUID, String> names = learnerNames(result.getContent().stream()
+                .map(a -> a.attempt().learnerId()).collect(Collectors.toSet()));
+        Map<UUID, ExamPaper> papers = paperContext(result.getContent());
+        List<TeacherViews.AnswerMarkingView> items = result.getContent().stream()
+                .map(a -> TeacherViews.answer(a, names.get(a.attempt().learnerId()),
+                        null, null, paperTitle(papers, a)))
+                .toList();
+        return new TeacherViews.AnswerMarkingPageView(items, p, s,
+                result.getTotalElements(), result.getTotalPages());
+    }
+
+    private Answer.MarkingState parseMarkingState(String state) {
         try {
-            filter = Answer.MarkingState.valueOf(state.toUpperCase());
+            return Answer.MarkingState.valueOf(state.toUpperCase());
         } catch (IllegalArgumentException e) {
             // C-9: an unknown filter value is a malformed request (400), not a
             // missing resource — 404 is reserved for real not-found lookups.
             throw new BadRequestException("unknown marking state: " + state
                     + " (expected PENDING, SMART_MARKED, HUMAN_MARKED or OVERRIDDEN)");
         }
-        List<Answer> queue = answers.findByMarkingState(filter);
-        // one batched identity lookup so the queue is self-contained (T-029:
-        // the teacher reads whose answer it is without a client-side join)
-        Map<UUID, String> names = learnerNames(
-                queue.stream().map(a -> a.attempt().learnerId()).collect(Collectors.toSet()));
-        return queue.stream()
-                .map(a -> TeacherViews.answer(a, names.get(a.attempt().learnerId())))
-                .toList();
     }
 
     /**
-     * Marking throughput lane (sprint 2 §6/§7): the deterministic paper-grouped
-     * queue — ordered oldest-waiting-first with one mark scheme in working
-     * memory at a time, each item carrying paper context, the newest Smart
-     * Mark run and the mark→next link. Ordering is a workflow aid; it never
-     * changes any mark, gate or evidence semantic.
+     * Direct-call compatibility surface: the UNPAGED v2 queue. Not a handler —
+     * the paginated {@link #queueV2(String, Integer, Integer)} owns the route.
+     */
+    public TeacherMarkingQueueService.MarkingQueueView queueV2(String state) {
+        return markingQueueService.markingQueue(parseMarkingState(state));
+    }
+
+    /**
+     * The v2 marking queue with OPT-IN pagination (G-5): paper-GROUP pages —
+     * one mark scheme in working memory per page, whole papers never split
+     * across a boundary. Without page/size the response is the unchanged full
+     * view. Papers-per-page bounds: 1..100, default 5. Validation lives in
+     * the service (unit-pinned there).
      */
     @GetMapping("/queue-v2")
-    public TeacherMarkingQueueService.MarkingQueueView queueV2(
-            @RequestParam(defaultValue = "PENDING") String state) {
-        Answer.MarkingState filter;
-        try {
-            filter = Answer.MarkingState.valueOf(state.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException("unknown marking state: " + state
-                    + " (expected PENDING, SMART_MARKED, HUMAN_MARKED or OVERRIDDEN)");
+    public Object queueV2(@RequestParam(defaultValue = "PENDING") String state,
+                          @RequestParam(required = false) Integer page,
+                          @RequestParam(required = false) Integer size) {
+        Answer.MarkingState filter = parseMarkingState(state);
+        if (page == null && size == null) {
+            return markingQueueService.markingQueue(filter);
         }
-        return markingQueueService.markingQueue(filter);
+        return markingQueueService.markingQueue(filter, page, size);
     }
 
     /**

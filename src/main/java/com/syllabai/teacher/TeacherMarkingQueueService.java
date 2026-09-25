@@ -82,9 +82,89 @@ public class TeacherMarkingQueueService {
      * paper lookup + one smart-mark lookup + one identity lookup.
      */
     public MarkingQueueView markingQueue(Answer.MarkingState state) {
+        Assembled assembled = assemble(state);
+        // the mark→next chain over the ordered items (null on the last item)
+        List<MarkingQueueItem> items = chain(assembled.itemsByGroup().stream()
+                .flatMap(List::stream).toList());
+        return new MarkingQueueView(state.name(), assembled.groupViews(), items);
+    }
+
+    /** default paper groups per queue-v2 page when only `page` is given (G-5) */
+    static final int DEFAULT_PAPER_GROUPS_PER_PAGE = 5;
+    /** hard bound on paper groups per queue-v2 page (G-5) */
+    static final int MAX_PAPER_GROUPS_PER_PAGE = 100;
+
+    /**
+     * Opt-in PAGED v2 queue (G-5, the F-161 class-C note): pages of WHOLE
+     * paper groups — one mark scheme in working memory per page, and a paper
+     * is never split across a page boundary. Without page/size the full view
+     * above is returned unchanged. The mark→next chain restarts inside each
+     * page: a next link pointing off-page would break the one-paper contract.
+     * Bounds: page ≥ 0; papers-per-page 1..100, default
+     * {@link #DEFAULT_PAPER_GROUPS_PER_PAGE}. Counts in the envelope are the
+     * real totals (all groups/items of the state), never estimates.
+     */
+    public Object markingQueue(Answer.MarkingState state, Integer page, Integer size) {
+        if (page == null && size == null) {
+            return markingQueue(state);
+        }
+        int p = page == null ? 0 : page;
+        int s = size == null ? DEFAULT_PAPER_GROUPS_PER_PAGE : size;
+        if (p < 0) {
+            throw new BadRequestException("page must be >= 0");
+        }
+        if (s < 1 || s > MAX_PAPER_GROUPS_PER_PAGE) {
+            throw new BadRequestException("size must be between 1 and "
+                    + MAX_PAPER_GROUPS_PER_PAGE + " (paper groups per page)");
+        }
+        Assembled assembled = assemble(state);
+        int totalGroups = assembled.groupViews().size();
+        int totalItems = assembled.itemsByGroup().stream().mapToInt(List::size).sum();
+        int totalPages = totalGroups == 0 ? 0 : (totalGroups + s - 1) / s;
+        if (p >= totalPages) {
+            // past the end: an honestly empty page, not an error
+            return new MarkingQueuePageView(state.name(), List.of(), List.of(),
+                    p, s, totalGroups, totalItems, totalPages);
+        }
+        int fromGroup = p * s;
+        int toGroup = Math.min(fromGroup + s, totalGroups);
+        List<MarkingGroupView> groups = assembled.groupViews()
+                .subList(fromGroup, toGroup).stream().toList();
+        List<MarkingQueueItem> items = new ArrayList<>();
+        for (List<MarkingQueueItem> groupItems
+                : assembled.itemsByGroup().subList(fromGroup, toGroup)) {
+            items.addAll(groupItems);
+        }
+        return new MarkingQueuePageView(state.name(), groups, chain(items),
+                p, s, totalGroups, totalItems, totalPages);
+    }
+
+    private static List<MarkingQueueItem> chain(List<MarkingQueueItem> ordered) {
+        List<MarkingQueueItem> items = new ArrayList<>(ordered);
+        for (int i = 0; i < items.size(); i++) {
+            items.set(i, items.get(i).withNext(
+                    i + 1 < items.size() ? items.get(i + 1).answer().answerId() : null));
+        }
+        return items;
+    }
+
+    /** one assembled queue: group views + per-group ordered items (no next links yet) */
+    private record Assembled(List<MarkingGroupView> groupViews,
+                             List<List<MarkingQueueItem>> itemsByGroup) {
+    }
+
+    /**
+     * The shared assembly for both the full and paged v2 queue: one queue
+     * query + one paper lookup + one smart-mark lookup + one human-mark
+     * lookup + one identity lookup; deterministic group ordering
+     * (oldest-waiting paper first, then more pending, then id) and
+     * deterministic within-paper item order. Items are appended group by
+     * group, so per-group lists slice exactly along the group views.
+     */
+    private Assembled assemble(Answer.MarkingState state) {
         List<Answer> queue = answers.findByMarkingState(state);
         if (queue.isEmpty()) {
-            return new MarkingQueueView(state.name(), List.of(), List.of());
+            return new Assembled(List.of(), List.of());
         }
 
         // paper context in one lookup
@@ -139,7 +219,7 @@ public class TeacherMarkingQueueService {
                     .compareTo(g2.get(0).attempt().question().examPaperId());
         });
 
-        List<MarkingQueueItem> items = new ArrayList<>(queue.size());
+        List<List<MarkingQueueItem>> itemsByGroup = new ArrayList<>(groups.size());
         List<MarkingGroupView> groupViews = new ArrayList<>(groups.size());
         for (List<Answer> group : groups) {
             UUID paperId = group.get(0).attempt().question().examPaperId();
@@ -153,18 +233,14 @@ public class TeacherMarkingQueueService {
                     group.size(),
                     oldestAt,
                     oldestAt.isAfter(now) ? null : Duration.between(oldestAt, now).toHours()));
+            List<MarkingQueueItem> groupItems = new ArrayList<>(group.size());
             for (Answer a : group) {
-                items.add(TeacherMarkingQueueService.item(a, paper, names,
+                groupItems.add(TeacherMarkingQueueService.item(a, paper, names,
                         latestSmart, latestHuman));
             }
+            itemsByGroup.add(groupItems);
         }
-
-        // the mark→next chain over the ordered items (null on the last item)
-        for (int i = 0; i < items.size(); i++) {
-            items.set(i, items.get(i).withNext(
-                    i + 1 < items.size() ? items.get(i + 1).answer().answerId() : null));
-        }
-        return new MarkingQueueView(state.name(), groupViews, items);
+        return new Assembled(groupViews, itemsByGroup);
     }
 
     /**
@@ -307,7 +383,8 @@ public class TeacherMarkingQueueService {
         SmartMarkResult smart = latestSmart.get(a.id());
         HumanMark human = latestHuman.get(a.id());
         TeacherViews.AnswerMarkingView base = TeacherViews.answer(a,
-                names.get(attempt.learnerId()), smart, human);
+                names.get(attempt.learnerId()), smart, human,
+                paper == null ? null : paper.title());
         return new MarkingQueueItem(
                 base, paper == null ? null : paper.id(),
                 paper == null ? null : paper.title(),
@@ -331,6 +408,21 @@ public class TeacherMarkingQueueService {
     public record MarkingQueueView(String state,
                                    List<MarkingGroupView> groups,
                                    List<MarkingQueueItem> items) {
+    }
+
+    /**
+     * Paged v2 queue envelope (G-5): whole paper groups per page, honest
+     * totals (all groups/items of the state, not just this page), and the
+     * mark→next chain scoped to the page. Returned by
+     * {@code GET /teacher/marking/queue-v2} ONLY when page/size params are
+     * present — without them the endpoint keeps returning the unchanged full
+     * {@link MarkingQueueView}.
+     */
+    public record MarkingQueuePageView(String state,
+                                       List<MarkingGroupView> groups,
+                                       List<MarkingQueueItem> items,
+                                       int page, int size,
+                                       int totalGroups, int totalItems, int totalPages) {
     }
 
     /** one paper group: the marking-unit the reviewer works through */

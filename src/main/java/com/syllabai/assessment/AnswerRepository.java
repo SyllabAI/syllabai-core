@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -36,6 +38,22 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
             order by a.createdAt asc
             """)
     List<Answer> findByMarkingState(@Param("state") Answer.MarkingState state);
+
+    /**
+     * Opt-in paged marking queue (G-5): same read model as
+     * {@link #findByMarkingState(Answer.MarkingState)} with a TOTAL order —
+     * createdAt asc, then id asc — so page boundaries are stable while rows
+     * move through states. The unpaged list stays the compatibility surface
+     * (the marking UI and the calibration harness read it); sort comes from
+     * the caller's Pageable.
+     */
+    @EntityGraph(attributePaths = {"questionPart", "attempt", "attempt.question"})
+    @Query("""
+            select a from Answer a
+            where a.markingState = :state
+            """)
+    Page<Answer> findPageByMarkingState(@Param("state") Answer.MarkingState state,
+                                        Pageable pageable);
 
     @EntityGraph(attributePaths = {"questionPart", "attempt", "attempt.question"})
     @Query("""

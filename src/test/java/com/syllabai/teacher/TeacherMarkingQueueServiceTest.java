@@ -397,4 +397,97 @@ class TeacherMarkingQueueServiceTest {
         assertThat(view.items().get(0).outcome()).isEqualTo("FAILED");
         assertThat(view.items().get(0).reason()).contains("not found");
     }
+
+    // ---- opt-in paper-group pagination (G-5) ----
+
+    @Test
+    @DisplayName("paged queue slices whole paper groups; next chain restarts inside the page")
+    void pagedQueueSlicesWholePaperGroups() {
+        PaperFix fixA = paperFix(UUID.randomUUID(), "Paper A");
+        PaperFix fixB = paperFix(UUID.randomUUID(), "Paper B");
+        PaperFix fixC = paperFix(UUID.randomUUID(), "Paper C");
+        // group order by oldest waiting: B (B1 at -90m), A (A1 at -60m), C (C1 at BASE)
+        Answer b1 = pendingAnswer(fixB, null, BASE.minus(90, ChronoUnit.MINUTES), "a");
+        Answer b2 = pendingAnswer(fixB, null, BASE.minus(30, ChronoUnit.MINUTES), "b");
+        Answer a1 = pendingAnswer(fixA, null, BASE.minus(60, ChronoUnit.MINUTES), "a");
+        Answer c1 = pendingAnswer(fixC, null, BASE, "a");
+        stageQueue(List.of(c1, a1, b2, b1), fixA, fixB, fixC);
+
+        var page0 = (TeacherMarkingQueueService.MarkingQueuePageView)
+                service.markingQueue(Answer.MarkingState.PENDING, 0, 2);
+
+        assertThat(page0.totalGroups()).isEqualTo(3);
+        assertThat(page0.totalItems()).isEqualTo(4);
+        assertThat(page0.totalPages()).isEqualTo(2);
+        // whole papers only: page 0 = the B group (both answers) + the A group
+        assertThat(page0.groups()).extracting(TeacherMarkingQueueService.MarkingGroupView::paperId)
+                .containsExactly(fixB.paper().id(), fixA.paper().id());
+        assertThat(page0.items()).extracting(i -> i.answer().answerId())
+                .containsExactly(b1.id(), b2.id(), a1.id());
+        // the next chain restarts inside the page — never points off-page
+        assertThat(page0.items().get(0).nextAnswerId()).isEqualTo(b2.id());
+        assertThat(page0.items().get(2).nextAnswerId()).isNull();
+
+        var page1 = (TeacherMarkingQueueService.MarkingQueuePageView)
+                service.markingQueue(Answer.MarkingState.PENDING, 1, 2);
+        assertThat(page1.groups()).extracting(TeacherMarkingQueueService.MarkingGroupView::paperId)
+                .containsExactly(fixC.paper().id());
+        assertThat(page1.items()).extracting(i -> i.answer().answerId())
+                .containsExactly(c1.id());
+        assertThat(page1.items().get(0).nextAnswerId()).isNull();
+    }
+
+    @Test
+    @DisplayName("paged queue past the last page is honestly empty with real totals")
+    void pagedQueuePastEndIsEmpty() {
+        PaperFix fix = paperFix(UUID.randomUUID(), "P");
+        Answer a = pendingAnswer(fix, null, BASE, "a");
+        stageQueue(List.of(a), fix);
+
+        var view = (TeacherMarkingQueueService.MarkingQueuePageView)
+                service.markingQueue(Answer.MarkingState.PENDING, 5, 3);
+
+        assertThat(view.groups()).isEmpty();
+        assertThat(view.items()).isEmpty();
+        assertThat(view.totalGroups()).isEqualTo(1);
+        assertThat(view.totalItems()).isEqualTo(1);
+        assertThat(view.totalPages()).isEqualTo(1);
+        assertThat(view.page()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("paged queue rejects out-of-bounds page/size with 400 semantics")
+    void pagedQueueRejectsOutOfBounds() {
+        assertThatThrownBy(() -> service.markingQueue(Answer.MarkingState.PENDING, -1, 3))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.markingQueue(Answer.MarkingState.PENDING, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.markingQueue(Answer.MarkingState.PENDING, 0, 101))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("paper groups per page");
+    }
+
+    @Test
+    @DisplayName("null page+size returns the unchanged full view; size defaults when only page given")
+    void pagedQueueDefaultsAndCompatibility() {
+        PaperFix fixA = paperFix(UUID.randomUUID(), "A");
+        PaperFix fixB = paperFix(UUID.randomUUID(), "B");
+        Answer a1 = pendingAnswer(fixA, null, BASE, "a");
+        Answer b1 = pendingAnswer(fixB, null, BASE.minus(10, ChronoUnit.MINUTES), "a");
+        stageQueue(List.of(a1, b1), fixA, fixB);
+
+        // the null/null overload IS the full view (compatibility contract)
+        Object bothNull = service.markingQueue(Answer.MarkingState.PENDING, null, null);
+        assertThat(bothNull).isInstanceOf(TeacherMarkingQueueService.MarkingQueueView.class);
+        var direct = service.markingQueue(Answer.MarkingState.PENDING);
+        var full = (TeacherMarkingQueueService.MarkingQueueView) bothNull;
+        assertThat(full.groups()).isEqualTo(direct.groups());
+        assertThat(full.items()).isEqualTo(direct.items());
+
+        // size defaults when only page is given
+        var onlyPage = (TeacherMarkingQueueService.MarkingQueuePageView)
+                service.markingQueue(Answer.MarkingState.PENDING, 1, null);
+        assertThat(onlyPage.size())
+                .isEqualTo(TeacherMarkingQueueService.DEFAULT_PAPER_GROUPS_PER_PAGE);
+    }
 }

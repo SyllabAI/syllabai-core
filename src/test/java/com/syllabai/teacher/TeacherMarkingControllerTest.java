@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -37,6 +38,12 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 /**
  * T-029: the marking queue is a self-contained teacher read model — the server
@@ -58,10 +65,12 @@ class TeacherMarkingControllerTest {
     private final SmartMarkAgreementEvaluationRepository agreementEvaluations =
             mock(SmartMarkAgreementEvaluationRepository.class);
     private final UserRepository users = mock(UserRepository.class);
+    private final com.syllabai.assessment.ExamPaperRepository examPapers =
+            mock(com.syllabai.assessment.ExamPaperRepository.class);
 
     private final TeacherMarkingController controller = new TeacherMarkingController(
             answers, smartMarkService, teacherMarkingService, markingQueueService,
-            smartMarkResults, humanMarks, agreementEvaluations, users);
+            smartMarkResults, humanMarks, agreementEvaluations, users, examPapers);
 
     private final Question question;
     private final QuestionPart part;
@@ -189,5 +198,71 @@ class TeacherMarkingControllerTest {
                         SmartMarkAgreementEvaluation.SCOPE_ALL, null, 2, 1.0, 1.0, 0.6, MARKER));
         controller.evaluateKappa(MARKER, null);
         verify(teacherMarkingService).evaluateAgreement(null, MARKER);
+    }
+
+    @Test
+    @DisplayName("v1 queue pagination is opt-in: params produce an envelope with the database's own counts; the total order is createdAt asc then id asc")
+    void queuePaginationOptIn() {
+        Page<Answer> page = new PageImpl<>(List.of(answer), PageRequest.of(0, 50), 51);
+        when(answers.findPageByMarkingState(eq(Answer.MarkingState.PENDING), any(Pageable.class)))
+                .thenReturn(page);
+
+        Object paged = controller.queue("PENDING", 0, 50);
+
+        assertThat(paged).isInstanceOf(TeacherViews.AnswerMarkingPageView.class);
+        var view = (TeacherViews.AnswerMarkingPageView) paged;
+        assertThat(view.items()).hasSize(1);
+        assertThat(view.items().get(0).learnerDisplayName()).isEqualTo("Ada Learner");
+        assertThat(view.page()).isZero();
+        assertThat(view.size()).isEqualTo(50);
+        assertThat(view.totalElements()).isEqualTo(51);
+        assertThat(view.totalPages()).isEqualTo(2);
+
+        // the total order that makes page boundaries stable is pinned here
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(answers).findPageByMarkingState(eq(Answer.MarkingState.PENDING), pageable.capture());
+        Sort sort = pageable.getValue().getSort();
+        assertThat(sort.getOrderFor("createdAt")).isNotNull();
+        assertThat(sort.getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.ASC);
+        assertThat(sort.getOrderFor("id").getDirection()).isEqualTo(Sort.Direction.ASC);
+
+        // bounds fail loud (400 semantics), never silently clamp
+        assertThatThrownBy(() -> controller.queue("PENDING", 0, 201))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> controller.queue("PENDING", -1, 10))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("kappa evaluate delegates the PAPER scope to the marking service")
+    void kappaEvaluatePaperScope() {
+        UUID paperId = UUID.randomUUID();
+        when(teacherMarkingService.evaluateAgreement(paperId, MARKER)).thenReturn(
+                new SmartMarkAgreementEvaluation(
+                        SmartMarkAgreementEvaluation.SCOPE_PAPER, paperId, 5, 0.9, 0.95, 0.6,
+                        MARKER));
+
+        var view = controller.evaluateKappa(MARKER, paperId);
+
+        verify(teacherMarkingService).evaluateAgreement(paperId, MARKER);
+        assertThat(view.scope()).isEqualTo("PAPER");
+        assertThat(view.paperId()).isEqualTo(paperId);
+    }
+
+    @Test
+    @DisplayName("kappa latest resolves the PAPER-scoped row by paperId")
+    void kappaLatestPaperScope() {
+        UUID paperId = UUID.randomUUID();
+        SmartMarkAgreementEvaluation evaluation = new SmartMarkAgreementEvaluation(
+                SmartMarkAgreementEvaluation.SCOPE_PAPER, paperId, 7, 0.8, 0.85, 0.6, MARKER);
+        when(agreementEvaluations.findFirstByScopeAndExamPaperIdOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_PAPER, paperId))
+                .thenReturn(Optional.of(evaluation));
+
+        var view = controller.latestKappa(paperId);
+
+        assertThat(view.scope()).isEqualTo("PAPER");
+        assertThat(view.paperId()).isEqualTo(paperId);
+        assertThat(view.sampleSize()).isEqualTo(7);
     }
 }
