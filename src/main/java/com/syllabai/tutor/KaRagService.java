@@ -111,8 +111,13 @@ public class KaRagService {
                 ? List.of()
                 : vectorRetriever.retrieve(query, vectorCandidates, scope);
 
-        // 3. rank fusion (both sources contribute; neither dominates)
-        List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorCandidatesList));
+        // 3. rank fusion (plan §7 per-kind weights — the P3 serving posture:
+        // NOTE 1.0 > SYLLABUS 0.9 > QUESTION_PAPER 0.8 > TEXTBOOK 0.7 >
+        // MARK_SCHEME 0.6 > CARD 0.3; KG topic anchors weigh 1.0, so their
+        // influence is unchanged. Rank order inside each list is untouched;
+        // the unweighted 1-arg fuse stays bit-identical for bench replays)
+        List<EvidenceItem> fused = fusion.fuseWithPlanWeights(
+                List.of(kgCandidates, vectorCandidatesList));
 
         // 4. rerank + cap (v0: NoReranker keeps the fused order)
         List<EvidenceItem> evidence = reranker.rerank(query, fused)

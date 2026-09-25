@@ -74,14 +74,13 @@ public final class RetrievalFabric {
      * from this map (KG nodes, learner work, OTHER) weigh 1.0. These are the
      * weights the P3 routing posture ships with — any change re-runs the eval
      * harness first (plan §9: no retrieval change ships without it).
+     *
+     * <p>Canonical home is {@link ReciprocalRankFusion#PLAN_V2_WEIGHTS} (the
+     * serving fusion consumes the same map — one source of truth, no drift);
+     * this alias preserves the fabric's public API.</p>
      */
-    public static final Map<EvidenceItem.EvidenceSource, Double> PLAN_V2_WEIGHTS = Map.of(
-            EvidenceItem.EvidenceSource.NOTE, 1.0,
-            EvidenceItem.EvidenceSource.SYLLABUS, 0.9,
-            EvidenceItem.EvidenceSource.QUESTION_PAPER, 0.8,
-            EvidenceItem.EvidenceSource.TEXTBOOK, 0.7,
-            EvidenceItem.EvidenceSource.MARK_SCHEME, 0.6,
-            EvidenceItem.EvidenceSource.CARD, 0.3);
+    public static final Map<EvidenceItem.EvidenceSource, Double> PLAN_V2_WEIGHTS =
+            ReciprocalRankFusion.PLAN_V2_WEIGHTS;
 
     private final List<RetrievalProvider> providers;
     private final ReciprocalRankFusion fusion;

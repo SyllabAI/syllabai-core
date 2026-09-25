@@ -276,7 +276,9 @@ public class ClaService {
         kgCandidates.addAll(specStructureEvidence(context, subjectTree));
         List<EvidenceItem> vectorList = vectorRetriever.retrieve(question, vectorCandidates,
                 scopeOf(context));
-        List<EvidenceItem> fused = fusion.fuse(List.of(kgCandidates, vectorList));
+        // plan §7 per-kind weights on the serving fusion (same posture as
+        // KaRagService): KG anchors weigh 1.0, chunk kinds scale per plan §7
+        List<EvidenceItem> fused = fusion.fuseWithPlanWeights(List.of(kgCandidates, vectorList));
         List<EvidenceItem> evidence = reranker.rerank(question, fused)
                 .stream()
                 .limit(evidenceLimit)

@@ -35,12 +35,54 @@ public class ReciprocalRankFusion {
     }
 
     /**
+     * Plan §7 per-kind RRF weights — the canonical home (RetrievalFabric
+     * aliases this map). The v2 routing stance: knowledge-layer evidence
+     * leads, question evidence is verbatim context, mark schemes surface only
+     * when policy allows ({@code ClaLeakagePolicy} governs the answer
+     * surface), cards are identity pointers. Sources absent from this map
+     * (KNOWLEDGE_NODE, LEARNER_WORK, OTHER) weigh 1.0 — KG topic anchors keep
+     * their full pre-weights rank influence, so enabling the serving posture
+     * only rescales chunk-kind influence. Plan §9: no retrieval change ships
+     * without the eval harness — unit gates pin the induced ordering; the
+     * T-C13 bench re-runs on the next corpus change. Rollback posture: the
+     * unweighted 1-arg {@link #fuse(List)} stays bit-identical (bench replays,
+     * offline evals); serving reverts by restoring the call sites.
+     */
+    public static final Map<EvidenceItem.EvidenceSource, Double> PLAN_V2_WEIGHTS = Map.of(
+            EvidenceItem.EvidenceSource.NOTE, 1.0,
+            EvidenceItem.EvidenceSource.SYLLABUS, 0.9,
+            EvidenceItem.EvidenceSource.QUESTION_PAPER, 0.8,
+            EvidenceItem.EvidenceSource.TEXTBOOK, 0.7,
+            EvidenceItem.EvidenceSource.MARK_SCHEME, 0.6,
+            EvidenceItem.EvidenceSource.CARD, 0.3);
+
+    /**
      * @param rankedLists candidate rankings, best-first; a candidate appearing in
      *                    several lists accumulates score (agreement is rewarded)
      * @return fused ranking best-first with {@code fusedScore} set
      */
     public List<EvidenceItem> fuse(List<List<EvidenceItem>> rankedLists) {
         return fuse(rankedLists, item -> 1.0);
+    }
+
+    /**
+     * Per-candidate weight function over {@link #PLAN_V2_WEIGHTS}; sources
+     * absent from the map weigh 1.0 (never negative, never dropped).
+     */
+    public static java.util.function.ToDoubleFunction<EvidenceItem> planWeights() {
+        return item -> PLAN_V2_WEIGHTS.getOrDefault(item.source(), 1.0);
+    }
+
+    /**
+     * Serving fusion posture (plan §7): weighted fuse with the canonical plan
+     * weights — exactly {@code fuse(rankedLists, planWeights())}. Rank order
+     * inside each list is untouched; only cross-source influence scales.
+     *
+     * @param rankedLists candidate rankings, best-first
+     * @return fused ranking best-first with {@code fusedScore} set
+     */
+    public List<EvidenceItem> fuseWithPlanWeights(List<List<EvidenceItem>> rankedLists) {
+        return fuse(rankedLists, planWeights());
     }
 
     /**
