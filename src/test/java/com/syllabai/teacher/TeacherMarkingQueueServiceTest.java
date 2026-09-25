@@ -30,6 +30,7 @@ import java.lang.reflect.Field;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -489,5 +490,149 @@ class TeacherMarkingQueueServiceTest {
                 service.markingQueue(Answer.MarkingState.PENDING, 1, null);
         assertThat(onlyPage.size())
                 .isEqualTo(TeacherMarkingQueueService.DEFAULT_PAPER_GROUPS_PER_PAGE);
+    // ---- question-bank (null examPaperId) answers: the unfiled group (regression) ----
+    // Production defect (session 118): a SMART_MARKED answer on a question-bank
+    // (SME) question — examPaperId null BY DESIGN — crashed queue-v2 with a 500:
+    // the nullable id flowed into findAllById (rejects null elements) and the
+    // group-sort tie-break called compareTo on it. Both must stay null-safe.
+
+    /** a question deliberately NOT attached to any paper: examPaperId stays null */
+    private record BankFix(Question question, QuestionVersion version) {
+    }
+
+    private BankFix bankFix() {
+        Question question = new Question("q-" + UUID.randomUUID(),
+                Question.Type.STRUCTURED, "stem", 2, 3, 120, "Explain",
+                UUID.randomUUID(), Question.Provenance.TEACHER_AUTHORED);
+        TestIds.withId(question, UUID.randomUUID());
+        // deliberately NO attachToPaper — the question-bank case
+        QuestionVersion version = new QuestionVersion(question, 1, "stem", 2, 3, 120,
+                "Explain", QuestionVersion.ValidationState.VALIDATED, "doc", 0.9, "test");
+        TestIds.withId(version, UUID.randomUUID());
+        return new BankFix(question, version);
+    }
+
+    private Answer bankAnswer(BankFix fix, Instant attemptAt, String partLabel) {
+        QuestionPart part = new QuestionPart(fix.version(), partLabel, "prompt",
+                "State", 1, 0);
+        TestIds.withId(part, UUID.randomUUID());
+        fix.version().addPart(part);
+        Attempt attempt = new Attempt(UUID.randomUUID(), fix.question(), null, false, null,
+                5000L, 4, false, false, "test");
+        TestIds.withId(attempt, UUID.randomUUID());
+        attempt.beginMarking();
+        setField(attempt, "createdAt", attemptAt);
+        Answer answer = new Answer(attempt, part, "bank answer text");
+        TestIds.withId(answer, UUID.randomUUID());
+        return answer;
+    }
+
+    @SuppressWarnings("unchecked")
+    private org.mockito.ArgumentCaptor<Collection<UUID>> paperIdsCaptor() {
+        return (org.mockito.ArgumentCaptor<Collection<UUID>>) (Object)
+                org.mockito.ArgumentCaptor.forClass(Collection.class);
+    }
+
+    @Test
+    @DisplayName("SMART_MARKED queue with question-bank answers: unfiled group renders, paper lookup never sees a null id")
+    void markingQueueNullPaperAnswersGroupWithoutCrash() {
+        PaperFix fix = paperFix(UUID.randomUUID(), "Chemistry Paper 1");
+        BankFix bank = bankFix();
+        Answer paperAnswer = pendingAnswer(fix, null, BASE, "a");
+        paperAnswer.smartMarked(2);
+        Answer bankA = bankAnswer(bank, BASE.minus(10, ChronoUnit.MINUTES), "a");
+        bankA.smartMarked(1);
+        Answer bankB = bankAnswer(bank, BASE.minus(5, ChronoUnit.MINUTES), "b");
+        bankB.smartMarked(0);
+
+        when(answers.findByMarkingState(Answer.MarkingState.SMART_MARKED))
+                .thenReturn(List.of(bankA, bankB, paperAnswer));
+        lenient().when(examPapers.findAllById(anyCollection())).thenReturn(List.of(fix.paper()));
+        lenient().when(smartMarkResults.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(humanMarks.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(users.findAllById(anyCollection())).thenReturn(List.of());
+
+        var view = service.markingQueue(Answer.MarkingState.SMART_MARKED);
+
+        // the two bank answers form ONE unfiled group (null paper, null context)
+        assertThat(view.groups()).hasSize(2);
+        assertThat(view.groups()).anyMatch(g -> g.paperId() == null
+                && g.paperTitle() == null && g.count() == 2);
+        assertThat(view.groups()).anyMatch(g -> fix.paper().id().equals(g.paperId()));
+        assertThat(view.items()).hasSize(3);
+        // THE regression: the paper lookup must never receive a null id element
+        var captor = paperIdsCaptor();
+        verify(examPapers, times(1)).findAllById(captor.capture());
+        assertThat(captor.getValue()).doesNotContainNull();
+        assertThat(captor.getValue()).containsExactly(fix.paper().id());
+    }
+
+    @Test
+    @DisplayName("queue with ZERO paper rows (all question-bank): the unfiled group renders and the immutable empty paper map is never queried with a null key")
+    void markingQueueAllBankQueueRendersUnfiledGroup() {
+        // Production defect (2026-09-24, layer 3): SMART_MARKED was the ONLY
+        // state whose queue held zero paper rows -> paperIds empty -> `papers`
+        // = immutable Map.of() -> the unfiled group's papers.get(null) NPEed.
+        // Every other state had >=1 paper row -> Collectors.toMap HashMap ->
+        // get(null) returns null. The mixed-queue regression above exercises
+        // only the HashMap branch; this one pins the Map.of() branch. It also
+        // only became reachable AFTER the detached-lazy lookup fix (that
+        // exception fired earlier in the assembly and masked this one).
+        BankFix bank = bankFix();
+        Answer bankA = bankAnswer(bank, BASE.minus(10, ChronoUnit.MINUTES), "a");
+        bankA.smartMarked(1);
+        Answer bankB = bankAnswer(bank, BASE.minus(5, ChronoUnit.MINUTES), "b");
+        bankB.smartMarked(0);
+
+        when(answers.findByMarkingState(Answer.MarkingState.SMART_MARKED))
+                .thenReturn(List.of(bankA, bankB));
+        lenient().when(smartMarkResults.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(humanMarks.findByAnswerIdsOrderByCreatedAtAsc(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(users.findAllById(anyCollection())).thenReturn(List.of());
+
+        var view = service.markingQueue(Answer.MarkingState.SMART_MARKED);
+
+        assertThat(view.groups()).hasSize(1);
+        assertThat(view.groups().get(0).paperId()).isNull();
+        assertThat(view.groups().get(0).paperTitle()).isNull();
+        assertThat(view.groups().get(0).paperCode()).isNull();
+        assertThat(view.groups().get(0).count()).isEqualTo(2);
+        assertThat(view.items()).hasSize(2);
+        assertThat(view.items()).allSatisfy(it -> {
+            assertThat(it.paperId()).isNull();
+            assertThat(it.paperTitle()).isNull();
+            assertThat(it.answer().markingState()).isEqualTo("SMART_MARKED");
+        });
+        // all-bank queue: the paper lookup must never be called at all
+        verify(examPapers, never()).findAllById(anyCollection());
+    }
+
+    @Test
+    @DisplayName("throughput with question-bank pending answers: honest counts, no null id reaches the paper lookup")
+    void throughputNullPaperAnswersCountWithoutCrash() {
+        PaperFix fix = paperFix(UUID.randomUUID(), "Chemistry Paper 1");
+        BankFix bank = bankFix();
+        Answer paperAnswer = pendingAnswer(fix, null, BASE, "a");
+        Answer bankAnswer = bankAnswer(bank, BASE.minus(1, ChronoUnit.MINUTES), "a");
+        when(answers.countGroupedByMarkingState()).thenReturn(List.<Object[]>of(
+                new Object[]{Answer.MarkingState.PENDING, 2L}));
+        when(humanMarks.countSince(any(Instant.class))).thenReturn(0L);
+        when(answers.findByMarkingState(Answer.MarkingState.PENDING))
+                .thenReturn(List.of(paperAnswer, bankAnswer));
+        when(examPapers.findAllById(anyCollection())).thenReturn(List.of(fix.paper()));
+
+        var view = service.throughput();
+
+        assertThat(view.answersByState()).containsEntry("PENDING", 2L);
+        // the bank answer lands in the unfiled (null paperId) leaders bucket
+        assertThat(view.pendingByPaper()).hasSize(2);
+        var captor = paperIdsCaptor();
+        verify(examPapers, times(1)).findAllById(captor.capture());
+        assertThat(captor.getValue()).doesNotContainNull();
+        assertThat(captor.getValue()).containsExactly(fix.paper().id());
     }
 }

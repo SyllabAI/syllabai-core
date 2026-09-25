@@ -115,6 +115,66 @@ public class ChunkVectorRepository {
                 literal, limit);
     }
 
+    /**
+     * Serving-eligible vector search (T-C20, the vector mirror of
+     * {@link ChunkLexicalRepository#searchServingEligible}): identical to
+     * {@link #search(float[], Document.Kind, UUID, int)} except the scope
+     * EXISTS predicate additionally requires the owning paper to be
+     * {@code VALIDATED} — a SUGGESTED, FLAGGED or REJECTED paper's chunks are
+     * never returned, regardless of cosine similarity. The V33 subject branch
+     * (knowledge-layer chunks with no exam-paper row) is gated the same way
+     * the corpus law gates it: the chunk's own document must be
+     * {@code VALIDATED} — the V29 {@code documents.validation_state} column
+     * exists precisely so corpus imports are born SUGGESTED and nothing
+     * serves without human validation.
+     *
+     * <p>Why this overload exists beside the neutral {@code search}: the
+     * lexical side records boundary exclusion as enforced once, centrally,
+     * never per-provider — until the fabric's central enforcer lands, the
+     * serving path ({@code ContentRetrievalService}) calls THIS method and
+     * the neutral {@code search} remains the benchmark/audit surface the
+     * T-C13 harness replays against. Additive and reversible: nothing about
+     * the existing search contract changes.</p>
+     */
+    public List<ChunkHit> searchServingEligible(float[] queryVector, Document.Kind kind,
+                                                UUID curriculumVersionId, int limit) {
+        if (curriculumVersionId == null) {
+            throw new IllegalArgumentException(
+                    "curriculumVersionId is mandatory — chunk search never runs unscoped (T-C07)");
+        }
+        String literal = toVectorLiteral(queryVector);
+        String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
+        String sql = """
+                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                       c.content, c.page_start, c.page_end, c.element_ids,
+                       c.embedding_model, 1 - (c.embedding <=> ?::vector) as score
+                from document_chunks c
+                join documents d on d.id = c.document_row_id
+                where c.embedding is not null
+                  and c.embed_rev = ?
+                  and (
+                        exists (
+                              select 1 from exam_papers p
+                              join subjects s on s.id = p.subject_id
+                              where s.curriculum_version_id = ?
+                                and p.validation_state = 'VALIDATED'
+                                and (p.question_paper_document_id = d.document_id
+                                  or p.mark_scheme_document_id = d.document_id))
+                     or exists (
+                              select 1 from subjects s2
+                              where s2.curriculum_version_id = ?
+                                and s2.id = c.subject_id
+                                and d.validation_state = 'VALIDATED'))
+                """ + kindFilter + """
+                order by c.embedding <=> ?::vector
+                limit ?
+                """;
+        return jdbc.query(sql,
+                (rs, i) -> mapHit(rs),
+                literal, CURRENT_EMBED_REV, curriculumVersionId, curriculumVersionId,
+                literal, limit);
+    }
+
     private ChunkHit mapHit(java.sql.ResultSet rs) throws java.sql.SQLException {
         // element_ids is a JSONB array (house pattern, see MarkPoint.acceptanceCriteria)
         List<String> elementIds = new ArrayList<>();

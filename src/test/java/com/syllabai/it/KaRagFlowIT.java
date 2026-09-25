@@ -159,9 +159,14 @@ class KaRagFlowIT {
         CurriculumVersion ial = curriculumVersions
                 .findById(summary.curriculumVersionId()).orElseThrow();
         Subject msSubject = subjects.save(new Subject(ial, "4CH0", "Chemistry (mark-scheme side)"));
-        examPapers.save(new ExamPaper(msSubject.id(), "IT paper 4CH0/1C Jan 2012", "Edexcel",
-                "IGCSE", null, null, "4CH0/1C",
+        ExamPaper msPaper = examPapers.save(new ExamPaper(msSubject.id(), "IT paper 4CH0/1C Jan 2012",
+                "Edexcel", "IGCSE", null, null, "4CH0/1C",
                 null, result.documentId(), ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
+        // T-C20: the serving path is VALIDATED-only — pin the human-validated
+        // state this positive control represents (never rely on DB defaults;
+        // the SUGGESTED exclusion is ContentPipelineIT Orders 8/9's proof)
+        jdbc.update("update exam_papers set validation_state = 'VALIDATED' where id = ?",
+                msPaper.id());
     }
 
     @Test

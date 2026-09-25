@@ -23,6 +23,9 @@ import org.springframework.beans.factory.ObjectProvider;
  * T-C07: the curriculum scope is a mandatory argument — a null scope is rejected
  * before anything runs (retrieval never serves unscoped), and the scope's
  * curriculum version id is what reaches the vector store predicate.
+ * T-C20: the serving path drives the SERVING-ELIGIBLE vector surface
+ * ({@code searchServingEligible} — VALIDATED-only), never the neutral benchmark
+ * surface.
  */
 class ContentRetrievalServiceTest {
 
@@ -69,13 +72,13 @@ class ContentRetrievalServiceTest {
     }
 
     @Test
-    @DisplayName("search embeds the query and delegates with a clamped limit and the scope's cv id")
+    @DisplayName("search embeds the query and delegates to the serving-eligible surface with a clamped limit and the scope's cv id (T-C20)")
     void happyPath() {
         when(provider.getIfAvailable()).thenReturn(recording);
         List<ChunkHit> expected = List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
                 "doc-1", "MARK_SCHEME", 0, "content", 1, 1, List.of("e0"),
                 "gemini-embedding-001", 0.98));
-        when(vectors.search(any(), eq(Document.Kind.MARK_SCHEME), eq(CV_ID), eq(10)))
+        when(vectors.searchServingEligible(any(), eq(Document.Kind.MARK_SCHEME), eq(CV_ID), eq(10)))
                 .thenReturn(expected);
 
         List<ChunkHit> hits = service.search("rate of reaction", Document.Kind.MARK_SCHEME, SCOPE, 10);
@@ -88,14 +91,14 @@ class ContentRetrievalServiceTest {
     @DisplayName("limits are clamped into 1..50 no matter what the caller sends")
     void limitClamped() {
         when(provider.getIfAvailable()).thenReturn(recording);
-        when(vectors.search(any(), any(), any(), eq(1))).thenReturn(List.of());
-        when(vectors.search(any(), any(), any(), eq(50))).thenReturn(List.of());
+        when(vectors.searchServingEligible(any(), any(), any(), eq(1))).thenReturn(List.of());
+        when(vectors.searchServingEligible(any(), any(), any(), eq(50))).thenReturn(List.of());
 
         service.search("q", null, SCOPE, -5);
         service.search("q", null, SCOPE, 5000);
 
-        verify(vectors).search(any(), any(), eq(CV_ID), eq(1));
-        verify(vectors).search(any(), any(), eq(CV_ID), eq(50));
+        verify(vectors).searchServingEligible(any(), any(), eq(CV_ID), eq(1));
+        verify(vectors).searchServingEligible(any(), any(), eq(CV_ID), eq(50));
         assertThat(recording.queries).hasSize(2);
     }
 

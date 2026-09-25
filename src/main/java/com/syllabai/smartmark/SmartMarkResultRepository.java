@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -27,8 +28,13 @@ public interface SmartMarkResultRepository extends JpaRepository<SmartMarkResult
      * Marking throughput lane (sprint 2 §6): every smart-mark run for a batch
      * of answers in ONE query, oldest first — the caller keeps the newest run
      * per answer in memory. Bounded by the marking-queue page size, never the
-     * full history of the table.
+     * full history of the table. The answer association is fetched eagerly:
+     * open-in-view is OFF, so the caller assembles the queue with these runs
+     * DETACHED and keyed by run.answerId() — an uninitialized lazy proxy would
+     * throw LazyInitializationException there (every marked state 500ed while
+     * PENDING worked, 2026-09-24).
      */
+    @EntityGraph(attributePaths = {"answer"})
     @Query("""
             select r from SmartMarkResult r
             where r.answer.id in :answerIds

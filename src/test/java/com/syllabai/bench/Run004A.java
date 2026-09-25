@@ -27,7 +27,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * T-C13 (spec §7): Run 004 — arm A, the production semantic arm, recorded.
  *
  * <p>Executor: the PRODUCTION vector serving path ({@code ContentRetrievalService}
- * → {@code ChunkVectorRepository.search}: pgvector cosine over V11 vector(768),
+ * → {@code ChunkVectorRepository.searchServingEligible}: pgvector cosine over V11 vector(768),
  * T-C07 scope predicate; {@code ContentVectorRetriever} cosine floor 0.15,
  * kind-agnostic) against a REAL Postgres migrated with the actual Flyway
  * V1..V28 and loaded with the frozen snap-001 corpus, with the frozen
@@ -228,8 +228,9 @@ public final class Run004A {
         results.put("run_id", "run-004-a");
         results.put("date", runDate);
         results.put("arm", "A semantic — PRODUCTION vector serving path (ContentRetrievalService → "
-                + "ChunkVectorRepository.search: pgvector 1-(embedding <=> q) cosine over V11 vector(768), "
-                + "T-C07 scope EXISTS predicate; ContentVectorRetriever cosine floor 0.15, kind-agnostic) "
+                + "ChunkVectorRepository.searchServingEligible: pgvector 1-(embedding <=> q) cosine over V11 "
+                + "vector(768), T-C07 scope EXISTS predicate + T-C05/T-C20 VALIDATED-only serving gate; "
+                + "ContentVectorRetriever cosine floor 0.15, kind-agnostic) "
                 + "— chunk+query vectors replayed from the frozen artifact embed-backfill-snap-001, "
                 + "zero API calls at run time, NoReranker");
         results.put("arm_status", "RUNNABLE — frozen backfill artifact applied (" + applied + "/"
@@ -243,7 +244,9 @@ public final class Run004A {
         results.put("executor", "production code over real Postgres migrated V1..V28 (Flyway), corpus "
                 + "loaded from the frozen snapshot; chunk vectors applied from the checksummed "
                 + "compute-once-freeze-forever artifact and query vectors served from it through the "
-                + "production EmbeddingProvider port; no scorer reimplemented, no retrieval SQL changed");
+                + "production EmbeddingProvider port; no scorer reimplemented — the retrieval surface is "
+                + "the T-C20 serving-eligible production path (the historical run-004-a record predates "
+                + "that gate and is preserved unchanged)");
         results.put("embedding_artifact", Map.of(
                 "run_id", manifest.path("run_id").asText(),
                 "model", manifest.path("model").asText(),
@@ -256,13 +259,13 @@ public final class Run004A {
                 "chunk_axis", "Recall@5/10/20, MRR (first tier-2 hit in top-20), nDCG@10 (2/1/0 tiers), "
                         + "evidence precision@10 and FP@10 over the fixed top-10 denominator — formulas "
                         + "identical to run-001/run-002/run-003 (BenchMetrics, pinned).",
-                "serving_scope", "the production vector surface enforces T-C07 curriculum scoping but "
-                        + "predates T-C05: the SERVED view is the production truth over the T-C07-scoped "
-                        + "embedded corpus; the COMPLIANT view is the post-hoc VALIDATED-only filter of the "
-                        + "served top-20 (run-001 B-proxy validated_only discipline) — an evaluation view "
-                        + "comparable with arm B's compliant scope, NOT a serving simulation (a compliant "
-                        + "vector surface would re-rank within the compliant corpus and is not implemented; "
-                        + "registered as follow-up)",
+                "serving_scope", "the production vector surface enforces T-C07 curriculum scoping AND "
+                        + "the T-C05/T-C20 VALIDATED-only serving gate (searchServingEligible): the SERVED "
+                        + "view is the production truth over the serving-eligible embedded corpus; the "
+                        + "COMPLIANT view — the post-hoc VALIDATED-only filter of the served top-20 "
+                        + "(run-001 B-proxy validated_only discipline) — is retained as the independent "
+                        + "cross-check and is expected to AGREE with the served view post-T-C20 (the "
+                        + "historical run-004-a record predates the gate and carried the boundary finding)",
                 "cosine_floor", "hits below the production ContentVectorRetriever MIN_COSINE 0.15 are "
                         + "dropped before ranking (production truth) — empty result lists are honest zeros",
                 "spec_resolution_axis", "NOT SCOREABLE for arm A: the snapshot carries ZERO "
@@ -270,10 +273,10 @@ public final class Run004A {
                         + "T-C06/F-168 mapping substrate is pending), so a resolution number would be "
                         + "fabrication; recorded as a named data gap, not a zero, not an exclusion",
                 "boundary_check", "every served hit audited against the loader's paper-state map; any "
-                        + "non-VALIDATED hit is a VALIDATION_BOUNDARY_VIOLATION finding — on this "
-                        + "production surface it is EXPECTED (the T-C05 predicate exists on the lexical "
-                        + "serving-eligible surface only) and is recorded as the run's named finding, "
-                        + "never silently patched"));
+                        + "non-VALIDATED hit is a VALIDATION_BOUNDARY_VIOLATION — on the T-C20-closed "
+                        + "production surface the expected count is ZERO and any violation is a REGRESSION, "
+                        + "not a finding (the historical run-004-a record surfaced violations because the "
+                        + "vector surface then predated T-C05; that record is preserved, never rewritten)"));
         results.put("queries_total", gold.records().size());
         results.put("queries_scored_chunks", labeled.size());
         results.put("queries_excluded_no_chunk_labels", Map.of(
@@ -285,13 +288,15 @@ public final class Run004A {
         results.put("queries_compliant_starved", compliantStarved);
         results.put("chunk_axis", Map.of(
                 "served_view", Map.of(
-                        "scope", "T-C07-scoped embedded corpus (production vector surface as-is)",
+                        "scope", "T-C07 scope + T-C05/T-C20 VALIDATED-only gate (production vector "
+                                + "surface); corpus_n = embedded chunks held by the index",
                         "corpus_n", dbChunks,
                         "queries_scored", labeled.size(),
                         "overall", servedOverall,
                         "per_class", servedPerClass),
                 "compliant_view", Map.of(
-                        "scope", "post-hoc VALIDATED-only filter of the served top-20 (evaluation view)",
+                        "scope", "post-hoc VALIDATED-only filter of the served top-20 — independent "
+                                + "cross-check, expected to agree with the served view post-T-C20",
                         "corpus_n", validatedCorpus,
                         "queries_scored", labeled.size(),
                         "overall", compliantOverall,
@@ -781,12 +786,13 @@ public final class Run004A {
 
         md.append("\n## Boundary + resolution axes\n\n")
                 .append("- VALIDATION_BOUNDARY_VIOLATIONS (served view): ").append(violations)
-                .append(". **Named finding, not a silent patch:** the production vector surface ")
-                .append("(ChunkVectorRepository.search) enforces the T-C07 curriculum-scope predicate but ")
-                .append("predates T-C05 — the VALIDATED-paper predicate exists only on the lexical ")
-                .append("serving-eligible surface (ChunkLexicalRepository.searchServingEligible). The served ")
-                .append("view is the production truth; a compliant vector surface is registered as follow-up. ")
-                .append("This run changes nothing in serving.\n")
+                .append(". **T-C20 CLOSED — zero is the contract:** the production vector surface ")
+                .append("(ChunkVectorRepository.searchServingEligible via ContentRetrievalService) now ")
+                .append("enforces the T-C07 curriculum-scope predicate AND the VALIDATED-only serving ")
+                .append("gate, mirroring the lexical surface (ChunkLexicalRepository.")
+                .append("searchServingEligible). Any non-zero count here is a REGRESSION, not a finding. ")
+                .append("The historical run-004-a record — which surfaced the finding because the vector ")
+                .append("surface then predated T-C05 — is preserved unchanged.\n")
                 .append("- SpecificationPoint resolution: NOT SCOREABLE for arm A — zero HUMAN_VALIDATED ")
                 .append("chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 ")
                 .append("substrate pending). Recorded as a named data gap, never fabricated.\n")
@@ -794,21 +800,21 @@ public final class Run004A {
                 .append("/120 (all top-20 hits below the production cosine floor 0.15 — honest empties, ")
                 .append("scored as real zeros).\n")
                 .append("- Compliant-starved queries: ").append(compliantStarved)
-                .append(" (served non-empty but every hit sits on a non-VALIDATED paper — the boundary gap's ")
-                .append("user-visible shape).\n\n");
+                .append(" (served non-empty but every hit sits on a non-VALIDATED paper — expected 0 ")
+                .append("post-T-C20; non-zero means the gate and the audit disagree, investigate).\n\n");
 
         md.append("## Reading\n\n")
                 .append("- Arm A drives the PRODUCTION vector serving path (ContentRetrievalService → ")
-                .append("ChunkVectorRepository.search pgvector cosine; ContentVectorRetriever floor 0.15, ")
-                .append("kind-agnostic) — no retrieval SQL or scorer was reimplemented or changed. The only ")
+                .append("ChunkVectorRepository.searchServingEligible pgvector cosine; ")
+                .append("ContentVectorRetriever floor 0.15, kind-agnostic) — no scorer was reimplemented; ")
+                .append("the retrieval surface is the T-C20 serving-eligible gate. The only ")
                 .append("stubbed surface is the embedding CALL itself, replayed from the frozen artifact ")
                 .append("through the production EmbeddingProvider port (compute-once-freeze-forever).\n")
-                .append("- Served vs compliant view: the served view scores over the T-C07-scoped corpus ")
-                .append("(production truth, boundary finding included); the compliant view is a post-hoc ")
-                .append("VALIDATED-only filter of the same served top-20 — comparable in SCOPE with arm B, ")
-                .append("but it is NOT a serving simulation (a compliant vector surface would re-rank within ")
-                .append("the compliant corpus). Treat cross-arm comparisons as evaluation context for the §8 ")
-                .append("gate arithmetic, not as promotion evidence.\n")
+                .append("- Served vs compliant view: post-T-C20 both views score the VALIDATED-only ")
+                .append("surface — the served view is production truth, the compliant view an independent ")
+                .append("post-hoc filter retained as the cross-check (agreement expected; disagreement is ")
+                .append("itself a defect signal). Cross-arm comparisons remain evaluation context for the §8 ")
+                .append("gate arithmetic, not promotion evidence.\n")
                 .append("- A vs B: arm B's numbers come from run-003-b (production lexical arm, ")
                 .append("VALIDATED-served scope, same frozen gold, same formulas). Any hybrid (arm C) verdict ")
                 .append("requires the orchestrator, which does not exist yet (the retrieval fabric has port + ")

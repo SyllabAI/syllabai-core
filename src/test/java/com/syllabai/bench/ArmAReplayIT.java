@@ -48,8 +48,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>Proves: artifact verification (incl. gold provenance), bit-exact apply
  * through the real storeEmbedding, single-model index rule, the served view
- * surfacing the T-C05 boundary finding (the SUGGESTED-paper duplicate IS
- * served by the production surface), the compliant view filtering it, and the
+ * (the PRODUCTION surface, T-C20 serving-eligible gate) EXCLUDING the
+ * SUGGESTED-paper duplicate — the historical run-004-a finding is closed, not
+ * asserted — agreement with the post-hoc compliant cross-check view, and the
  * determinism double-pass holding. Asserts set-membership and consistency, not
  * tie-dependent exact ranks (the duplicate-content trick creates an exact
  * cosine tie between the two A-chunks by design).</p>
@@ -257,8 +258,9 @@ class ArmAReplayIT {
         assertThat(result.appliedVectors()).isEqualTo(4);
         assertThat(result.queries()).isEqualTo(1);
 
-        // served view (production truth): the duplicate content A chunks MUST be
-        // served (cosine 1.0) — including the SUGGESTED-paper one: the finding.
+        // served view (production truth): the duplicate content A chunk is served
+        // from the VALIDATED paper (cosine 1.0) — and the SUGGESTED-paper
+        // duplicate is NOT served: the T-C20 serving-eligible gate holds.
         @SuppressWarnings("unchecked")
         Map<String, Object> served = (Map<String, Object>) readJson(runOut.resolve("results.json"))
                 .get("chunk_axis");
@@ -274,8 +276,9 @@ class ArmAReplayIT {
                 readJson(runOut.resolve("results.json")).get("per_query_compliant")).get("it-q-001")).get("ranked_refs");
 
         assertThat(servedRefs).isNotEmpty();
-        assertThat(servedRefs).contains(DOC_V + ":0", DOC_S + ":0");
-        assertThat(result.violations()).isGreaterThanOrEqualTo(1);
+        assertThat(servedRefs).contains(DOC_V + ":0");
+        assertThat(servedRefs).doesNotContain(DOC_S + ":0");
+        assertThat(result.violations()).isZero();
         assertThat(compliantRefs).contains(DOC_V + ":0");
         assertThat(compliantRefs).doesNotContain(DOC_S + ":0");
         assertThat(compliantView.get("corpus_n")).isEqualTo(1); // one VALIDATED paper

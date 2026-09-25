@@ -39,6 +39,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -56,6 +57,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * serves scoped chunks, the negative controls prove a foreign-curriculum scope
  * sees nothing and an unlinked document (unresolvable curriculum) is never
  * served (fail-closed).</p>
+ *
+ * <p>T-C20 (VALIDATED-only serving): the SERVICE is the serving-eligible
+ * surface — a SUGGESTED paper's chunks and a SUGGESTED knowledge-layer note
+ * are never served regardless of cosine similarity (Orders 8–9 prove the
+ * exclusion, then flip the state to VALIDATED and prove the SAME rows serve,
+ * isolating the gate as the only variable). The positive fixtures pin their
+ * papers/documents VALIDATED (the human-validated state the positive controls
+ * represent — never rely on DB defaults, the ArmAReplayIT house pattern).</p>
  *
  * <p>Container state is shared across the class's test methods: the 4CH0 mark
  * scheme fixture is ingested by three of them, and ingestion is
@@ -95,6 +104,12 @@ class ContentPipelineIT {
     @Autowired
     private ContentRetrievalService retrieval;
     @Autowired
+    private ChunkVectorRepository vectorRepository;
+    @Autowired
+    private EmbeddingProvider embeddingProvider;
+    @Autowired
+    private JdbcTemplate jdbc;
+    @Autowired
     private DocumentRepository documents;
     @Autowired
     private DocumentChunkRepository chunks;
@@ -110,18 +125,23 @@ class ContentPipelineIT {
     /**
      * Creates ACTIVE curriculum + subject + exam-paper rows linking
      * {@code documentId} as the paper's QP or MS document (the real T-C07 join
-     * path), and returns the curriculum version id for scope construction.
+     * path), pins the paper VALIDATED (T-C20: the positive controls prove the
+     * serving-eligible surface, whose gate requires it), and returns the
+     * curriculum version id for scope construction.
      */
     private UUID linkPaper(String code, String documentId, Document.Kind kind) {
         CurriculumVersion cv = curriculumVersions.save(new CurriculumVersion(
                 "Edexcel", "IGCSE", code, "IT fixture " + code,
                 CurriculumVersion.Status.ACTIVE));
         Subject subject = subjects.save(new Subject(cv, code, "Chemistry (" + code + ")"));
-        examPapers.save(new ExamPaper(subject.id(), "IT paper " + code, "Edexcel", "IGCSE",
+        ExamPaper paper = examPapers.save(new ExamPaper(subject.id(), "IT paper " + code, "Edexcel",
+                "IGCSE",
                 null, null, code + "/1C",
                 kind == Document.Kind.QUESTION_PAPER ? documentId : null,
                 kind == Document.Kind.MARK_SCHEME ? documentId : null,
                 ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
+        jdbc.update("update exam_papers set validation_state = 'VALIDATED' where id = ?",
+                paper.id());
         return cv.id();
     }
 
@@ -374,6 +394,12 @@ class ContentPipelineIT {
                 ingestion.ingest(note, "{}", Document.Kind.EXTERNAL_NOTES, null);
         embedding.embedDocument(result.id());
 
+        // T-C20: corpus imports land SUGGESTED; the subject branch serves only
+        // VALIDATED documents — pin the human-validated state this positive
+        // control represents (never rely on defaults, the house pattern)
+        jdbc.update("update documents set validation_state = 'VALIDATED' where document_id = ?",
+                documentId);
+
         // the owning curriculum serves the note chunk through the SUBJECT branch
         // (there is no exam_papers row — the old join path alone could never see it)
         var owner = retrieval.search("electrolysis molten chloride electrodes",
@@ -392,6 +418,82 @@ class ContentPipelineIT {
                         "NOTE-FOREIGN", Set.of()), 50);
         assertThat(foreignHits)
                 .noneMatch(h -> h.documentId().equals(documentId));
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("T-C20 paper branch: a SUGGESTED paper is never served — flipping the paper to VALIDATED serves the same rows")
+    void suggestedPaperNeverServedUntilValidated() throws Exception {
+        Fixture qp = fixture("canonical-qp-4ch0-1c-jan2012.json");
+        String qpDocumentId = qp.dto().documentId(); // ingested + embedded by Order 2 (checksum-idempotent)
+
+        // a NEW curriculum/subject/paper over the SAME document — left SUGGESTED (insert-side default)
+        UUID sugCv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "4CH0-SUG", "IT fixture suggested paper",
+                CurriculumVersion.Status.ACTIVE)).id();
+        Subject sugSubject = subjects.save(new Subject(
+                curriculumVersions.findById(sugCv).orElseThrow(), "4CH0-SUG", "Chemistry (suggested)"));
+        examPapers.save(new ExamPaper(sugSubject.id(), "IT suggested paper", "Edexcel", "IGCSE",
+                null, null, "4CH0-SUG/1C", qpDocumentId, null,
+                ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
+
+        CurriculumScope sugScope = new CurriculumScope(sugCv, "4CH0-SUG", Set.of());
+
+        // serving surface: NOTHING serves from the SUGGESTED paper — regardless of match strength
+        assertThat(retrieval.search("Write your name here", null, sugScope, 50)).isEmpty();
+
+        // the same query vector DOES hit the chunk on the neutral benchmark surface —
+        // the data exists; only the serving gate hides it
+        assertThat(vectorRepository.search(
+                embeddingProvider.embedQuery("Write your name here"), null, sugCv, 50)).isNotEmpty();
+
+        // flip the paper to VALIDATED: the SAME rows now serve — the state is the only variable
+        jdbc.update("update exam_papers set validation_state = 'VALIDATED' where paper_code = '4CH0-SUG/1C'");
+        assertThat(retrieval.search("Write your name here", null, sugScope, 50)).isNotEmpty();
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("T-C20 subject branch: a SUGGESTED note is never served — flipping the document to VALIDATED serves it")
+    void suggestedNoteNeverServedUntilValidated() {
+        // curriculum + subject with NO exam-paper row (the knowledge layer shape)
+        CurriculumVersion cv = curriculumVersions.save(new CurriculumVersion(
+                "Edexcel", "IGCSE", "NOTE-SUG", "IT fixture suggested note",
+                CurriculumVersion.Status.ACTIVE));
+        subjects.save(new Subject(cv, "NOTE-SUG", "Chemistry (suggested note)"));
+
+        String checksum = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        String documentId = CanonicalDocumentValidator.derivedDocumentId(
+                checksum, "opendataloader-pdf", "2.5.7");
+        CanonicalDocumentDto note = new CanonicalDocumentDto(documentId, "1.0", 1,
+                new CanonicalDocumentDto.SourceInfo("suggested-notes.pdf", checksum, "SHA-256",
+                        "application/pdf", "suggested-notes.pdf"),
+                1, List.of(), List.of(),
+                List.of(new CanonicalDocumentDto.TextBlockElement("sn-0", "text_block", 1, null,
+                        "Titration curves sketch the pH change as acid meets alkali.", 0, 1.0,
+                        "paragraph", null, "opendataloader-pdf", "2.5.7", null)),
+                List.of(), List.of(), List.of(),
+                new CanonicalDocumentDto.ProvenanceInfo("opendataloader-pdf", "2.5.7",
+                        "2026-09-20T00:00:00Z", java.util.Map.of(), "syllabai-parser", "1.0"),
+                new CanonicalDocumentDto.RetrievalMeta("IGCSE Chemistry", "NOTE-SUG",
+                        null, null, null, "Notes", "Titration", List.of("1.45")));
+
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(note, "{}", Document.Kind.EXTERNAL_NOTES, null);
+        embedding.embedDocument(result.id());
+        // left SUGGESTED — corpus imports are born SUGGESTED (T-C06); never pinned
+
+        CurriculumScope scope = new CurriculumScope(cv.id(), "NOTE-SUG", Set.of());
+        assertThat(retrieval.search("titration curves pH", null, scope, 50)).isEmpty();
+
+        // the same vector hits the chunk on the neutral surface — data present, gate closed
+        assertThat(vectorRepository.search(embeddingProvider.embedQuery("titration curves pH"),
+                null, cv.id(), 50)).isNotEmpty();
+
+        // flip the document to VALIDATED: the same note now serves through the subject branch
+        jdbc.update("update documents set validation_state = 'VALIDATED' where document_id = ?",
+                documentId);
+        assertThat(retrieval.search("titration curves pH", null, scope, 50)).isNotEmpty();
     }
 
     /**
