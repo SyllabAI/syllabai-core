@@ -33,10 +33,15 @@ import org.springframework.stereotype.Service;
  * <ol>
  *   <li><strong>Bank anchor</strong> — {@link FetchService} (R4 plan §7 FETCH)
  *       resolves a single paper within the ask's curriculum scope. Served only
- *       when the paper row is VALIDATED and the resolved QP/MS documents are
- *       VALIDATED; evidence is the question-number-matching chunks of those
- *       documents (QP stem chunks, MS answer chunks when the ask is
- *       mark-scheme-seeking).</li>
+ *       when the paper row is VALIDATED — exactly branch 1 of the serving law
+ *       ({@code ChunkVectorRepository#searchServingEligible}): paper-anchored
+ *       QP/MS chunks gate on the <em>exam_papers</em> row, and the linked
+ *       document rows may still sit at SUGGESTED in the documents table (they
+ *       do in production — the 09-26 live probes proved a paper-VALIDATED +
+ *       document-SUGGESTED doc serves through the vector arm). A REJECTED
+ *       document row never serves. Evidence is the question-number-matching
+ *       chunks of those documents (QP stem chunks, MS answer chunks when the
+ *       ask is mark-scheme-seeking).</li>
  *   <li><strong>Question-card anchor</strong> — the per-session card document
  *       {@code qcard-{code}-{unit}-{SERIES}-{year}.txt} (uniquely named per
  *       session, covering sessions the structured bank does not). Served only
@@ -146,8 +151,13 @@ public class PaperQuestionResolver {
         if (canonicalDocumentId == null) {
             return List.of();
         }
+        // Serving law branch 1 (paper-anchored): the paper row's VALIDATED state
+        // was already checked by the caller — the document row's own SUGGESTED
+        // state must NOT block (production: every documents row is SUGGESTED
+        // while 11 exam_papers rows are VALIDATED, and the vector arm serves
+        // exactly those docs). Only a REJECTED document row is excluded here.
         Optional<Document> doc = documents.findTopByDocumentIdOrderByDocVersionDesc(canonicalDocumentId)
-                .filter(this::servesUnderServingLaw);
+                .filter(d -> !"REJECTED".equals(d.validationState()));
         if (doc.isEmpty() || doc.get().kind() != expectedKind) {
             return List.of();
         }
@@ -292,9 +302,10 @@ public class PaperQuestionResolver {
     // ── serving law + evidence construction ─────────────────────────────────
 
     /**
-     * The T-C20 learner-serving gate, document branch: a VALIDATED document
-     * serves; a SUGGESTED or REJECTED one never does — identical to the
-     * subject branch of {@code ChunkVectorRepository#searchServingEligible}.
+     * The T-C20 learner-serving gate, branch 2 (knowledge-layer / document
+     * branch — used by the card tier): a VALIDATED document serves; a
+     * SUGGESTED or REJECTED one never does. The paper branch (tier 1) does
+     * NOT go through here — see {@code documentQuestionChunks}.
      */
     private boolean servesUnderServingLaw(Document doc) {
         return "VALIDATED".equals(doc.validationState());

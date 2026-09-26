@@ -62,7 +62,8 @@ class PaperQuestionResolverTest {
     }
 
     @Test
-    @DisplayName("bank anchor: single VALIDATED paper → its QP document's question chunks pin first")
+    @DisplayName("bank anchor: single VALIDATED paper → its QP document's question chunks pin first "
+            + "(branch-1 law: the doc row's SUGGESTED state does not block)")
     void bankAnchoredResolution() {
         ParsedFetchQuery parsed = new ParsedFetchQuery("4CH1/2C", null, "JUN", 2019, 10,
                 null, false, "june 2019 question 10");
@@ -71,7 +72,7 @@ class PaperQuestionResolverTest {
         when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
                 .thenReturn(new FetchResult(parsed, false, false, List.of(paper)));
         UUID rowId = UUID.randomUUID();
-        Document qp = document(rowId, "qp-doc-1", Document.Kind.QUESTION_PAPER, "VALIDATED", "QP.md");
+        Document qp = document(rowId, "qp-doc-1", Document.Kind.QUESTION_PAPER, "SUGGESTED", "QP.md");
         when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-1"))
                 .thenReturn(Optional.of(qp));
         when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(rowId)).thenReturn(List.of(
@@ -87,6 +88,27 @@ class PaperQuestionResolverTest {
         assertThat(pinned.get(0).content()).contains("apparatus a teacher uses");
         assertThat(pinned.get(0).chunkIndex()).isEqualTo(7);
         assertThat(pinned.get(0).documentId()).isEqualTo("qp-doc-1");
+    }
+
+    @Test
+    @DisplayName("serving law: a REJECTED document row never pins, even under a VALIDATED paper")
+    void rejectedBankDocumentNeverServes() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery("4CH1/2C", null, "JUN", 2019, 10,
+                null, false, "june 2019 question 10");
+        FetchPaperHit paper = new FetchPaperHit(UUID.randomUUID(), "4CH1/2C", "June 2019",
+                "JUN", 2019, "VALIDATED", "qp-doc-1", null, null);
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of(paper)));
+        Document qp = document(UUID.randomUUID(), "qp-doc-1", Document.Kind.QUESTION_PAPER,
+                "REJECTED", "QP.md");
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-1"))
+                .thenReturn(Optional.of(qp));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "explain question 10 from june 2019 paper 2", SCOPE);
+
+        assertThat(pinned).isEmpty();
+        verifyNoInteractions(chunks);
     }
 
     @Test
