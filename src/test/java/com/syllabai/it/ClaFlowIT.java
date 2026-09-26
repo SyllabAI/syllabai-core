@@ -235,9 +235,7 @@ class ClaFlowIT {
     void explainAskGrounded() throws Exception {
         seed();
 
-        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null, null , ResponseMode.EXPLAIN,
-                "explain bonding and structure");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null, null, ResponseMode.EXPLAIN, "explain bonding and structure");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.answer()).contains("[1]");
@@ -279,8 +277,7 @@ class ClaFlowIT {
     @DisplayName("SUMMARIZE: mode recorded end to end, plan constrained")
     void summarizeAsk() throws Exception {
         seed();
-        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null, null , ResponseMode.SUMMARIZE, "summarize bonding and structure");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null, null, ResponseMode.SUMMARIZE, "summarize bonding and structure");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().mode()).isEqualTo(ResponseMode.SUMMARIZE);
@@ -296,8 +293,7 @@ class ClaFlowIT {
         // self-contained ask: this test instance has its own freshly-registered
         // learner (JUnit per-method instances), so the rows asserted here are
         // exactly the rows THIS ask produces
-        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, topicId, null, null, null , ResponseMode.EXPLAIN, "explain ionic bonding");
+        ClaAnswerView answer = cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null, null, ResponseMode.EXPLAIN, "explain ionic bonding");
         assertThat(answer.refused()).isFalse();
 
         List<TutorTopicEngagement> rows = engagements
@@ -357,8 +353,7 @@ class ClaFlowIT {
         Integer edgesBefore = jdbc.queryForObject(
                 "select count(*) from knowledge_edges", Integer.class);
 
-        cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null ,
-                ResponseMode.EXPLAIN, "explain bonding and structure again");
+        cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, topicId, null, null, null, null, ResponseMode.EXPLAIN, "explain bonding and structure again");
 
         Integer nodeStatusCountAfter = jdbc.queryForObject(
                 "select count(*) from knowledge_nodes where validation_status = 'VALIDATED'",
@@ -386,18 +381,15 @@ class ClaFlowIT {
 
         // a topic id that exists nowhere in this subject's subtree
         UUID foreign = UUID.randomUUID();
-        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                rootId, foreign, null, null, null , ResponseMode.EXPLAIN, "explain"))
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, foreign, null, null, null, null, ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(NotFoundException.class);
 
         // a root that is not a subject root
-        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                UUID.randomUUID(), topicId, null, null, null , ResponseMode.EXPLAIN, "explain"))
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, UUID.randomUUID(), topicId, null, null, null, null, ResponseMode.EXPLAIN, "explain"))
                 .isInstanceOf(NotFoundException.class);
 
         // an unknown question id → 404 (no question existence oracle)
-        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.PAST_PAPER_QUESTION,
-                null, null, UUID.randomUUID(), null, null , ResponseMode.HINT, "hint me"))
+        assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, UUID.randomUUID(), null, null, null, ResponseMode.HINT, "hint me"))
                 .isInstanceOf(NotFoundException.class);
 
         // unvalidated content is invisible to the CLA — indistinguishable 404,
@@ -406,8 +398,7 @@ class ClaFlowIT {
         jdbc.update("update knowledge_nodes set validation_status = 'SUGGESTED' where id = ?",
                 suggestible);
         try {
-            assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC,
-                    rootId, suggestible, null, null, null , ResponseMode.EXPLAIN, "explain"))
+            assertThatThrownBy(() -> cla.contextualAsk(learnerId, ResourceContext.Kind.KG_TOPIC, rootId, suggestible, null, null, null, null, ResponseMode.EXPLAIN, "explain"))
                     .isInstanceOf(NotFoundException.class)
                     .hasMessageContaining("validated");
         } finally {
@@ -425,9 +416,7 @@ class ClaFlowIT {
         seed();
         // the V7 seed MCQ is servable and topic-mapped; the corpus contains the
         // real canonical mark-scheme fixture chunks the vector side can retrieve
-        ClaAnswerView answer = cla.contextualAsk(freshLearner(),
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
-                ResponseMode.HINT, "give me the mass of calcium carbonate");
+        ClaAnswerView answer = cla.contextualAsk(freshLearner(), ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null, null, ResponseMode.HINT, "give me the mass of calcium carbonate");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().kind()).isEqualTo("PAST_PAPER_QUESTION");
@@ -457,9 +446,7 @@ class ClaFlowIT {
         seed();
         UUID learner = freshLearner();
         int generatorCallsBefore = generator.calls.get();
-        assertThatThrownBy(() -> cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
-                ResponseMode.CHECK, "check my answer"))
+        assertThatThrownBy(() -> cla.contextualAsk(learner, ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null, null, ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
         // the refusal happened BEFORE the generator: no LLM call for this ask
         // (lastContext persists from earlier tests in the shared context, so
@@ -475,9 +462,7 @@ class ClaFlowIT {
         UUID learner = freshLearner();
 
         // pre-attempt: the gate refuses
-        assertThatThrownBy(() -> cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
-                ResponseMode.CHECK, "check my answer"))
+        assertThatThrownBy(() -> cla.contextualAsk(learner, ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null, null, ResponseMode.CHECK, "check my answer"))
                 .isInstanceOf(AttemptRequiredException.class);
 
         // real attempt evidence through the REAL assessment pipeline (Review Hub substrate)
@@ -485,9 +470,7 @@ class ClaFlowIT {
                 SEED_MCQ, SEED_MCQ_CORRECT_OPTION, 20_000L, 4, false, false));
 
         // post-attempt: the gate unlocks
-        ClaAnswerView answer = cla.contextualAsk(learner,
-                ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null ,
-                ResponseMode.CHECK, "check my answer now");
+        ClaAnswerView answer = cla.contextualAsk(learner, ResourceContext.Kind.PAST_PAPER_QUESTION, null, null, SEED_MCQ, null, null, null, ResponseMode.CHECK, "check my answer now");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().attempted()).isTrue();
@@ -579,12 +562,29 @@ class ClaFlowIT {
                 kgBody(rootId, topicId, "WHISPER", "explain bonding"));
         assertThat(badMode.statusCode()).isEqualTo(400);
 
-        // unsupported context kind (closed enum, not served by this runtime) → 400
+        // unsupported context kind (closed enum) → 400: a kind outside the enum
+        // is rejected at binding; NOTE_SECTION is now SERVED, so the enum-closed
+        // probe uses a payload Jackson cannot map to the enum at all
         HttpResponse<String> badKind = post("/api/v1/learners/me/cla/ask", token,
                 """
-                {"kind": "NOTE_SECTION", "mode": "EXPLAIN", "question": "explain"}
+                {"kind": "NOT_A_KIND", "mode": "EXPLAIN", "question": "explain"}
                 """);
         assertThat(badKind.statusCode()).isEqualTo(400);
+
+        // NOTE_SECTION without noteId → 400 (served kind, missing reference)
+        HttpResponse<String> missingNote = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "NOTE_SECTION", "rootId": "%s", "mode": "EXPLAIN", "question": "explain"}
+                """.formatted(rootId));
+        assertThat(missingNote.statusCode()).isEqualTo(400);
+
+        // NOTE_SECTION with an unknown note → 404 (fail-closed, no oracle)
+        HttpResponse<String> unknownNote = post("/api/v1/learners/me/cla/ask", token,
+                """
+                {"kind": "NOTE_SECTION", "rootId": "%s", "noteId": "rn_not_in_corpus",
+                 "mode": "EXPLAIN", "question": "explain"}
+                """.formatted(rootId));
+        assertThat(unknownNote.statusCode()).isEqualTo(404);
 
         // missing reference for the declared kind → 400
         HttpResponse<String> missingRef = post("/api/v1/learners/me/cla/ask", token,
@@ -756,9 +756,7 @@ class ClaFlowIT {
         seedPartQuestion();
         UUID learner = freshLearner();
 
-        ClaAnswerView answer = cla.contextualAsk(learner,
-                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
-                ResponseMode.HINT, "how do I start this part?");
+        ClaAnswerView answer = cla.contextualAsk(learner, ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null, null, ResponseMode.HINT, "how do I start this part?");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().kind()).isEqualTo("QUESTION_PART");
@@ -785,15 +783,11 @@ class ClaFlowIT {
         seedPartQuestion();
 
         // unknown part id → 404, no existence oracle
-        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(),
-                ResourceContext.Kind.QUESTION_PART, null, null, null, UUID.randomUUID(), null ,
-                ResponseMode.HINT, "hint me"))
+        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(), ResourceContext.Kind.QUESTION_PART, null, null, null, UUID.randomUUID(), null, null, ResponseMode.HINT, "hint me"))
                 .isInstanceOf(NotFoundException.class);
 
         // a root that is not a subject root → 404
-        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(),
-                ResourceContext.Kind.QUESTION_PART, UUID.randomUUID(), null, null, partAId, null ,
-                ResponseMode.HINT, "hint me"))
+        assertThatThrownBy(() -> cla.contextualAsk(freshLearner(), ResourceContext.Kind.QUESTION_PART, UUID.randomUUID(), null, null, partAId, null, null, ResponseMode.HINT, "hint me"))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -806,9 +800,7 @@ class ClaFlowIT {
 
         // pre-attempt: the deterministic gate refuses before any generation
         int generatorCallsBefore = generator.calls.get();
-        assertThatThrownBy(() -> cla.contextualAsk(learner,
-                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
-                ResponseMode.CHECK, "check my part answer"))
+        assertThatThrownBy(() -> cla.contextualAsk(learner, ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null, null, ResponseMode.CHECK, "check my part answer"))
                 .isInstanceOf(AttemptRequiredException.class);
         assertThat(generator.calls.get()).isEqualTo(generatorCallsBefore);
 
@@ -823,9 +815,7 @@ class ClaFlowIT {
                 30000L, 4, false, false));
 
         // post-attempt: the gate unlocks and feedback grounds on the PART's points
-        ClaAnswerView answer = cla.contextualAsk(learner,
-                ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null ,
-                ResponseMode.CHECK, "check my part a answer");
+        ClaAnswerView answer = cla.contextualAsk(learner, ResourceContext.Kind.QUESTION_PART, null, null, null, partAId, null, null, ResponseMode.CHECK, "check my part a answer");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().attempted()).isTrue();
@@ -900,9 +890,7 @@ class ClaFlowIT {
         seed();
         UUID learner = freshLearner();
 
-        ClaAnswerView answer = cla.contextualAsk(learner,
-                ResourceContext.Kind.SMART_LESSON, rootId, topicId, null, null, null ,
-                ResponseMode.EXPLAIN, "help me with this lesson");
+        ClaAnswerView answer = cla.contextualAsk(learner, ResourceContext.Kind.SMART_LESSON, rootId, topicId, null, null, null, null, ResponseMode.EXPLAIN, "help me with this lesson");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.context().kind()).isEqualTo("SMART_LESSON");

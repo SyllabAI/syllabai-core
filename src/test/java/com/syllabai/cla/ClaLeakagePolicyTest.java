@@ -31,7 +31,7 @@ class ClaLeakagePolicyTest {
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "Calculate the mass of 0.25 mol CaCO3", "Calculate", 2, "4CH0/1C",
-                attempted, null, null);
+                attempted, null, null, null, null);
     }
 
     private ResourceContext topicContext() {
@@ -41,7 +41,7 @@ class ClaLeakagePolicyTest {
                 new ResourceContext.CurriculumVersionInfo("IAL-CHEM-2018", "Edexcel", "IAL",
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
-                null, null, 0, null, null, null, null);
+                null, null, 0, null, null, null, null, null, null);
     }
 
     /** a SMART_LESSON context: topic-anchored, never assessment content */
@@ -54,7 +54,7 @@ class ClaLeakagePolicyTest {
                 "VALIDATED", LEARNER, Instant.now(),
                 null, null, 0, null, null, null,
                 new ResourceContext.LessonActionInfo("REVIEW_TOPIC", "DUE_REVIEW",
-                        null, null, null, "review due", 3));
+                        null, null, null, "review due", 3), null, null);
     }
 
     private EvidenceItem documentMarkSchemeChunk() {
@@ -151,7 +151,7 @@ class ClaLeakagePolicyTest {
                         "ACTIVE"),
                 "VALIDATED", LEARNER, Instant.now(),
                 "State why ionic compounds conduct when molten.", "State", 2, "4CH0/1C",
-                attempted, "a", null);
+                attempted, "a", null, null, null);
     }
 
     @Test

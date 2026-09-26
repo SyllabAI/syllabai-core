@@ -19,9 +19,12 @@ import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.learner.SmartLessonService;
 import com.syllabai.learner.dto.SmartLessonView;
+import com.syllabai.revisionnotes.RevisionNote;
+import com.syllabai.revisionnotes.RevisionNoteRepository;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -63,6 +66,7 @@ public class ClaContextResolver {
     private final ServableQuestionService servableQuestions;
     private final AttemptRepository attempts;
     private final SmartLessonService smartLessons;
+    private final RevisionNoteRepository revisionNotes;
 
     public ClaContextResolver(KnowledgeGraphService graph,
                               KnowledgeNodeRepository nodes,
@@ -73,7 +77,8 @@ public class ClaContextResolver {
                               QuestionPartRepository questionParts,
                               ServableQuestionService servableQuestions,
                               AttemptRepository attempts,
-                              SmartLessonService smartLessons) {
+                              SmartLessonService smartLessons,
+                              RevisionNoteRepository revisionNotes) {
         this.graph = graph;
         this.nodes = nodes;
         this.subjects = subjects;
@@ -84,6 +89,7 @@ public class ClaContextResolver {
         this.servableQuestions = servableQuestions;
         this.attempts = attempts;
         this.smartLessons = smartLessons;
+        this.revisionNotes = revisionNotes;
     }
 
     /**
@@ -179,7 +185,7 @@ public class ClaContextResolver {
                 node.validationStatus().name(),
                 learnerId,
                 Instant.now(),
-                null, null, 0, null, null, null, null);
+                null, null, 0, null, null, null, null, null, null);
     }
 
     /**
@@ -225,6 +231,54 @@ public class ClaContextResolver {
                 action.actionType().name(), action.reasonCode().name(),
                 action.targetNodeId(), action.targetCode(), action.targetTitle(),
                 action.reasonDetail(), action.servableQuestionCount());
+    }
+
+    /**
+     * Resolve a NOTE_SECTION context (the revision-note reader's anchor, s137).
+     * The client passes the opaque note id (the corpus package's stable
+     * business id, e.g. "rn_2VnK66PqbvFKdKYt"); the server resolves the note
+     * and anchors it to its FIRST spec-point code that resolves to a
+     * VALIDATED curriculum node inside the rooted subject's subtree — the
+     * note is the deterministic anchor (its own sections lead the evidence,
+     * the spec spine joins), which is what makes "the note you are reading"
+     * visible to the CLA.
+     *
+     * <p>Fail-closed discipline identical to the other kinds: unknown note,
+     * note whose spec codes resolve to nothing VALIDATED inside this
+     * subject, and a foreign subject root are all an indistinguishable 404
+     * (no existence oracle, no validation-state oracle — the same contract
+     * §1.2 gate parity as the curriculum spine).</p>
+     */
+    @Transactional(readOnly = true)
+    public ResourceContext resolveNoteSection(UUID rootId, String noteId, UUID learnerId) {
+        if (noteId == null || noteId.isBlank()) {
+            throw new BadRequestException("NOTE_SECTION context requires noteId");
+        }
+        RevisionNote note = revisionNotes.findById(noteId.strip())
+                .orElseThrow(() -> new NotFoundException("revision note", noteId));
+        Subject subject = subjects.findByKnowledgeNodeId(rootId)
+                .orElseThrow(() -> new NotFoundException("curriculum subject root", rootId));
+
+        // the note's spec-point codes are the anchor candidates; the FIRST
+        // code that resolves to a VALIDATED node inside the root's subtree
+        // anchors the context (ordered, deterministic — no best-effort guess;
+        // the spine re-runs the same validation gate for defence in depth)
+        Map<UUID, NodeView> byId = new HashMap<>();
+        collect(graph.tree(rootId), byId);
+        UUID anchor = Arrays.stream(note.specPointCodes().split(","))
+                .map(String::strip)
+                .filter(c -> !c.isEmpty())
+                .flatMap(c -> byId.values().stream()
+                        .filter(n -> c.equals(n.code())
+                                && "VALIDATED".equals(n.validationStatus()))
+                        .map(NodeView::id)
+                        .sorted())
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException(
+                        "revision note anchored in this subject", noteId));
+        return resolveCurriculumNode(rootId, anchor, learnerId,
+                ResourceContext.Kind.NOTE_SECTION, "revision note anchor")
+                .withNote(note.noteId(), note.title());
     }
 
     /**
@@ -417,7 +471,7 @@ public class ClaContextResolver {
                 anchor.paper() != null ? anchor.paper().paperCode() : null,
                 attempted,
                 partLabel,
-                null);
+                null, null, null);
     }
 
     /** resolved question-anchor spine shared by the two assessment kinds */

@@ -50,6 +50,14 @@ import java.util.UUID;
  *                          code, redirect target, honest reason detail). Relevant
  *                          learner state for FRAMING (contract §2.3), never a
  *                          source of educational truth; null on every other kind
+ * @param noteId            NOTE_SECTION contexts: the revision note's stable
+ *                          business id (the corpus package id, e.g.
+ *                          "rn_2VnK66PqbvFKdKYt") — the opaque reference the
+ *                          client passed and the server resolved; null on every
+ *                          other kind
+ * @param noteTitle         NOTE_SECTION contexts: the note's canonical title
+ *                          (provenance for the note-lead evidence); null on
+ *                          every other kind
  */
 public record ResourceContext(
         Kind kind,
@@ -69,7 +77,9 @@ public record ResourceContext(
         String paperCode,
         Boolean attempted,
         String partLabel,
-        LessonActionInfo lessonAction) {
+        LessonActionInfo lessonAction,
+        String noteId,
+        String noteTitle) {
 
     /**
      * The learner's OWN deterministic Smart Lesson decision carried on a
@@ -105,9 +115,10 @@ public record ResourceContext(
      * Closed enum (contract §1) — SPECIFICATION_POINT | KG_TOPIC |
      * NOTE_SECTION | QUESTION_PART | SMART_LESSON | PAST_PAPER_QUESTION,
      * extensible by decision only. Runtime serves KG_TOPIC,
-     * SPECIFICATION_POINT, PAST_PAPER_QUESTION, QUESTION_PART and
-     * SMART_LESSON; the other values name the contract's closed set so
-     * extensions are explicit.
+     * SPECIFICATION_POINT, PAST_PAPER_QUESTION, QUESTION_PART,
+     * SMART_LESSON and NOTE_SECTION (the revision-note reader's anchor:
+     * the note the learner is reading, resolved through its spec-point
+     * codes to a VALIDATED curriculum node).
      */
     public enum Kind {
         SPECIFICATION_POINT,
@@ -143,14 +154,23 @@ public record ResourceContext(
     }
 
     /**
-     * topic-anchored (non-assessment) predicate: KG_TOPIC and SMART_LESSON
-     * share the identical curriculum spine and the identical tutor-parity
-     * evidence rules — a Smart Lesson is a topic-anchored learning context,
-     * NOT assessment content (no §7 leakage boundary of its own, no invented
-     * marking semantics).
+     * topic-anchored (non-assessment) predicate: KG_TOPIC, SMART_LESSON and
+     * NOTE_SECTION share the identical curriculum spine and the identical
+     * tutor-parity evidence rules — a Smart Lesson and a revision note are
+     * topic-anchored learning contexts, NOT assessment content (no §7 leakage
+     * boundary of their own, no invented marking semantics). A note context
+     * additionally LEADS with the note's own sections as deterministic
+     * evidence (what the learner is looking at), exactly like a question
+     * context leads with its stem.
      */
     public boolean isTopicContext() {
-        return kind == Kind.KG_TOPIC || kind == Kind.SMART_LESSON;
+        return kind == Kind.KG_TOPIC || kind == Kind.SMART_LESSON
+                || kind == Kind.NOTE_SECTION;
+    }
+
+    /** note-anchored context predicate (the note-lead evidence branch) */
+    public boolean isNoteContext() {
+        return kind == Kind.NOTE_SECTION;
     }
 
     /**
@@ -162,6 +182,19 @@ public record ResourceContext(
         return new ResourceContext(kind, reference, topicNodeId, rootId, subjectCode,
                 topicCode, topicTitle, curriculumVersion, validationState, learnerId,
                 resolvedAt, questionStem, questionCommandWord, questionMarks,
-                paperCode, attempted, partLabel, lessonAction);
+                paperCode, attempted, partLabel, lessonAction, noteId, noteTitle);
+    }
+
+    /**
+     * Copy of this context with the note identity attached (resolver-internal:
+     * the curriculum spine resolves first — fail-closed through the spec-point
+     * gate — then the note's own identity enriches it for the answer view and
+     * the note-lead evidence).
+     */
+    public ResourceContext withNote(String noteId, String noteTitle) {
+        return new ResourceContext(kind, reference, topicNodeId, rootId, subjectCode,
+                topicCode, topicTitle, curriculumVersion, validationState, learnerId,
+                resolvedAt, questionStem, questionCommandWord, questionMarks,
+                paperCode, attempted, partLabel, lessonAction, noteId, noteTitle);
     }
 }
