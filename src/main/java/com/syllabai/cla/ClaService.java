@@ -121,6 +121,11 @@ public class ClaService {
      *  remainder of spec-structure and fused chunks */
     static final int NOTE_CONTEXT_EVIDENCE_LIMIT = 9;
 
+    /** per-part prompt bound inside the whole-question parts evidence (s129):
+     *  generous enough that a real part prompt rides whole, tight enough that
+     *  a six-part question stays inside the Tutor generator's char budgets */
+    static final int PART_PROMPT_BOUND = 1200;
+
     private final ClaContextResolver resolver;
     private final ClaToolRegistry tools;
     private final KnowledgeGraphService graph;
@@ -329,6 +334,12 @@ public class ClaService {
         // fusion pool (fusion keys on node/chunk identity; the anchored stem and
         // the question's own scheme points are id-anchored, not similarity-anchored):
         //   [stem (always — what the learner is looking at)]
+        //   [+ the question's OWN part prompts, whole-question contexts only
+        //    (s129: the SME corpus carries most structured questions' text in
+        //     the parts, not the stem — 394/692 stems are blank — so the
+        //     whole-question anchor serves stem + every part prompt, exactly
+        //     what the learner's card shows; part contexts already carry their
+        //     own prompt in the stem slot)]
         //   [+ the learner's OWN submitted answers (§7.3 CHECK feedback: the
         //    mode's stated job is to review the learner's submitted work —
         //    part-scoped on QUESTION_PART, latest attempt, resolved by ids)]
@@ -337,6 +348,12 @@ public class ClaService {
         if (context.isQuestionContext()) {
             List<EvidenceItem> lead = new ArrayList<>();
             lead.add(questionStemEvidence(context));
+            if (!context.isQuestionPartContext()) {
+                EvidenceItem partsEvidence = questionPartsEvidence(context);
+                if (partsEvidence != null) {
+                    lead.add(partsEvidence);
+                }
+            }
             if (ClaLeakagePolicy.schemePointEvidenceAllowed(context, mode)) {
                 EvidenceItem workEvidence = learnerWorkEvidence(context);
                 if (workEvidence != null) {
@@ -429,13 +446,35 @@ public class ClaService {
                                         ? "anchored Smart Lesson on topic " + context.topicCode()
                                         : "anchored topic " + context.topicCode();
         return switch (mode) {
-            case EXPLAIN -> new TutorPolicyService.InterventionPlan(
-                    policyPlan.type(),
-                    "CLA EXPLAIN mode on the " + anchored + " — " + policyPlan.rationale(),
-                    List.of("Teach the anchored concept from the numbered SOURCES, citing [n] where used.",
-                            "Stay within the anchored topic and its prerequisites.",
-                            "Use the learner brief to choose framing; never reveal internal "
-                                    + "probabilities, model names or diagnostic rules."));
+            case EXPLAIN -> context.isQuestionContext()
+                    // question contexts: DECODE the question, never answer it —
+                    // the exam-questions "Understand" quick action (s129). The
+                    // generic teach-the-concept plan would treat an anchored
+                    // question like a topic and could legitimately state the
+                    // expected answer; decoding has HINT's leak discipline.
+                    ? new TutorPolicyService.InterventionPlan(
+                            policyPlan.type(),
+                            "CLA EXPLAIN mode on the " + anchored + " — question decoding "
+                                    + "(decode-only: what is being asked, never the answer)",
+                            List.of("Decode what the anchored question and each of its parts "
+                                            + "(as served in the SOURCES) is asking: the "
+                                            + "command word, the marks and what the examiner "
+                                            + "wants, part by part.",
+                                    "Never state, narrow or rule out the expected answer — no "
+                                            + "candidate answers, no eliminations, no 'not just "
+                                            + "X' steering (the same discipline as HINT, pre- "
+                                            + "and post-attempt).",
+                                    "Stay within the anchored topic and its prerequisites.",
+                                    "Use the learner brief to choose framing; never reveal "
+                                            + "internal probabilities, model names or "
+                                            + "diagnostic rules."))
+                    : new TutorPolicyService.InterventionPlan(
+                            policyPlan.type(),
+                            "CLA EXPLAIN mode on the " + anchored + " — " + policyPlan.rationale(),
+                            List.of("Teach the anchored concept from the numbered SOURCES, citing [n] where used.",
+                                    "Stay within the anchored topic and its prerequisites.",
+                                    "Use the learner brief to choose framing; never reveal internal "
+                                            + "probabilities, model names or diagnostic rules."));
             case SUMMARIZE -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
                     "CLA SUMMARIZE mode on the " + anchored + " — " + policyPlan.rationale(),
@@ -691,6 +730,49 @@ public class ClaService {
         return new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER, anchored,
                 null, null, null, null, null, null, null, null, null, null, null,
                 List.of(), List.of(context.topicNodeId()), 1.0, 0.0, null);
+    }
+
+    /**
+     * Whole-question lead evidence: the anchored question's OWN part prompts,
+     * joined in serving order (s129). The SME corpus carries most structured
+     * questions' text in the parts — 394 of 692 active structured questions
+     * have a blank stem — so a whole-question anchor that served only the stem
+     * would ground the model on a question it cannot read. This is still
+     * exactly §2.1 ("what the learner is looking at"): the card shows the stem
+     * AND every part prompt, all of it question-paper text the learner already
+     * sees pre-attempt. Id-anchored through the canonical FK chain (reference
+     * → current version → parts), never retrieval — the parts cannot be
+     * crowded out, and no mark-scheme material rides along (scheme points are
+     * a separate evidence item, gated by {@link ClaLeakagePolicy}). Part-level
+     * contexts do NOT get this item: they carry their own prompt in the stem
+     * slot, and sibling parts are not what that anchor is about. Each prompt is
+     * bounded so a six-part question stays inside the generation budget.
+     */
+    private EvidenceItem questionPartsEvidence(ResourceContext context) {
+        return questionVersions.findByQuestionIdOrderByVersionDesc(context.reference())
+                .stream().findFirst()
+                .map(v -> questionParts.findByQuestionVersionIdOrderByOrdering(v.id()))
+                .filter(parts -> !parts.isEmpty())
+                .map(parts -> parts.stream()
+                        .map(p -> "(" + p.label() + ") (" + p.marks()
+                                + (p.marks() == 1 ? " mark)" : " marks)")
+                                + (p.commandWord() != null ? " " + p.commandWord() + ":" : "")
+                                + " " + boundPartPrompt(p.prompt()))
+                        .collect(java.util.stream.Collectors.joining("\n")))
+                .map(joined -> new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER,
+                        "Question parts:\n" + joined,
+                        null, null, null, null, null, null, null, null, null, null, null,
+                        List.of(), List.of(context.topicNodeId()), 1.0, 0.0, null))
+                .orElse(null);
+    }
+
+    /** generation-budget bound for one part prompt inside the parts evidence */
+    private static String boundPartPrompt(String prompt) {
+        if (prompt == null) {
+            return "";
+        }
+        return prompt.length() <= PART_PROMPT_BOUND ? prompt
+                : prompt.substring(0, PART_PROMPT_BOUND) + " …";
     }
 
     /**
