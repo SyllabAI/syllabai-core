@@ -3,6 +3,7 @@ package com.syllabai.tutor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -108,7 +109,9 @@ class PaperQuestionResolverTest {
                 "explain question 10 from june 2019 paper 2", SCOPE);
 
         assertThat(pinned).isEmpty();
-        verifyNoInteractions(chunks);
+        // the card + content-store anchors still probe; no chunk row may load
+        verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -124,7 +127,9 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve("explain question 10 june 2019", SCOPE);
 
         assertThat(pinned).isEmpty();
-        verifyNoInteractions(chunks);
+        // the content-store anchor still probes; no chunk row may load
+        verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -208,7 +213,9 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve("jan 2022 1C question 4", SCOPE);
 
         assertThat(pinned).isEmpty();
-        verifyNoInteractions(chunks);
+        // the content-store anchor still probes (identity bindable); no chunk row may load
+        verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -235,5 +242,181 @@ class PaperQuestionResolverTest {
 
         assertThat(pinned).isEmpty();
         verifyNoInteractions(documents, chunks);
+    }
+
+    // ── tier 2b: content-store paper anchor ───────────────────────────────
+
+    @Test
+    @DisplayName("content-store companion: the bound identity's real QP/MS chunks pin after the card")
+    void contentStoreCompanionPinsQpAndMsAfterCard() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JAN", 2022, 4,
+                null, true, "give me the answer of jan 2022 question 4 paper 1");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID cardRow = UUID.randomUUID();
+        Document card = document(cardRow, "qcard-doc-1", Document.Kind.EXTERNAL_QUESTIONS,
+                "VALIDATED", "qcard-4CH1-1C-JAN-2022.txt");
+        when(documents.findTopByFileNameOrderByDocVersionDesc("qcard-4CH1-1C-JAN-2022.txt"))
+                .thenReturn(Optional.of(card));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(cardRow)).thenReturn(List.of(
+                chunk(0, "Question 4 — percentage of oxygen (8 marks)", "q4")));
+
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2022,
+                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-9", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-9", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-9")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-9")).thenReturn(Optional.of(ms));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(3, "Q3 states of matter", "3"),
+                chunk(4, "Q4 — percentage of oxygen in a gaseous mixture", "4"),
+                chunk(5, "Q4 — suggest one reason why the percentage may not be accurate", "4"),
+                chunk(6, "Q5 isotopes", "5")));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(3, "Mark scheme for Question 3", "3"),
+                chunk(4, "Q4 P1: heat the copper / Q4 P3: copper(II) oxide", "4"),
+                chunk(5, "Q4 P5: leak in the apparatus / (20÷253)×100 = 7.9%", "4"),
+                chunk(6, "Mark scheme for Question 5", "5")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "give me the answer of jan 2022 question 4 paper 1", SCOPE);
+
+        assertThat(pinned).hasSize(5);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(1).documentId()).isEqualTo("qp-doc-9");
+        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(3).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(3).documentId()).isEqualTo("ms-doc-9");
+        assertThat(pinned.get(3).content()).contains("copper(II) oxide");
+        assertThat(pinned.get(4).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(4).content()).contains("7.9%");
+    }
+
+    @Test
+    @DisplayName("serving law at the store: a SUGGESTED content-store MS never pins")
+    void suggestedContentStoreDocumentNeverPins() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JAN", 2022, 4,
+                null, true, "give me the answer of jan 2022 question 4 paper 1");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID cardRow = UUID.randomUUID();
+        Document card = document(cardRow, "qcard-doc-1", Document.Kind.EXTERNAL_QUESTIONS,
+                "VALIDATED", "qcard-4CH1-1C-JAN-2022.txt");
+        when(documents.findTopByFileNameOrderByDocVersionDesc("qcard-4CH1-1C-JAN-2022.txt"))
+                .thenReturn(Optional.of(card));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(cardRow)).thenReturn(List.of(
+                chunk(0, "Question 4 — percentage of oxygen (8 marks)", "q4")));
+
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2022,
+                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-9", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-9", Document.Kind.MARK_SCHEME, "SUGGESTED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-9")).thenReturn(Optional.of(qp));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(4, "Q4 — percentage of oxygen in a gaseous mixture", "4"),
+                chunk(5, "Q4 — suggest one reason why the percentage may not be accurate", "4")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "give me the answer of jan 2022 question 4 paper 1", SCOPE);
+
+        assertThat(pinned).hasSize(3);   // card + 2 QP; the SUGGESTED MS is invisible
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(msRow);
+    }
+
+    @Test
+    @DisplayName("a superseded version row never pins — the top version does")
+    void staleVersionRowNeverPins() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2022, 4,
+                null, true, "jan 2022 1C question 4");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+        UUID staleRow = UUID.randomUUID();
+        Document stale = document(staleRow, "qp-doc-9", Document.Kind.QUESTION_PAPER,
+                "VALIDATED", "qp.pdf");
+        Document top = document(UUID.randomUUID(), "qp-doc-9", Document.Kind.QUESTION_PAPER,
+                "VALIDATED", "qp.pdf");
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2022, List.of("4CH1/1C", "4CH0/1C")))
+                .thenReturn(List.<Object[]>of(new Object[]{staleRow, "4CH1/1C"}));
+        when(documents.findById(staleRow)).thenReturn(Optional.of(stale));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-9"))
+                .thenReturn(Optional.of(top));
+
+        List<EvidenceItem> pinned = resolver.resolve("jan 2022 1C question 4", SCOPE);
+
+        assertThat(pinned).isEmpty();
+        verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(staleRow);
+    }
+
+    @Test
+    @DisplayName("content-store anchor works without a card — identity alone pins the QP/MS")
+    void contentStorePinsWithoutCard() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JAN", 2022, 4,
+                null, true, "give me the answer of jan 2022 question 4 paper 1");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenReturn(Optional.empty());
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2022,
+                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-9", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-9", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-9")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-9")).thenReturn(Optional.of(ms));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(4, "Q4 — percentage of oxygen in a gaseous mixture", "4"),
+                chunk(5, "Q4 — suggest one reason why the percentage may not be accurate", "4")));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(4, "Q4 P1: heat the copper / Q4 P3: copper(II) oxide", "4"),
+                chunk(5, "Q4 P5: leak in the apparatus / (20÷253)×100 = 7.9%", "4")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "give me the answer of jan 2022 question 4 paper 1", SCOPE);
+
+        assertThat(pinned).hasSize(4);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+    }
+
+    @Test
+    @DisplayName("identity miss: no content-store document carries the bound identity → card-only")
+    void identityMissLeavesCardOnly() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JAN", 2022, 4,
+                null, true, "give me the answer of jan 2022 question 4 paper 1");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID cardRow = UUID.randomUUID();
+        Document card = document(cardRow, "qcard-doc-1", Document.Kind.EXTERNAL_QUESTIONS,
+                "VALIDATED", "qcard-4CH1-1C-JAN-2022.txt");
+        when(documents.findTopByFileNameOrderByDocVersionDesc("qcard-4CH1-1C-JAN-2022.txt"))
+                .thenReturn(Optional.of(card));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(cardRow)).thenReturn(List.of(
+                chunk(0, "Question 4 — percentage of oxygen (8 marks)", "q4")));
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2022,
+                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
+                .thenReturn(List.of());
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "give me the answer of jan 2022 question 4 paper 1", SCOPE);
+
+        assertThat(pinned).hasSize(1);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
     }
 }
