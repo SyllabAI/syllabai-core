@@ -66,6 +66,12 @@ public class ClaController {
      * @param specCode    SPECIFICATION_POINT: the spec-point code the learner is
      *                    reading (e.g. "4CH1-1.18") — resolved server-side,
      *                    subject-isolated, VALIDATED-only
+     * @param noteId      NOTE_SECTION: the revision note the learner is reading
+     *                    (the corpus package's stable business id, e.g.
+     *                    "rn_2VnK66PqbvFKdKYt") — resolved server-side through
+     *                    its spec-point codes; the note's own sections lead the
+     *                    evidence (what the learner is looking at is always
+     *                    evidence, the question-stem pattern)
      * @param mode        explicit ResponseMode (EXPLAIN | SUMMARIZE | HINT |
      *                    CHECK); unknown values fail 400
      * @param question    the learner's question within the anchored context
@@ -77,6 +83,7 @@ public class ClaController {
             UUID questionId,
             UUID partId,
             @Size(max = 80) String specCode,
+            @Size(max = 256) String noteId,
             @NotNull ResponseMode mode,
             @NotBlank @Size(max = 2000) String question) {
     }
@@ -89,6 +96,6 @@ public class ClaController {
         }
         return cla.contextualAsk(learnerId, request.kind(), request.rootId(),
                 request.topicNodeId(), request.questionId(), request.partId(),
-                request.specCode(), request.mode(), request.question());
+                request.specCode(), request.noteId(), request.mode(), request.question());
     }
 }

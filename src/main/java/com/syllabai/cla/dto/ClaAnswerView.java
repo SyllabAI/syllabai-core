@@ -48,7 +48,9 @@ public record ClaAnswerView(
             String paperCode,
             Boolean attempted,
             String partLabel,
-            LessonActionView lessonAction) {
+            LessonActionView lessonAction,
+            String noteId,
+            String noteTitle) {
 
         public static ContextView of(ResourceContext context, ResponseMode mode) {
             return new ContextView(
@@ -60,7 +62,8 @@ public record ClaAnswerView(
                     context.validationState(), mode,
                     context.questionStem(), context.questionCommandWord(),
                     context.questionMarks(), context.paperCode(), context.attempted(),
-                    context.partLabel(), lessonActionOf(context.lessonAction()));
+                    context.partLabel(), lessonActionOf(context.lessonAction()),
+                    context.noteId(), context.noteTitle());
         }
 
         private static LessonActionView lessonActionOf(ResourceContext.LessonActionInfo a) {

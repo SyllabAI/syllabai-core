@@ -55,10 +55,12 @@ class ClaContextResolverTest {
     private final QuestionPartRepository questionParts = mock(QuestionPartRepository.class);
     private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final SmartLessonService smartLessons = mock(SmartLessonService.class);
+    private final com.syllabai.revisionnotes.RevisionNoteRepository revisionNotes =
+            mock(com.syllabai.revisionnotes.RevisionNoteRepository.class);
 
     private final ClaContextResolver resolver = new ClaContextResolver(graph, nodes, subjects,
             questions, examPapers, questionVersions, questionParts, servableQuestions, attempts,
-            smartLessons);
+            smartLessons, revisionNotes);
 
     private CurriculumVersion version;
 
@@ -178,6 +180,54 @@ class ClaContextResolverTest {
     void unknownSpecCodeFailsClosed() {
         assertThatThrownBy(() -> resolver.resolveSpecificationPoint(
                 ROOT, "IALCHEM2018-U1-T99", LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // ── NOTE_SECTION: the revision-note reader's anchor ──────────────────────
+
+    @Test
+    @DisplayName("NOTE_SECTION resolves the note and anchors it on its spec-point code")
+    void resolvesNoteSectionThroughItsSpecCode() {
+        com.syllabai.revisionnotes.RevisionNote note =
+                org.mockito.Mockito.mock(com.syllabai.revisionnotes.RevisionNote.class);
+        when(note.noteId()).thenReturn("rn_abc123");
+        when(note.title()).thenReturn("Ionic bonding");
+        when(note.specPointCodes()).thenReturn("IALCHEM2018-U1-T9,IALCHEM2018-U1-T3");
+        when(revisionNotes.findById("rn_abc123")).thenReturn(Optional.of(note));
+
+        ResourceContext context = resolver.resolveNoteSection(ROOT, "rn_abc123", LEARNER);
+
+        assertThat(context.kind()).isEqualTo(ResourceContext.Kind.NOTE_SECTION);
+        // the FIRST spec code that resolves anchors the topic (ordered, deterministic)
+        assertThat(context.topicNodeId()).isEqualTo(TOPIC);
+        assertThat(context.topicCode()).isEqualTo("IALCHEM2018-U1-T3");
+        assertThat(context.noteId()).isEqualTo("rn_abc123");
+        assertThat(context.noteTitle()).isEqualTo("Ionic bonding");
+        assertThat(context.isTopicContext()).isTrue();
+        assertThat(context.isQuestionContext()).isFalse();
+        assertThat(context.validationState()).isEqualTo("VALIDATED");
+    }
+
+    @Test
+    @DisplayName("NOTE_SECTION fail-closed: unknown note is a 404")
+    void unknownNoteFailsClosed() {
+        assertThatThrownBy(() -> resolver.resolveNoteSection(
+                ROOT, "rn_does_not_exist", LEARNER))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("NOTE_SECTION fail-closed: a note whose codes anchor nothing VALIDATED "
+            + "in this subject is a 404 (indistinguishable from unknown)")
+    void unanchoredNoteFailsClosed() {
+        com.syllabai.revisionnotes.RevisionNote note =
+                org.mockito.Mockito.mock(com.syllabai.revisionnotes.RevisionNote.class);
+        when(note.noteId()).thenReturn("rn_foreign");
+        when(note.title()).thenReturn("Foreign note");
+        when(note.specPointCodes()).thenReturn("WCH11-T1.1,NOPE-1");
+        when(revisionNotes.findById("rn_foreign")).thenReturn(Optional.of(note));
+
+        assertThatThrownBy(() -> resolver.resolveNoteSection(ROOT, "rn_foreign", LEARNER))
                 .isInstanceOf(NotFoundException.class);
     }
 

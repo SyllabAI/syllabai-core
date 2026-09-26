@@ -14,6 +14,10 @@ import com.syllabai.cla.ClaToolRegistry.RelatedConcepts;
 import com.syllabai.cla.ClaToolRegistry.Tool;
 import com.syllabai.cla.ClaToolRegistry.ToolResultWith;
 import com.syllabai.cla.dto.ClaAnswerView;
+import com.syllabai.content.Document;
+import com.syllabai.content.DocumentChunk;
+import com.syllabai.content.DocumentChunkRepository;
+import com.syllabai.content.DocumentRepository;
 import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.curriculum.CurriculumVersion;
 import com.syllabai.curriculum.Subject;
@@ -103,6 +107,20 @@ public class ClaService {
      */
     static final int SPEC_STRUCTURE_LIMIT = 4;
 
+    /** corpus convention: the note's content document is filed as
+     *  "sme-note-{noteId}.txt" (EXTERNAL_NOTES) — the id-anchored path to the
+     *  note's own chunked sections, independent of any embedding/ranking */
+    static final String NOTE_DOCUMENT_FILE_PREFIX = "sme-note-";
+
+    /** note-lead evidence: the note's own sections, capped (the note is the
+     *  anchor — its sections are bounded by the corpus chunking, and the
+     *  Tutor generator's per-source/total char budgets truncate gracefully) */
+    static final int NOTE_CHUNK_LIMIT = 6;
+
+    /** NOTE_SECTION total evidence cap: the note's own sections + a bounded
+     *  remainder of spec-structure and fused chunks */
+    static final int NOTE_CONTEXT_EVIDENCE_LIMIT = 9;
+
     private final ClaContextResolver resolver;
     private final ClaToolRegistry tools;
     private final KnowledgeGraphService graph;
@@ -120,6 +138,8 @@ public class ClaService {
     private final CitationResolver citationResolver;
     private final TutorPolicyService policy;
     private final ApplicationEventPublisher events;
+    private final DocumentRepository documents;
+    private final DocumentChunkRepository documentChunks;
 
     private final int vectorCandidates;
     private final int evidenceLimit;
@@ -141,6 +161,8 @@ public class ClaService {
                       CitationResolver citationResolver,
                       TutorPolicyService policy,
                       ApplicationEventPublisher events,
+                      DocumentRepository documents,
+                      DocumentChunkRepository documentChunks,
                       @Value("${syllabai.cla.vector-candidates:12}") int vectorCandidates,
                       @Value("${syllabai.cla.evidence-limit:6}") int evidenceLimit) {
         this.resolver = resolver;
@@ -160,6 +182,8 @@ public class ClaService {
         this.citationResolver = citationResolver;
         this.policy = policy;
         this.events = events;
+        this.documents = documents;
+        this.documentChunks = documentChunks;
         this.vectorCandidates = Math.max(1, vectorCandidates);
         this.evidenceLimit = Math.max(1, evidenceLimit);
     }
@@ -177,13 +201,17 @@ public class ClaService {
      *                    question's CURRENT validated version
      * @param specCode    opaque reference (SPECIFICATION_POINT): the spec-point code the
      *                    learner is reading (e.g. "4CH1-1.18") — server resolves it
+     * @param noteId      opaque reference (NOTE_SECTION): the revision note the learner
+     *                    is reading (the corpus package's stable business id, e.g.
+     *                    "rn_2VnK66PqbvFKdKYt") — server resolves it through its
+     *                    spec-point codes; the note's own sections lead the evidence
      * @param mode        explicit response mode (contract §3)
      * @param question    the learner's question within the anchored context
      */
     public ClaAnswerView contextualAsk(UUID learnerId, ResourceContext.Kind kind,
                                        UUID rootId, UUID topicNodeId, UUID questionId,
-                                       UUID partId, String specCode, ResponseMode mode,
-                                       String question) {
+                                       UUID partId, String specCode, String noteId,
+                                       ResponseMode mode, String question) {
         if (learnerId == null) {
             throw new IllegalArgumentException("learnerId is required on the CLA surface");
         }
@@ -208,6 +236,13 @@ public class ClaService {
                             "SPECIFICATION_POINT context requires rootId");
                 }
                 yield resolver.resolveSpecificationPoint(rootId, specCode, learnerId);
+            }
+            case NOTE_SECTION -> {
+                if (rootId == null || noteId == null || noteId.isBlank()) {
+                    throw new BadRequestException(
+                            "NOTE_SECTION context requires rootId and noteId");
+                }
+                yield resolver.resolveNoteSection(rootId, noteId, learnerId);
             }
             case SMART_LESSON -> {
                 if (rootId == null || topicNodeId == null) {
@@ -316,6 +351,21 @@ public class ClaService {
             evidence = List.copyOf(lead.subList(0, Math.min(lead.size(), evidenceLimit)));
         }
 
+        // NOTE_SECTION contexts lead with the note's OWN chunked sections,
+        // deterministically ordered — the exact question-stem pattern applied
+        // to the notes surface: what the learner is looking at is always
+        // evidence, id-anchored (never similarity-anchored — the note cannot
+        // lose its own evidence to a generic question's cosine ranking). The
+        // anchored topic + spec structure + fused chunks then fill the
+        // remainder of a note-sized cap. This is what makes "the note you are
+        // reading" visible to the CLA (s137).
+        if (context.isNoteContext()) {
+            List<EvidenceItem> lead = new ArrayList<>(noteSectionEvidence(context));
+            lead.addAll(evidence);
+            evidence = List.copyOf(lead.subList(0,
+                    Math.min(lead.size(), noteEvidenceLimit())));
+        }
+
         // 5. grounding gate → mode-constrained grounded generation (Tutor stack)
         TutorGenerator.GeneratedAnswer generated;
         boolean refused = evidence.isEmpty();
@@ -372,9 +422,12 @@ public class ClaService {
                         + context.topicCode()
                 : context.isQuestionContext()
                         ? "anchored question on topic " + context.topicCode()
-                        : context.kind() == ResourceContext.Kind.SMART_LESSON
-                                ? "anchored Smart Lesson on topic " + context.topicCode()
-                                : "anchored topic " + context.topicCode();
+                        : context.isNoteContext()
+                                ? "anchored revision note '" + context.noteTitle()
+                                        + "' on topic " + context.topicCode()
+                                : context.kind() == ResourceContext.Kind.SMART_LESSON
+                                        ? "anchored Smart Lesson on topic " + context.topicCode()
+                                        : "anchored topic " + context.topicCode();
         return switch (mode) {
             case EXPLAIN -> new TutorPolicyService.InterventionPlan(
                     policyPlan.type(),
@@ -638,6 +691,52 @@ public class ClaService {
         return new EvidenceItem(EvidenceItem.EvidenceSource.QUESTION_PAPER, anchored,
                 null, null, null, null, null, null, null, null, null, null, null,
                 List.of(), List.of(context.topicNodeId()), 1.0, 0.0, null);
+    }
+
+    /**
+     * NOTE_SECTION lead evidence: the note's OWN chunked sections from the
+     * content store, id-anchored and deterministically ordered (chunk index),
+     * capped at {@link #NOTE_CHUNK_LIMIT}. The note the learner is reading is
+     * the anchor — its sections are evidence regardless of how the question
+     * text ranks against the whole curriculum's chunks (the failure mode of
+     * the similarity-only path: a generic "Summarise the key points" cannot
+     * lose the note it is about). Each section carries real chunk provenance
+     * (document row, chunk id, index) so citations resolve exactly like
+     * retrieved chunks — "Revision notes", deep-linked. Honest empty list
+     * when the note has no chunked document (the spec-anchored evidence pool
+     * still serves the ask; logged, never silent).
+     */
+    private List<EvidenceItem> noteSectionEvidence(ResourceContext context) {
+        String fileName = NOTE_DOCUMENT_FILE_PREFIX + context.noteId() + ".txt";
+        List<DocumentChunk> sections = documents
+                .findTopByFileNameOrderByDocVersionDesc(fileName)
+                .map(Document::id)
+                .map(documentChunks::findByDocumentRowIdOrderByChunkIndexAsc)
+                .orElse(List.of());
+        if (sections.isEmpty()) {
+            log.warn("note {} has no chunked content document ({} sections=0) — "
+                    + "evidence falls back to the spec-anchored pool",
+                    context.noteId(), fileName);
+            return List.of();
+        }
+        return sections.stream()
+                .limit(NOTE_CHUNK_LIMIT)
+                .map(chunk -> EvidenceItem.fromChunk(
+                        chunk.documentRowId(),
+                        NOTE_DOCUMENT_FILE_PREFIX + context.noteId(),
+                        documents.findById(chunk.documentRowId())
+                                .map(Document::docVersion).orElse(1),
+                        chunk.id(), chunk.chunkIndex(),
+                        chunk.kind() != null ? chunk.kind().name() : "EXTERNAL_NOTES",
+                        chunk.content(), chunk.pageStart(), chunk.pageEnd(),
+                        chunk.elementIds(), chunk.embeddingModel(), 1.0))
+                .map(item -> item.withTopicIds(List.of(context.topicNodeId())))
+                .toList();
+    }
+
+    /** NOTE_SECTION total cap (note sections + the bounded remainder) */
+    private int noteEvidenceLimit() {
+        return Math.max(evidenceLimit, NOTE_CONTEXT_EVIDENCE_LIMIT);
     }
 
     /**
