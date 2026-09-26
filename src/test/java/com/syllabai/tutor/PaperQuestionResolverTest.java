@@ -58,7 +58,7 @@ class PaperQuestionResolverTest {
     private static DocumentChunk chunk(int index, String content, String atomNumber) {
         return new DocumentChunk(UUID.randomUUID(), index, content, 3, 3, List.of(),
                 40, new com.syllabai.content.ChunkMetadata(Document.Kind.EXTERNAL_QUESTIONS,
-                        null, "JAN", 2022, "1C", atomNumber, List.of()));
+                        null, "JAN", 2022, "1C", atomNumber, List.<String>of(), 1));
     }
 
     @Test
