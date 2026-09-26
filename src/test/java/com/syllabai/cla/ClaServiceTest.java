@@ -531,6 +531,103 @@ class ClaServiceTest {
     }
 
     @Test
+    @DisplayName("EXPLAIN on a question context is DECODE-ONLY (exam-questions Understand): never the answer; topic contexts keep the teach plan")
+    void explainOnQuestionContextIsDecodeOnly() {
+        ResourceContext questionContext = new ResourceContext(
+                ResourceContext.Kind.PAST_PAPER_QUESTION, UUID.randomUUID(), TOPIC, ROOT, "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and structure",
+                new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                "This question is about rusting.", "Name", 4, "4CH0/1C", false, null, null, null, null);
+        TutorPolicyService.InterventionPlan base = new TutorPolicyService.InterventionPlan(
+                TutorPolicyService.InterventionType.EXPLANATION, "no signal", List.of("base"));
+
+        var decode = ClaService.modePlan(ResponseMode.EXPLAIN, questionContext, base);
+        assertThat(decode.rationale())
+                .contains("CLA EXPLAIN mode")
+                .contains("question decoding");
+        // THE INVARIANT: the decode plan carries HINT's leak discipline
+        assertThat(decode.actions()).anySatisfy(a -> assertThat(a)
+                .contains("Never state, narrow or rule out the expected answer"));
+        assertThat(decode.actions()).anySatisfy(a -> assertThat(a)
+                .contains("command word"));
+
+        // topic/note contexts keep the teach-the-concept plan, unchanged
+        var teach = ClaService.modePlan(ResponseMode.EXPLAIN, context, base);
+        assertThat(teach.rationale()).doesNotContain("question decoding");
+        assertThat(teach.actions()).noneSatisfy(a -> assertThat(a)
+                .contains("Never state, narrow or rule out"));
+        assertThat(teach.actions()).anySatisfy(a -> assertThat(a)
+                .contains("Teach the anchored concept"));
+    }
+
+    @Test
+    @DisplayName("whole-question anchor: the current version's part prompts ride the lead evidence (blank stems are the corpus norm)")
+    void wholeQuestionPartsRideTheAnchorEvidence() {
+        // the SME corpus norm: a BLANK stem, all question text in the parts
+        ResourceContext questionContext = new ResourceContext(
+                ResourceContext.Kind.PAST_PAPER_QUESTION, UUID.randomUUID(), TOPIC, ROOT, "4CH1",
+                "IALCHEM2018-U1-T3", "Bonding and structure",
+                new ResourceContext.CurriculumVersionInfo("IALCHEM2018", "Edexcel", "IAL", "ACTIVE"),
+                "VALIDATED", LEARNER, Instant.now(),
+                "", null, 4, "4CH0/1C", false, null, null, null, null);
+        when(resolver.resolvePastPaperQuestion(any(), eq(LEARNER))).thenReturn(questionContext);
+        when(tools.enabledFor(ResourceContext.Kind.PAST_PAPER_QUESTION, ResponseMode.EXPLAIN))
+                .thenReturn(List.of(ClaToolRegistry.Tool.values()));
+        when(tools.specificationContext(eq(questionContext), any())).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_SPECIFICATION_CONTEXT, "args",
+                        List.of(new SpecAnchor(ROOT, "IALCHEM2018", "SUBJECT",
+                                "IAL Chemistry", 0))));
+        when(tools.relatedConcepts(questionContext)).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_RELATED_CONCEPTS, "args",
+                        new RelatedConcepts(List.of(), List.of())));
+        when(tools.learnerState(eq(LEARNER), any())).thenReturn(
+                new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
+                        new OwnLearnerState(List.of(), List.of())));
+        vectorReturns(chunkEvidence("plain validated chunk"));
+
+        QuestionVersion version = org.mockito.Mockito.mock(QuestionVersion.class);
+        when(questionVersions.findByQuestionIdOrderByVersionDesc(questionContext.reference()))
+                .thenReturn(List.of(version));
+        com.syllabai.assessment.QuestionPart partA =
+                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionPart.class);
+        when(partA.label()).thenReturn("a");
+        when(partA.prompt()).thenReturn("Name the two substances needed for iron to rust.");
+        when(partA.marks()).thenReturn(2);
+        when(partA.commandWord()).thenReturn("Name");
+        com.syllabai.assessment.QuestionPart partB =
+                org.mockito.Mockito.mock(com.syllabai.assessment.QuestionPart.class);
+        when(partB.label()).thenReturn("b");
+        when(partB.prompt()).thenReturn("Give the chemical name for rust.");
+        when(partB.marks()).thenReturn(1);
+        when(partB.commandWord()).thenReturn("Give");
+        when(questionParts.findByQuestionVersionIdOrderByOrdering(version.id()))
+                .thenReturn(List.of(partA, partB));
+
+        service.contextualAsk(LEARNER, ResourceContext.Kind.PAST_PAPER_QUESTION, null, null,
+                questionContext.reference(), null, null, null, ResponseMode.EXPLAIN,
+                "What is this question asking me to do?");
+
+        ArgumentCaptor<ContextAssembler.TutorContext> seen =
+                ArgumentCaptor.forClass(ContextAssembler.TutorContext.class);
+        verify(generator).generate(any(), seen.capture());
+        List<EvidenceItem> evidence = seen.getValue().evidence();
+        // the anchor slot still leads (the blank-stem item), then THE INVARIANT:
+        // the parts item rides the lead id-anchored — labels, marks, prompts
+        assertThat(evidence.get(0).source())
+                .isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(evidence.get(1).source())
+                .isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(evidence.get(1).content())
+                .contains("Question parts:")
+                .contains("(a) (2 marks) Name: Name the two substances needed for iron to rust.")
+                .contains("(b) (1 mark) Give: Give the chemical name for rust.");
+        // and the mark scheme NEVER rides a pre-attempt EXPLAIN (leakage gate)
+        assertThat(evidence).noneSatisfy(item -> assertThat(item.source())
+                .isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME));
+    }
+
+    @Test
     @DisplayName("request shape: missing required references are the established 400s (closed enum)")
     void missingReferencesFailClosed() {
         assertThatThrownBy(() -> service.contextualAsk(LEARNER, ResourceContext.Kind.NOTE_SECTION, null, null, null, null, null, null, ResponseMode.EXPLAIN, "explain"))
