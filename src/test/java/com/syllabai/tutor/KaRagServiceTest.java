@@ -45,6 +45,7 @@ class KaRagServiceTest {
 
     private final KnowledgeRetriever knowledgeRetriever = mock(KnowledgeRetriever.class);
     private final VectorRetriever vectorRetriever = mock(VectorRetriever.class);
+    private final PaperQuestionResolver paperQuestionResolver = mock(PaperQuestionResolver.class);
     private final CurriculumScopeResolver curriculumScopes = mock(CurriculumScopeResolver.class);
     private final ReciprocalRankFusion fusion = new ReciprocalRankFusion(60);
     private final EvidenceReranker reranker = new NoReranker();
@@ -54,8 +55,8 @@ class KaRagServiceTest {
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
     private final KaRagService service = new KaRagService(knowledgeRetriever, vectorRetriever,
-            curriculumScopes, fusion, reranker, contextAssembler, generator, citationResolver,
-            events, 5, 12, 6);
+            paperQuestionResolver, curriculumScopes, fusion, reranker, contextAssembler, generator,
+            citationResolver, events, 5, 12, 6);
 
     private final UUID learnerId = UUID.randomUUID();
     private final UUID topicId = UUID.randomUUID();
@@ -183,7 +184,7 @@ class KaRagServiceTest {
                 new TutorGenerator.GeneratedAnswer("answer", "m", "p"));
 
         KaRagService capped = new KaRagService(knowledgeRetriever, vectorRetriever,
-                curriculumScopes, fusion,
+                paperQuestionResolver, curriculumScopes, fusion,
                 reranker, contextAssembler, generator, citationResolver, events, 5, 12, 2);
         TutorAnswerView answer = capped.ask(learnerId, "question");
 
@@ -218,5 +219,68 @@ class KaRagServiceTest {
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(events).publishEvent(eventCaptor.capture());
         assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).learnerId()).isNull();
+    }
+
+    @Test
+    @DisplayName("paper-question resolver: pinned lead evidence precedes fused evidence and dedup keeps the lead")
+    void pinnedLeadEvidencePrecedesFused() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(new MatchedTopic(topicId, "C", "T", 0.4)),
+                        List.of(), List.of()));
+        UUID pinnedChunk = UUID.randomUUID();
+        EvidenceItem pinned = EvidenceItem.fromChunk(UUID.randomUUID(), "qp-1", 1, pinnedChunk, 7,
+                "QUESTION_PAPER", "10 (a) The diagram shows the apparatus", 3, 3,
+                List.of(), "paper-question-resolver", 1.0);
+        when(paperQuestionResolver.resolve(eq("explain question 10 from june 2019 paper 2"), eq(SCOPE)))
+                .thenReturn(List.of(pinned));
+        // the vector arm surfaces the SAME chunk (dedup must keep the pinned lead)
+        // plus one fusion-only chunk
+        EvidenceItem duplicate = pinned.withFusedScore(0.9);
+        EvidenceItem vectorOnly = EvidenceItem.fromChunk(UUID.randomUUID(), "ms-1", 1,
+                UUID.randomUUID(), 2, "MARK_SCHEME", "silver chloride", 4, 4,
+                List.of(), "gemini", 0.8);
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(List.of(vectorOnly, duplicate));
+        when(contextAssembler.assemble(any(), any(), any())).thenReturn(
+                new ContextAssembler.TutorContext("l", "k", List.of()));
+        when(generator.generate(anyString(), any())).thenReturn(
+                new TutorGenerator.GeneratedAnswer("grounded", "m", "p"));
+
+        TutorAnswerView answer = service.ask(learnerId, "explain question 10 from june 2019 paper 2");
+
+        assertThat(answer.refused()).isFalse();
+        ArgumentCaptor<List<EvidenceItem>> evidenceCaptor = ArgumentCaptor.forClass(List.class);
+        verify(contextAssembler).assemble(any(), evidenceCaptor.capture(), any());
+        List<EvidenceItem> assembled = evidenceCaptor.getValue();
+        // pinned lead first, duplicate removed, vector-only chunk survives, KG anchor in between
+        assertThat(assembled).extracting(EvidenceItem::chunkId)
+                .startsWith(pinnedChunk)
+                .doesNotHaveDuplicates();
+        assertThat(assembled).anyMatch(item -> item.source() == EvidenceItem.EvidenceSource.KNOWLEDGE_NODE);
+        assertThat(assembled).anyMatch(item -> item.chunkId() != null
+                && !item.chunkId().equals(pinnedChunk));
+        assertThat(assembled.size()).isLessThanOrEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("resolver miss keeps the pipeline byte-identical: no pinned evidence, fusion as before")
+    void resolverMissLeavesPipelineUnchanged() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of(
+                EvidenceItem.fromChunk(UUID.randomUUID(), "qp-1", 1, UUID.randomUUID(), 0,
+                        "QUESTION_PAPER", "states of matter", 1, 1, List.of(), "gemini", 0.7)));
+        when(paperQuestionResolver.resolve(anyString(), any(CurriculumScope.class))).thenReturn(List.of());
+        when(contextAssembler.assemble(any(), any(), any())).thenReturn(
+                new ContextAssembler.TutorContext("l", "k", List.of()));
+        when(generator.generate(anyString(), any())).thenReturn(
+                new TutorGenerator.GeneratedAnswer("a", "m", "p"));
+
+        TutorAnswerView answer = service.ask(learnerId, "explain states of matter");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.evidenceCount()).isEqualTo(1);
     }
 }

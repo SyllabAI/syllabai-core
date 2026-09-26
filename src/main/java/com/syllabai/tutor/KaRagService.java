@@ -5,7 +5,9 @@ import com.syllabai.curriculum.CurriculumScopeResolver;
 import com.syllabai.tutor.dto.TutorAnswerView;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +45,7 @@ public class KaRagService {
 
     private final KnowledgeRetriever knowledgeRetriever;
     private final VectorRetriever vectorRetriever;
+    private final PaperQuestionResolver paperQuestionResolver;
     private final CurriculumScopeResolver curriculumScopes;
     private final ReciprocalRankFusion fusion;
     private final EvidenceReranker reranker;
@@ -57,6 +60,7 @@ public class KaRagService {
 
     public KaRagService(KnowledgeRetriever knowledgeRetriever,
                         VectorRetriever vectorRetriever,
+                        PaperQuestionResolver paperQuestionResolver,
                         CurriculumScopeResolver curriculumScopes,
                         ReciprocalRankFusion fusion,
                         EvidenceReranker reranker,
@@ -69,6 +73,7 @@ public class KaRagService {
                         @Value("${syllabai.tutor.evidence-limit:6}") int evidenceLimit) {
         this.knowledgeRetriever = knowledgeRetriever;
         this.vectorRetriever = vectorRetriever;
+        this.paperQuestionResolver = paperQuestionResolver;
         this.curriculumScopes = curriculumScopes;
         this.fusion = fusion;
         this.reranker = reranker;
@@ -111,6 +116,16 @@ public class KaRagService {
                 ? List.of()
                 : vectorRetriever.retrieve(query, vectorCandidates, scope);
 
+        // 2.5 deterministic paper-question lead evidence (plan §7 lead items):
+        // a paper-style ask ("explain question 10 from june 2019 paper 2")
+        // binds session+paper+number by metadata and pins the exact question's
+        // chunks at the HEAD of the pool — outside RRF, where per-kind weights
+        // would rank identity cards (0.3) below everything else. Resolver
+        // misses leave this list empty and the pipeline unchanged.
+        List<EvidenceItem> pinned = scope == null
+                ? List.of()
+                : paperQuestionResolver.resolve(query, scope);
+
         // 3. rank fusion (plan §7 per-kind weights — the P3 serving posture:
         // NOTE 1.0 > SYLLABUS 0.9 > QUESTION_PAPER 0.8 > TEXTBOOK 0.7 >
         // MARK_SCHEME 0.6 > CARD 0.3; KG topic anchors weigh 1.0, so their
@@ -119,9 +134,23 @@ public class KaRagService {
         List<EvidenceItem> fused = fusion.fuseWithPlanWeights(
                 List.of(kgCandidates, vectorCandidatesList));
 
-        // 4. rerank + cap (v0: NoReranker keeps the fused order)
-        List<EvidenceItem> evidence = reranker.rerank(query, fused)
-                .stream()
+        // 4. lead-first merge, dedup (a pinned chunk may also surface via the
+        //    vector arm — the pinned lead wins), rerank + cap (v0: NoReranker
+        //    keeps the merged order)
+        List<EvidenceItem> reranked = reranker.rerank(query, fused);
+        Set<String> seen = new HashSet<>();
+        List<EvidenceItem> merged = new ArrayList<>(pinned.size() + reranked.size());
+        for (EvidenceItem item : pinned) {
+            if (seen.add(identityKey(item))) {
+                merged.add(item);
+            }
+        }
+        for (EvidenceItem item : reranked) {
+            if (seen.add(identityKey(item))) {
+                merged.add(item);
+            }
+        }
+        List<EvidenceItem> evidence = merged.stream()
                 .limit(evidenceLimit)
                 .map(item -> item.source() == EvidenceItem.EvidenceSource.KNOWLEDGE_NODE
                         ? item
@@ -167,5 +196,11 @@ public class KaRagService {
         return knowledge.topics().stream()
                 .map(KnowledgeRetriever.KnowledgeContext.MatchedTopic::nodeId)
                 .toList();
+    }
+
+    /** Pipeline identity: a chunk by its row, a KG node by its node id. */
+    private static String identityKey(EvidenceItem item) {
+        return item.source() + "|"
+                + (item.chunkId() != null ? item.chunkId() : "node:" + item.nodeId());
     }
 }
