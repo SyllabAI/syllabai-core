@@ -95,6 +95,40 @@ EXPECTED = {   # FULL MATRIX (trace 1a0e3e6722ee9855): all 9 asks pinned
     "E2 CONTROL op-named":    "FULL-PIN(1C)",
 }
 
+RULES = {   # surfaced on drift: what a red means + the deliberate action required
+    "A1 bank-Q10 drop-from":
+        "STRUCTURAL (refusal side). Red = guard stopped refusing a zero-anchor "
+        "identity (regression) or the adjudication itself changed. Never retire "
+        "silently; adjudication changes need an operator decision record.",
+    "A2 bank-Q10 bare": "Same rule as A1 (family anchor).",
+    "A3 bank-Q10 alt-verb": "Same rule as A1 (family anchor).",
+    "B1 bank-coverage P2-Q5":
+        "GUARD-PRECISION sentinel (serve side). Red = guard refused a covered "
+        "identity (precision regression) or Q5 coverage was removed. If a data "
+        "wave removed coverage: flip to GUARD-REFUSAL deliberately in the same "
+        "change; otherwise treat as a production defect.",
+    "B2 bank-coverage P1-Q3":
+        "DATA-COUPLED. Expected flip: June-2019-1C QP/MS ingested/linked -> the "
+        "guard legitimately stops refusing. If an ingest wave explains it: flip "
+        "to SERVED(cites) deliberately in the same change. If NO ingest wave: "
+        "pool bleed is back — production defect, investigate.",
+    "C1 jan2022-2CR":
+        "DATA-COUPLED. Expected flips: 2CR .md family re-adjudicated (-> "
+        "refusal class) or cite loss (-> SERVED(no-cites)). Either way: "
+        "data-side review first, then retire/flip deliberately in the same "
+        "change. Never silently.",
+    "D1 jan2016-2C legacy":
+        "VERDICT-CLASS pin (robust to ingest waves: cite composition may shift, "
+        "the class must not). Red = legacy 4CH0 serve began refusing or lost "
+        "all citations. Verify legacy corpus validation state; treat as defect "
+        "unless a deliberate de-validation wave explains it.",
+    "E1 CONTROL known-good":
+        "CONTROL (byte-stable trio). Red = production regression or "
+        "content-export change — controls are NOT data-coupled, so a red is a "
+        "defect until proven otherwise. Never retire silently.",
+    "E2 CONTROL op-named": "Same rule as E1 (control pair).",
+}
+
 
 def http(method, path, token=None, payload=None, timeout=150):
     req = urllib.request.Request(
@@ -199,5 +233,12 @@ for label, verdict, expected in summary:
         fails += 0 if ok else 1
     print(f"  {verdict:<16} {label:<28} expected={expected:<12} {mark}")
 print(f"ANCHORS: {len(EXPECTED) - fails}/{len(EXPECTED)} green")
+drifted = [(label, verdict, expected) for label, verdict, expected in summary
+           if expected not in ("-", None) and verdict != expected]
+if drifted:
+    print("\n==== DRIFT ANNOTATION (BY-DESIGN retire/flip rules) ====")
+    for label, verdict, expected in drifted:
+        print(f"\n  [{label}]  observed={verdict}  expected={expected}")
+        print(f"    rule: {RULES.get(label, 'UNREGISTERED — register the rule in RULES before retiring or flipping anything.')}")
 print("DONE")
 sys.exit(1 if fails else 0)

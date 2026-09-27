@@ -61,8 +61,11 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Anchor matrix result"
+            echo "## Anchor matrix result — job: ${{ job.status }}"
             echo '```'
-            grep -E "ANCHORS:|PASS|FAIL" sweep_output.log 2>/dev/null | tail -n 12
+            # SUMMARY table + ANCHORS line + (on drift) the DRIFT ANNOTATION
+            # section: which anchor moved, observed vs expected, and the
+            # BY-DESIGN retire/flip rule from RULES in the harness.
+            sed -n '/^==== SUMMARY ====/,$p' sweep_output.log 2>/dev/null | head -n 80
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
