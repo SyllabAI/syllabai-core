@@ -11,11 +11,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -48,6 +52,16 @@ public final class BenchSnapshot {
     public record Edge(String relation, String source, String target) {
     }
 
+    /**
+     * Census of the optional {@code chunk_spec_hv.json} projection (the §8(d)
+     * chunk→SP HUMAN_VALIDATED substrate, staged for snap-005 by the
+     * chunk-sp-substrate-2026-09-27 bridge). Reported verbatim in run output —
+     * the honest denominators next to any §8(d) number.
+     */
+    public record ChunkSpecHvCensus(int rows, int rowsWithRefs, int distinctRefs,
+                                    int distinctCodes, List<String> missCodes) {
+    }
+
     public record SpecPoint(String code, String nodeType, String title, String validationStatus) {
     }
 
@@ -59,6 +73,12 @@ public final class BenchSnapshot {
     private final Map<String, List<Edge>> edgesFrom = new LinkedHashMap<>();
     private final Map<String, List<Edge>> edgesTo = new LinkedHashMap<>();
     private final int anchorCount;
+    private final boolean chunkSpecHvPresent;
+    private final Map<String, Set<String>> hvCodesByRef = new LinkedHashMap<>();
+    private final ChunkSpecHvCensus chunkSpecHvCensus;
+
+    /** Gold spec-point code shape (harness spec §3.2). */
+    private static final Pattern SPEC_CODE = Pattern.compile("^4CH1-[0-9]+\\.[0-9A-Za-z]+$");
 
     private BenchSnapshot(Path dir) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
@@ -124,6 +144,83 @@ public final class BenchSnapshot {
 
         JsonNode anchors = mapper.readTree(Files.readAllBytes(dir.resolve("question_anchors.json")));
         this.anchorCount = anchors.size();
+
+        // ── optional §8(d) substrate: chunk→SP HUMAN_VALIDATED mappings ──────
+        // snap-001..004 carry no such file (the accessor stays empty and the
+        // runner reports §8(d) NOT SCOREABLE exactly as before — the recorded
+        // generations keep byte-identical behavior). When the file exists it
+        // MUST be manifest-pinned (fail-closed: unpinned bytes never score) —
+        // the manifest loop above has already SHA-verified it by the time we
+        // get here. Row guards encode the §5 counting rule: only rows whose
+        // provenance.validation_status is HUMAN_VALIDATED may load, and a
+        // RULE_DERIVED tier with a promoted HV status is exactly what counts.
+        Path hvFile = dir.resolve("chunk_spec_hv.json");
+        if (!Files.exists(hvFile)) {
+            this.chunkSpecHvPresent = false;
+            this.chunkSpecHvCensus = new ChunkSpecHvCensus(0, 0, 0, 0, List.of());
+        } else {
+            if (!hashes.has("chunk_spec_hv.json")) {
+                throw new IllegalStateException("chunk_spec_hv.json present but not "
+                        + "manifest-pinned (fail-closed: unpinned bytes never score)");
+            }
+            this.chunkSpecHvPresent = true;
+            this.chunkSpecHvCensus = loadChunkSpecHv(mapper.readTree(Files.readAllBytes(hvFile)));
+        }
+    }
+
+    /** Parses + guards the §8(d) projection; every violation fails closed. */
+    private ChunkSpecHvCensus loadChunkSpecHv(JsonNode hv) {
+        JsonNode rows = hv.path("rows");
+        if (!rows.isArray() || rows.isEmpty()) {
+            throw new IllegalStateException("chunk_spec_hv.json carries no rows (fail-closed)");
+        }
+        Set<String> seenMappingIds = new LinkedHashSet<>();
+        Set<String> codes = new LinkedHashSet<>();
+        List<String> missCodes = new ArrayList<>();
+        int rowsWithRefs = 0;
+        for (JsonNode r : rows) {
+            String mappingId = r.path("mapping_id").asText("");
+            if (mappingId.isEmpty() || !seenMappingIds.add(mappingId)) {
+                throw new IllegalStateException("chunk_spec_hv.json row has blank or duplicate "
+                        + "mapping_id: '" + mappingId + "' (fail-closed)");
+            }
+            String code = r.path("spec_code").asText("");
+            if (!SPEC_CODE.matcher(code).matches()) {
+                throw new IllegalStateException("chunk_spec_hv.json row " + mappingId
+                        + " has malformed spec_code: '" + code + "' (fail-closed)");
+            }
+            String validationStatus = r.path("provenance").path("validation_status").asText("");
+            if (!"HUMAN_VALIDATED".equals(validationStatus)) {
+                // §5 counting rule in code: AI_SUGGESTED / RULE_DERIVED mappings
+                // never count as resolution — a non-HV row must abort, not filter.
+                throw new IllegalStateException("chunk_spec_hv.json row " + mappingId
+                        + " is not HUMAN_VALIDATED (provenance.validation_status='" + validationStatus
+                        + "'; fail-closed)");
+            }
+            List<String> refs = new ArrayList<>();
+            for (JsonNode ref : r.path("chunk_refs")) {
+                String refStr = ref.asText();
+                if (!chunksByRef.containsKey(refStr)) {
+                    throw new IllegalStateException("chunk_spec_hv.json row " + mappingId
+                            + " references unknown chunk_ref: '" + refStr
+                            + "' (fail-closed: the drift gate owns subset-ness, the loader owns existence)");
+                }
+                refs.add(refStr);
+            }
+            if (refs.isEmpty()) {
+                // a MISS row is recorded, never force-matched (bridge contract);
+                // it contributes no refs and surfaces in the census as a miss
+                missCodes.add(code);
+            } else {
+                rowsWithRefs++;
+            }
+            codes.add(code);
+            for (String refStr : refs) {
+                hvCodesByRef.computeIfAbsent(refStr, k -> new LinkedHashSet<>()).add(code);
+            }
+        }
+        return new ChunkSpecHvCensus(rows.size(), rowsWithRefs, hvCodesByRef.size(),
+                codes.size(), List.copyOf(missCodes));
     }
 
     private static void verify(Path file, String expectedSha, String name) throws IOException {
@@ -225,5 +322,31 @@ public final class BenchSnapshot {
     /** Incoming edges of a node code. */
     public List<Edge> edgesTo(String code) {
         return edgesTo.getOrDefault(code, List.of());
+    }
+
+    /**
+     * Whether the snapshot carries the §8(d) chunk→SP HUMAN_VALIDATED
+     * projection. False for snap-001..004 — the runner must report §8(d) NOT
+     * SCOREABLE in that case, exactly as the recorded generations did.
+     */
+    public boolean chunkSpecHvPresent() {
+        return chunkSpecHvPresent;
+    }
+
+    /**
+     * The §8(d) scoring substrate: chunk_ref → the set of spec codes whose
+     * HUMAN_VALIDATED mapping that chunk anchors. Counting predicate is the
+     * promoted validation_status, NOT the rule tier (the projection rows are
+     * RULE_DERIVED-origin, operator-promoted HV — a tier check would silently
+     * zero the metric). Empty unless {@link #chunkSpecHvPresent()} is true.
+     * Many-to-many by design: one chunk can anchor several spec codes.
+     */
+    public Map<String, Set<String>> hvSpecCodesByChunkRef() {
+        return Collections.unmodifiableMap(hvCodesByRef);
+    }
+
+    /** Census of the §8(d) projection as loaded (zeros when absent). */
+    public ChunkSpecHvCensus chunkSpecHvCensus() {
+        return chunkSpecHvCensus;
     }
 }
