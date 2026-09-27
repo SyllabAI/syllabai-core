@@ -87,12 +87,15 @@ class FetchQueryParserTest {
         ParsedFetchQuery pb = FetchQueryParser.parse("question number 4 part b jan 2020 paper 1");
         assertThat(pb.qnum()).isEqualTo(4);
         assertThat(pb.part()).isEqualTo("b");
-        // the widened parse carries a COMPLETE identity (guard trigger fields)
+        // the widened parse carries a COMPLETE identity (guard trigger fields:
+        // qnum + series + year — the resolver's guard keys on exactly these;
+        // "paper 2" binds later via the resolver's PAPER_HINT, not here)
         ParsedFetchQuery p = FetchQueryParser.parse("tenth question of june 2019 paper 2");
         assertThat(p.series()).isEqualTo("JUN");
         assertThat(p.year()).isEqualTo(2019);
         assertThat(p.qnum()).isEqualTo(10);
-        assertThat(p.hasExplicitPaper()).isTrue();
+        assertThat(p.unit()).isNull();
+        assertThat(p.paperCode()).isNull();
     }
 
     @Test
