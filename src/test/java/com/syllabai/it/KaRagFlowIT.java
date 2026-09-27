@@ -201,16 +201,17 @@ class KaRagFlowIT {
         assertThat(((Number) last.payload().get("evidenceCount")).intValue())
                 .isEqualTo(answer.evidenceCount());
         assertThat(last.payload().get("refused")).isEqualTo(false);
-        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v4");
+        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v5");
         // s139: the direct service call is single-turn — historyTurns reads 0
         assertThat(((Number) last.payload().get("historyTurns")).intValue()).isZero();
 
         // §19 registry: V12 seeded v1, V14 the diagnosis-aware v2, V40 the
-        // format-aware v3, V41 the working-memory v4 (all rows present, v4 is live)
+        // format-aware v3, V41 the working-memory v4, V43 the cross-session
+        // memory v5 (all rows present, v5 is live)
         Integer prompts = jdbc.queryForObject(
                 "select count(*) from prompt_versions where registry_key = 'tutor-grounded'",
                 Integer.class);
-        assertThat(prompts).isEqualTo(4);
+        assertThat(prompts).isEqualTo(5);
         Integer models = jdbc.queryForObject(
                 "select count(*) from model_versions where registry_key = 'ka-rag-pipeline'",
                 Integer.class);

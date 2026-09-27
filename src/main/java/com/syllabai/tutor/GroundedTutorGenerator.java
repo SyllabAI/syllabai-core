@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "4";
+    public static final String PROMPT_VERSION = "5";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
@@ -91,6 +91,16 @@ public class GroundedTutorGenerator implements TutorGenerator {
                   point", "that equation"). Earlier tutor messages are not sources:
                   cite ONLY the SOURCES numbered in this message, and
                   do not repeat an earlier answer verbatim — build on it.
+                - A RECENT LEARNING EXPERIENCES block, when present, summarizes
+                  this learner's earlier work on the current topics across
+                  sessions: prior tutor asks, practice outcomes and spaced-review
+                  status. Use it to open the FIRST answer of a session with one
+                  brief sentence of continuity when it genuinely helps (e.g.
+                  picking up where they left off, or acknowledging a topic they
+                  have been practising) — never as diagnosis, never quoting
+                  numbers, probabilities or internal state. It is context about
+                  the learner, NOT evidence about the subject: every subject
+                  claim still needs a SOURCES citation.
                 """;
     }
 
@@ -100,6 +110,15 @@ public class GroundedTutorGenerator implements TutorGenerator {
         appendConversation(sb, history);
         sb.append("QUESTION:\n").append(query.strip()).append("\n\n");
         sb.append("LEARNER CONTEXT:\n").append(context.learnerBrief()).append("\n\n");
+        // s140 episodic memory: the cross-session digest rides between the
+        // learner's state and the curriculum — omitted entirely when the
+        // learner has no history on the matched topics (or on the CLA surface,
+        // which composes memory-free contexts).
+        if (context.memoryBrief() != null && !context.memoryBrief().isBlank()) {
+            sb.append("RECENT LEARNING EXPERIENCES (this learner's earlier work on "
+                            + "the current topics, across sessions):\n")
+                    .append(context.memoryBrief()).append("\n\n");
+        }
         sb.append("CURRICULUM CONTEXT:\n").append(context.knowledgeBrief()).append("\n\n");
         var plan = context.interventionPlan();
         sb.append("INTERVENTION PLAN:\n").append(plan.type()).append(" — ")

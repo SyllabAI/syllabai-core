@@ -41,6 +41,17 @@ public record ConversationTurn(String role, String text) {
     public static final String ROLE_ASSISTANT = "assistant";
 
     /**
+     * Remove {@code [n]}/{@code 【n】} citation markers from a tutor answer
+     * (s140: also used by the §22 session store — a stored transcript renders
+     * as the learner-visible prose, and its source numbers belong to the
+     * KA_RAG_COMPLETED telemetry row, the citation archive of record).
+     * Public static so the session store shares the exact pattern.
+     */
+    public static String stripCitationMarkers(String text) {
+        return text == null ? null : CITATION_MARKER.matcher(text).replaceAll("");
+    }
+
+    /**
      * Normalize one raw client turn; returns null when it carries nothing
      * usable (unknown/blank role, blank text) — callers drop nulls rather
      * than failing the whole ask on one bad turn.
@@ -57,7 +68,7 @@ public record ConversationTurn(String role, String text) {
         // Assistant turns systematically carry [n] markers whose numbers refer
         // to sources absent from the next prompt — strip them. User turns keep
         // their text verbatim (a learner typing "[2]" is quoting, not citing).
-        String cleaned = assistant ? CITATION_MARKER.matcher(text).replaceAll("") : text;
+        String cleaned = assistant ? stripCitationMarkers(text) : text;
         cleaned = cleaned.strip();
         if (cleaned.isEmpty()) {
             return null;

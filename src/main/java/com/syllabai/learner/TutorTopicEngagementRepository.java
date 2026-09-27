@@ -19,6 +19,15 @@ public interface TutorTopicEngagementRepository extends JpaRepository<TutorTopic
     List<TutorTopicEngagement> findByNodeIdIn(java.util.Collection<UUID> nodeIds);
 
     /**
+     * One learner's engagement rows for a bounded set of topics (s140 episodic
+     * memory): the deterministic ask history the tutor's cross-session
+     * continuity digest is built from — matched-topic scoped, never a full
+     * account dump.
+     */
+    List<TutorTopicEngagement> findByLearnerIdAndNodeIdIn(UUID learnerId,
+            java.util.Collection<UUID> nodeIds);
+
+    /**
      * Per-topic engagement counts inside the window (NBA T7a): the learner's
      * own interest signal — which matched topics they have been asking about.
      */

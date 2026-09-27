@@ -29,6 +29,10 @@ import java.util.UUID;
  *                        dimension for the §3.5 chat-exchange record: whether
  *                        an exchange was a follow-up changes how its
  *                        retrieval provenance should be read.
+ * @param sessionId      the §22 tutor session this exchange was persisted to
+ *                        (s140; null = an unpersisted ask — pre-v2 clients or
+ *                        the CLA/SmartLesson surfaces). Links the §3.5
+ *                        chat-exchange row to its stored transcript.
  */
 public record TutorAnsweredEvent(
         UUID learnerId,
@@ -42,5 +46,6 @@ public record TutorAnsweredEvent(
         double latencyMs,
         Instant occurredAt,
         String interventionType,
-        int historyTurns) {
+        int historyTurns,
+        UUID sessionId) {
 }

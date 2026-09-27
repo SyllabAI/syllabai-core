@@ -20,17 +20,32 @@ public class LearnerContextAssembler implements ContextAssembler {
 
     private final LearnerModelService learnerModel;
     private final TutorPolicyService policy;
+    /** s140 episodic memory — null on the legacy test constructor: those
+     *  assembles stay memory-free exactly like the CLA surface. */
+    private final TutorMemoryService memory;
 
     /** Spring production constructor; the legacy constructor keeps T-024 unit tests focused. */
     @Autowired
-    public LearnerContextAssembler(LearnerModelService learnerModel, TutorPolicyService policy) {
+    public LearnerContextAssembler(LearnerModelService learnerModel, TutorPolicyService policy,
+                                   TutorMemoryService memory) {
         this.learnerModel = learnerModel;
         this.policy = policy;
+        this.memory = memory;
     }
 
+    /** Legacy T-024 shape (no policy, no episodic memory). */
     public LearnerContextAssembler(LearnerModelService learnerModel) {
         this.learnerModel = learnerModel;
         this.policy = null;
+        this.memory = null;
+    }
+
+    /** s139-era shape (policy, no episodic memory) — tests and any direct
+     *  wiring that predates the s140 digest. */
+    public LearnerContextAssembler(LearnerModelService learnerModel, TutorPolicyService policy) {
+        this.learnerModel = learnerModel;
+        this.policy = policy;
+        this.memory = null;
     }
 
     @Override
@@ -43,13 +58,23 @@ public class LearnerContextAssembler implements ContextAssembler {
 
         String learnerBrief = learnerId == null ? ANONYMOUS
                 : learnerBrief(learnerId, relevantNodes, knowledge);
+        // s140 episodic memory: the cross-session digest is matched-topic
+        // scoped — same topics the brief above reports state for. Null when
+        // the learner has no history on any of them (block omitted) or on
+        // the legacy no-memory wiring.
+        String memoryBrief = memory == null || learnerId == null ? null
+                : memory.digest(learnerId, knowledge.topics().stream()
+                        .map(topic -> new TutorMemoryService.TopicRef(
+                                topic.nodeId(), topic.title()))
+                        .toList());
         TutorPolicyService.InterventionPlan plan = policy == null
                 ? new TutorPolicyService.InterventionPlan(
                         TutorPolicyService.InterventionType.EXPLANATION,
                         "policy not supplied",
                         List.of("Explain from the supplied evidence."))
                 : policy.select(learnerId, knowledge.topics(), knowledge.misconceptions());
-        return new TutorContext(learnerBrief, knowledgeBrief(knowledge), List.copyOf(evidence), plan);
+        return new TutorContext(learnerBrief, memoryBrief, knowledgeBrief(knowledge),
+                List.copyOf(evidence), plan);
     }
 
     private String learnerBrief(UUID learnerId, Set<UUID> relevantNodes,

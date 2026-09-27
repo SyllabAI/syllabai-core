@@ -95,32 +95,41 @@ public class KaRagService {
 
     /**
      * Single-turn ask (anchored/legacy callers): identical to an ask with no
-     * conversation history.
+     * conversation history and no session persistence.
      *
      * @param learnerId asking learner (null allowed for anonymous preview)
      * @param query     the learner's question
      * @return grounded answer with citations, or a deterministic refusal
      */
     public TutorAnswerView ask(UUID learnerId, String query) {
-        return ask(learnerId, query, List.of());
+        return ask(learnerId, query, List.of(), null);
     }
 
     /**
-     * Conversational ask (s139 working memory): the final question plus the
-     * client-held transcript of the same chat. History influences the ask in
-     * exactly two bounded ways — it enriches the RETRIEVAL query (so "why is
-     * that?" still finds the moles evidence the first turn matched) and it
-     * rides along to generation for reference resolution. It is never stored,
-     * never cited, and never widens the curriculum scope (T-C07 binds both
-     * retrieval surfaces regardless of what the history mentions).
+     * Conversational ask (s139 working memory) without session persistence —
+     * the CLA/SmartLesson surfaces and tests.
+     */
+    public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history) {
+        return ask(learnerId, question, history, null);
+    }
+
+    /**
+     * Conversational ask (s139 working memory) with a §22 session anchor
+     * (s140): the session id rides the {@code TutorAnsweredEvent} for §3.5
+     * research linkage — the PIPELINE itself stays session-unaware (persistence
+     * is the controller's concern; scope, retrieval and generation are
+     * identical whether the exchange is stored or not).
      *
      * @param learnerId asking learner (null allowed for anonymous preview)
      * @param question  the learner's question (the turn to answer now)
      * @param history   prior turns of this chat, oldest first (client-supplied,
      *                 sanitized here before any pipeline use)
+     * @param sessionId §22 tutor session this exchange belongs to (null = an
+     *                 unpersisted ask — pre-s140 clients, CLA, SmartLesson)
      * @return grounded answer with citations, or a deterministic refusal
      */
-    public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history) {
+    public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history,
+                               UUID sessionId) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException("question must not be blank");
         }
@@ -219,7 +228,7 @@ public class KaRagService {
                 learnerId, query.strip(), matchedTopicIds(knowledge), evidence.size(),
                 evidence.stream().map(item -> item.source().name()).toList(),
                 refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
-                latencyMs, Instant.now(), interventionType, turns.size()));
+                latencyMs, Instant.now(), interventionType, turns.size(), sessionId));
 
         log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} history turn(s), {} ms)",
                 evidence.size(), knowledge.topics().size(), refused, turns.size(),

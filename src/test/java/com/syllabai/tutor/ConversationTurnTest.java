@@ -81,4 +81,19 @@ class ConversationTurnTest {
         assertThat(ConversationTurn.sanitize(raw))
                 .containsExactly(new ConversationTurn(ConversationTurn.ROLE_ASSISTANT, "kept"));
     }
+
+    @Test
+    @DisplayName("stripCitationMarkers: shared pattern for the §22 session store (s140), null-safe")
+    void stripMarkersShared() {
+        assertThat(ConversationTurn.stripCitationMarkers("moles [1] and mass [23]"))
+                .isEqualTo("moles and mass");
+        assertThat(ConversationTurn.stripCitationMarkers("fullwidth 【7】 markers"))
+                .isEqualTo("fullwidth markers");
+        // wide numbers are content, not markers
+        assertThat(ConversationTurn.stripCitationMarkers("paper [2025] row"))
+                .isEqualTo("paper [2025] row");
+        assertThat(ConversationTurn.stripCitationMarkers(null)).isNull();
+        assertThat(ConversationTurn.stripCitationMarkers("no markers here"))
+                .isEqualTo("no markers here");
+    }
 }

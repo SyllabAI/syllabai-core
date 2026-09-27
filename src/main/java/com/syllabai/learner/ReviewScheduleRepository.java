@@ -20,4 +20,12 @@ public interface ReviewScheduleRepository extends JpaRepository<ReviewSchedule, 
     List<ReviewSchedule> findByStatusAndDueAtLessThanEqualAndNodeIdIn(
             ReviewSchedule.Status status, java.time.Instant dueAt,
             java.util.Collection<UUID> nodeIds);
+
+    /**
+     * One learner's pending reviews for a bounded set of topics (s140 episodic
+     * memory): the forgetting-curve's "due for review" signal, matched-topic
+     * scoped for the tutor's cross-session continuity digest.
+     */
+    List<ReviewSchedule> findByLearnerIdAndNodeIdInAndStatus(UUID learnerId,
+            java.util.Collection<UUID> nodeIds, ReviewSchedule.Status status);
 }

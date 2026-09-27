@@ -96,7 +96,9 @@ class KaRagServiceTest {
         assertThat(event.evidenceCount()).isEqualTo(2);
         assertThat(event.refused()).isFalse();
         assertThat(event.answerModel()).isEqualTo("model-x");
-        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v4");
+        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v5");
+        // the single-turn overload is an unpersisted ask (s140: no session)
+        assertThat(event.sessionId()).isNull();
 
         // context assembly saw the evidence capped and topic-stamped
         ArgumentCaptor<List<EvidenceItem>> evidenceCaptor =
@@ -333,6 +335,28 @@ class KaRagServiceTest {
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(events).publishEvent(eventCaptor.capture());
         assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).historyTurns()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("s140: a session-anchored ask publishes the sessionId — the pipeline itself is unchanged")
+    void sessionAnchoredAskPublishesSessionId() {
+        stubGroundedFollowUpFlow();
+        UUID sessionId = UUID.randomUUID();
+
+        TutorAnswerView answer = service.ask(learnerId, "moles question", List.of(), sessionId);
+
+        assertThat(answer.refused()).isFalse();
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
+        assertThat(event.sessionId()).isEqualTo(sessionId);
+        assertThat(event.historyTurns()).isZero();
+        // single-turn + session: generation saw no conversation block
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ConversationTurn>> historyCaptor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(generator).generate(anyString(), historyCaptor.capture(), any());
+        assertThat(historyCaptor.getValue()).isEmpty();
     }
 
     @Test

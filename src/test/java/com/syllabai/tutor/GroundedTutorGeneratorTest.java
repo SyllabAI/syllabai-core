@@ -73,7 +73,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v4");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v5");
     }
 
     @Test
@@ -160,6 +160,56 @@ class GroundedTutorGeneratorTest {
         int from = prompt.indexOf("CONVERSATION SO FAR");
         int to = prompt.indexOf("QUESTION:");
         assertThat(to - from).isLessThanOrEqualTo(2400 + 400);
+    }
+
+    @Test
+    @DisplayName("v5 pins the cross-session memory rule: continuity opening allowed, never diagnosis or numbers")
+    void crossSessionMemoryRulePinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("RECENT LEARNING EXPERIENCES block, when present");
+        assertThat(system).contains("never as diagnosis");
+        assertThat(system).contains("never quoting");
+        assertThat(system).contains("numbers, probabilities or internal state");
+        assertThat(system).contains("NOT evidence about the subject");
+        // the v4 working-memory rule survives verbatim inside v5
+        assertThat(system).contains("CONVERSATION SO FAR block, when present");
+        assertThat(system).contains("GitHub-flavored markdown");
+    }
+
+    @Test
+    @DisplayName("the memory digest renders between LEARNER CONTEXT and CURRICULUM CONTEXT")
+    void memoryBlockRendered() {
+        ContextAssembler.TutorContext context = new ContextAssembler.TutorContext(
+                "brief", "'Moles': 3 earlier tutor ask(s)", "kb",
+                List.of(EvidenceItem.fromNode(UUID.randomUUID(), "C", "TOPIC", "T", null, 0.5)),
+                new TutorPolicyService.InterventionPlan(
+                        TutorPolicyService.InterventionType.EXPLANATION,
+                        "test", List.of("Explain.")));
+
+        generator.generate("tell me about moles again", context);
+
+        String prompt = provider.lastRequest().userPrompt();
+        int learnerAt = prompt.indexOf("LEARNER CONTEXT:");
+        int memoryAt = prompt.indexOf("RECENT LEARNING EXPERIENCES");
+        int curriculumAt = prompt.indexOf("CURRICULUM CONTEXT:");
+        assertThat(memoryAt).isGreaterThan(learnerAt);
+        assertThat(curriculumAt).isGreaterThan(memoryAt);
+        assertThat(prompt).contains("3 earlier tutor ask(s)");
+    }
+
+    @Test
+    @DisplayName("no digest ⇒ no memory block (fresh learners and the CLA surface keep the v4 prompt shape)")
+    void noMemoryBlockWhenNoDigest() {
+        generator.generate("first ever question?",
+                new ContextAssembler.TutorContext("b", "k", List.of()));
+        assertThat(provider.lastRequest().userPrompt()).doesNotContain("RECENT LEARNING EXPERIENCES");
+
+        generator.generate("blank digest?",
+                new ContextAssembler.TutorContext("b", " ", "k", List.of(),
+                        new TutorPolicyService.InterventionPlan(
+                                TutorPolicyService.InterventionType.EXPLANATION,
+                                "test", List.of("Explain."))));
+        assertThat(provider.lastRequest().userPrompt()).doesNotContain("RECENT LEARNING EXPERIENCES");
     }
 
     @Test
