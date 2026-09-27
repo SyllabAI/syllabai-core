@@ -153,6 +153,15 @@ public final class Run004A {
         int zeroResultQueries = 0;
         int compliantStarved = 0;
 
+        // §8(d) wiring (S8D_SCORING_HANDOFF_2026-09-28 §5): scored on BOTH views
+        // when the snapshot carries the chunk→SP HV projection; absent
+        // (snap-001..004) the recorded NOT SCOREABLE texts stay byte-identical.
+        final boolean hvPresent = snapshot.chunkSpecHvPresent();
+        final Map<String, Set<String>> hvCodes = snapshot.hvSpecCodesByChunkRef();
+        final List<ChunkSpecHvResolution.QueryResolution> hvRowsServed = new ArrayList<>();
+        final List<ChunkSpecHvResolution.QueryResolution> hvRowsCompliant = new ArrayList<>();
+        final List<String> hvGoldPoints = new ArrayList<>();
+
         for (BenchGold.GoldRecord rec : gold.records()) {
             ArmA.AResult served = arm.run(rec.query(), 20);
             violations += served.boundaryViolations();
@@ -182,6 +191,13 @@ public final class Run004A {
             c.put("ranked_refs", compliant.rankedRefs());
             c.put("scores", compliant.scores());
             perQueryCompliant.put(rec.id(), c);
+            if (hvPresent) {
+                hvRowsServed.add(ChunkSpecHvResolution.scoreQuery(rec.id(), served.rankedRefs(),
+                        rec.goldSpecPoints(), hvCodes));
+                hvRowsCompliant.add(ChunkSpecHvResolution.scoreQuery(rec.id(), compliant.rankedRefs(),
+                        rec.goldSpecPoints(), hvCodes));
+                hvGoldPoints.addAll(rec.goldSpecPoints());
+            }
         }
 
         // ── 5. aggregation (both views, dual-denominator context) ────────────
@@ -269,7 +285,12 @@ public final class Run004A {
                         + "historical run-004-a record predates the gate and carried the boundary finding)",
                 "cosine_floor", "hits below the production ContentVectorRetriever MIN_COSINE 0.15 are "
                         + "dropped before ranking (production truth) — empty result lists are honest zeros",
-                "spec_resolution_axis", "NOT SCOREABLE for arm A: the snapshot carries ZERO "
+                "spec_resolution_axis", hvPresent
+                        ? "SCORED for arm A on BOTH views (see spec_resolution_hv): the snapshot "
+                        + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
+                        + "the served ALL-denominator view per §10 ruling 1, the compliant view "
+                        + "reported alongside"
+                        : "NOT SCOREABLE for arm A: the snapshot carries ZERO "
                         + "HUMAN_VALIDATED chunk→spec mapping rows (concept_attachments = 0, the "
                         + "T-C06/F-168 mapping substrate is pending), so a resolution number would be "
                         + "fabrication; recorded as a named data gap, not a zero, not an exclusion",
@@ -319,6 +340,12 @@ public final class Run004A {
                 "I", "UNAVAILABLE — KG expansion + best-of"));
         results.put("per_query_chunks", perQueryServed);
         results.put("per_query_compliant", perQueryCompliant);
+        if (hvPresent) {
+            results.put("spec_resolution_hv", ChunkSpecHvResolution.section(snapshot,
+                    Map.of("served_view_all_denominator", ChunkSpecHvResolution.aggregate(hvRowsServed),
+                            "compliant_view", ChunkSpecHvResolution.aggregate(hvRowsCompliant)),
+                    ChunkSpecHvResolution.unbridgedGoldPoints(hvGoldPoints, hvCodes)));
+        }
         if (!context003.isEmpty()) {
             results.put("context_run_003_b", context003);
         }
@@ -343,6 +370,28 @@ public final class Run004A {
                 stable.writeValueAsString(servedOverall), "served view");
         checkEquals(stable.writeValueAsString(BenchMetrics.aggregateChunks(secondCompliant)),
                 stable.writeValueAsString(compliantOverall), "compliant view");
+        if (hvPresent) {
+            // the second pass re-runs the arm; recompute §8(d) on the replayed lists
+            List<ChunkSpecHvResolution.QueryResolution> hvSecondServed = new ArrayList<>();
+            List<ChunkSpecHvResolution.QueryResolution> hvSecondCompliant = new ArrayList<>();
+            for (BenchGold.GoldRecord rec : gold.records()) {
+                if (rec.goldEvidence().isEmpty()) {
+                    continue;
+                }
+                ArmA.AResult again = arm.run(rec.query(), 20);
+                hvSecondServed.add(ChunkSpecHvResolution.scoreQuery(rec.id(), again.rankedRefs(),
+                        rec.goldSpecPoints(), hvCodes));
+                ArmA.AResult againCompliant = ArmA.compliantView(again, paperStateByDocumentId);
+                hvSecondCompliant.add(ChunkSpecHvResolution.scoreQuery(rec.id(),
+                        againCompliant.rankedRefs(), rec.goldSpecPoints(), hvCodes));
+            }
+            checkEquals(stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvSecondServed)),
+                    stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvRowsServed)),
+                    "§8(d) served view");
+            checkEquals(stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvSecondCompliant)),
+                    stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvRowsCompliant)),
+                    "§8(d) compliant view");
+        }
         results.put("determinism_check", "PASS — scoring recomputed twice in-process (second full "
                 + "retrieval pass), both views' aggregates byte-identical; serialization byte-stable");
 
@@ -795,9 +844,10 @@ public final class Run004A {
                 .append("searchServingEligible). Any non-zero count here is a REGRESSION, not a finding. ")
                 .append("The historical run-004-a record — which surfaced the finding because the vector ")
                 .append("surface then predated T-C05 — is preserved unchanged.\n")
-                .append("- SpecificationPoint resolution: NOT SCOREABLE for arm A — zero HUMAN_VALIDATED ")
-                .append("chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 ")
-                .append("substrate pending). Recorded as a named data gap, never fabricated.\n")
+                .append(ChunkSpecHvResolution.reportLine(results,
+                        "- SpecificationPoint resolution: NOT SCOREABLE for arm A — zero HUMAN_VALIDATED "
+                                + "chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 "
+                                + "substrate pending). Recorded as a named data gap, never fabricated.\n"))
                 .append("- Zero-result queries: ").append(zeroResultQueries)
                 .append("/120 (all top-20 hits below the production cosine floor 0.15 — honest empties, ")
                 .append("scored as real zeros).\n")

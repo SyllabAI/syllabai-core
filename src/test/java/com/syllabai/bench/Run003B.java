@@ -94,6 +94,14 @@ public final class Run003B {
         List<String> violationRefs = new ArrayList<>();
         int zeroResultQueries = 0;
 
+        // §8(d) wiring (S8D_SCORING_HANDOFF_2026-09-28 §5): scored ONLY when the
+        // snapshot carries the chunk→SP HV projection; absent (snap-001..004) the
+        // recorded NOT SCOREABLE contract text and report line stay byte-identical.
+        final boolean hvPresent = snapshot.chunkSpecHvPresent();
+        final Map<String, Set<String>> hvCodes = snapshot.hvSpecCodesByChunkRef();
+        final List<ChunkSpecHvResolution.QueryResolution> hvRows = new ArrayList<>();
+        final List<String> hvGoldPoints = new ArrayList<>();
+
         for (BenchGold.GoldRecord rec : gold.records()) {
             ArmB.BResult result = arm.run(rec.query(), 20);
             violations += result.boundaryViolations();
@@ -114,6 +122,11 @@ public final class Run003B {
             q.put("scores", result.scores());
             q.put("gold_spec_points", rec.goldSpecPoints());
             perQuery.put(rec.id(), q);
+            if (hvPresent) {
+                hvRows.add(ChunkSpecHvResolution.scoreQuery(rec.id(), result.rankedRefs(),
+                        rec.goldSpecPoints(), hvCodes));
+                hvGoldPoints.addAll(rec.goldSpecPoints());
+            }
         }
 
         // ── 5. aggregation (dual-denominator view per §10 ruling 1) ──────────
@@ -158,7 +171,13 @@ public final class Run003B {
                         + "same gold labels on the VALIDATED-only reachable corpus (296 chunks) — "
                         + "the ALL-chunks (2,333) view is carried by run-001's B-proxy pair (AF-2) and "
                         + "is reproduced below for the §10-ruling-1 dual-denominator context",
-                "spec_resolution_axis", "NOT SCOREABLE for arm B: the snapshot carries ZERO "
+                "spec_resolution_axis", hvPresent
+                        ? "SCORED for arm B over its served (VALIDATED-served corpus) ranked "
+                        + "refs — see spec_resolution_hv: the snapshot carries the HUMAN_VALIDATED "
+                        + "chunk→SP projection (SNAP5-H1); the notes chunks it maps are SUGGESTED "
+                        + "content and structurally unreachable for arm B's compliant predicate, "
+                        + "so a near-zero arm-B §8(d) is honest production truth, not a defect"
+                        : "NOT SCOREABLE for arm B: the snapshot carries ZERO "
                         + "HUMAN_VALIDATED chunk→spec mapping rows (concept_attachments = 0, the "
                         + "T-C06/F-168 mapping substrate is pending), so a resolution number would be "
                         + "fabrication; recorded as a named data gap, not a zero, not an exclusion",
@@ -185,6 +204,11 @@ public final class Run003B {
                         "overall", ((Map<?, ?>) prev001.get("all_chunks")).get("overall")),
                 "validation_boundary_violations", violations,
                 "violation_refs", violationRefs));
+        if (hvPresent) {
+            results.put("spec_resolution_hv", ChunkSpecHvResolution.section(snapshot,
+                    Map.of("served_view_all_denominator", ChunkSpecHvResolution.aggregate(hvRows)),
+                    ChunkSpecHvResolution.unbridgedGoldPoints(hvGoldPoints, hvCodes)));
+        }
         results.put("arms_registry", Map.of(
                 "A0", "RUNNABLE — recorded in run-002-a0 (production baseline; chunk axis = real zeros, "
                         + "resolution axis on record)",
@@ -221,6 +245,7 @@ public final class Run003B {
 
         // ── 6. determinism: recomputed scoring + byte-stable serialization ───
         List<BenchMetrics.ChunkRow> secondPassRows = new ArrayList<>();
+        final List<ChunkSpecHvResolution.QueryResolution> hvSecond = new ArrayList<>();
         for (BenchGold.GoldRecord rec : gold.records()) {
             if (rec.goldEvidence().isEmpty()) {
                 continue;
@@ -229,6 +254,10 @@ public final class Run003B {
             Map<String, Integer> tiers = new LinkedHashMap<>();
             rec.goldEvidence().forEach(e -> tiers.put(e.chunkRef(), e.tier()));
             secondPassRows.add(BenchMetrics.scoreChunks(again.rankedRefs(), tiers));
+            if (hvPresent) {
+                hvSecond.add(ChunkSpecHvResolution.scoreQuery(rec.id(), again.rankedRefs(),
+                        rec.goldSpecPoints(), hvCodes));
+            }
         }
         ObjectMapper mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
@@ -236,6 +265,14 @@ public final class Run003B {
         String json2 = mapper.writeValueAsString(overall);
         if (!json1.equals(json2)) {
             throw new IllegalStateException("nondeterministic scoring (fail-closed): " + json1 + " != " + json2);
+        }
+        if (hvPresent) {
+            String h1 = mapper.writeValueAsString(ChunkSpecHvResolution.aggregate(hvSecond));
+            String h2 = mapper.writeValueAsString(ChunkSpecHvResolution.aggregate(hvRows));
+            if (!h1.equals(h2)) {
+                throw new IllegalStateException("nondeterministic §8(d) scoring (fail-closed): "
+                        + h1 + " != " + h2);
+            }
         }
         results.put("determinism_check", "PASS — scoring recomputed twice in-process (second full "
                 + "retrieval pass), aggregates byte-identical; serialization byte-stable");
@@ -482,11 +519,26 @@ public final class Run003B {
         md.append("\n## Boundary + resolution axes\n\n")
                 .append("- VALIDATION_BOUNDARY_VIOLATIONS: ").append(violations)
                 .append(violations == 0 ? " (the T-C05 VALIDATED-only predicate held under the real run)" : " — HARD FAIL")
-                .append(".\n")
-                .append("- SpecificationPoint resolution: NOT SCOREABLE for arm B — zero HUMAN_VALIDATED ")
-                .append("chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 substrate ")
-                .append("pending). Recorded as a named data gap, never fabricated.\n")
-                .append("- Zero-result queries: ").append(zeroResultQueries).append("/120 (lexical scorer found no ")
+                .append(".\n");
+        Object hvSection = results.get("spec_resolution_hv");
+        if (hvSection instanceof Map<?, ?> hv) {
+            Map<?, ?> views = hv.get("views") instanceof Map<?, ?> v ? v : Map.of();
+            Map<?, ?> agg = views.get("served_view_all_denominator") instanceof Map<?, ?> a
+                    ? a : Map.of();
+            md.append("- SpecificationPoint resolution: SCORED (spec_resolution_hv) — full-coverage ")
+                    .append(agg.get("spec_points_full_coverage_rate"))
+                    .append(" · micro-average ").append(agg.get("spec_points_micro_average"))
+                    .append(" over ").append(agg.get("gold_points_total")).append(" gold points on ")
+                    .append(agg.get("queries_scored")).append(" scored queries (served/VALIDATED-served view; ")
+                    .append("the HV-mapped notes chunks are SUGGESTED content, so a near-zero number ")
+                    .append("is honest production truth — see the section's dual-view caveat). First ")
+                    .append("§8(d)-scoreable run: this run sets the chunk-arm baseline.\n");
+        } else {
+            md.append("- SpecificationPoint resolution: NOT SCOREABLE for arm B — zero HUMAN_VALIDATED ")
+                    .append("chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 substrate ")
+                    .append("pending). Recorded as a named data gap, never fabricated.\n");
+        }
+        md.append("- Zero-result queries: ").append(zeroResultQueries).append("/120 (lexical scorer found no ")
                 .append("match — honest empties, scored as real zeros).\n\n");
         md.append("## Reading\n\n")
                 .append("- B runs the PRODUCTION SQL (tsvector/ts_rank_cd) — no scorer port; the only modeling is ")

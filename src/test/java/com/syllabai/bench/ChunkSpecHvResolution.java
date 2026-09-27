@@ -123,4 +123,73 @@ public final class ChunkSpecHvResolution {
     private static double r4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
     }
+
+    /**
+     * The RUN_REPORT.md resolution line: the scored §8(d) summary when the
+     * section is present, else the caller's original absent text VERBATIM (the
+     * recorded generations' absent-path behavior is byte-identical).
+     */
+    public static String reportLine(Map<String, Object> results, String absentLine) {
+        Object section = results.get("spec_resolution_hv");
+        if (!(section instanceof Map<?, ?> hv) || !(hv.get("views") instanceof Map<?, ?> views)) {
+            return absentLine;
+        }
+        Object all = views.get("served_view_all_denominator");
+        if (!(all instanceof Map<?, ?> agg)) {
+            return absentLine;
+        }
+        return "- SpecificationPoint resolution: SCORED (spec_resolution_hv) — full-coverage "
+                + agg.get("spec_points_full_coverage_rate")
+                + " · micro-average " + agg.get("spec_points_micro_average")
+                + " over " + agg.get("gold_points_total") + " gold points on "
+                + agg.get("queries_scored") + " scored queries (served ALL-denominator view; "
+                + "the HV-mapped notes chunks are SUGGESTED content, so a near-zero number on a "
+                + "compliant view is honest production truth — see the section's dual-view "
+                + "caveat). First §8(d)-scoreable run: this run sets the chunk-arm baseline.\n";
+    }
+
+    /**
+     * The run-report section for §8(d) when the projection is present (callers
+     * include it in results.json only then — the absent path keeps the recorded
+     * NOT SCOREABLE text byte-identical). Carries the honest context next to
+     * any §8(d) number: the counting rule, the dual-view caveat, the census,
+     * and the granularity statement.
+     *
+     * @param aggregatesByView per-view aggregates keyed by view label (e.g.
+     *                         "all_denominator" / "validated_only_view"); each
+     *                         value is an {@link #aggregate(List)} result
+     * @param unbridged        gold spec points present in NO projection row
+     */
+    public static Map<String, Object> section(BenchSnapshot snapshot,
+                                              Map<String, Map<String, Object>> aggregatesByView,
+                                              List<String> unbridged) {
+        BenchSnapshot.ChunkSpecHvCensus census = snapshot.chunkSpecHvCensus();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("status", "SCORED — HUMAN_VALIDATED chunk→SP projection present (§8(d) unlocked; "
+                + "substrate bridge chunk-sp-substrate-2026-09-27, records 94d0d405c)");
+        out.put("counting_rule", "HUMAN_VALIDATED by promoted validation_status, never the rule "
+                + "tier (RULE_DERIVED-origin rows are operator-promoted HV); enforced "
+                + "fail-closed in the loader");
+        out.put("views", aggregatesByView);
+        out.put("projection_census", Map.of(
+                "rows", census.rows(),
+                "rows_with_refs", census.rowsWithRefs(),
+                "distinct_refs", census.distinctRefs(),
+                "distinct_codes", census.distinctCodes(),
+                "miss_codes", census.missCodes()));
+        out.put("unbridged_gold_points", unbridged);
+        out.put("dual_view_caveat", "the projection's chunk_refs are EXTERNAL_NOTES chunks whose "
+                + "content paper_state is SUGGESTED — the HV status is on the MAPPING, not the "
+                + "content — so VALIDATED-only serving views exclude them exactly as production "
+                + "does; a near-zero §8(d) on a compliant/served view is honest production "
+                + "truth, not a defect. Gate arithmetic per §10 ruling 1 stays on the ALL view.");
+        out.put("granularity", "BOTH readings reported (no §10 ruling pins the choice): "
+                + "spec_points_full_coverage_rate = per-query full coverage (recommended gate "
+                + "input); spec_points_micro_average = per-point micro-mean; they differ only "
+                + "on gold class 11 (multi-spec queries)");
+        out.put("baseline_note", "first §8(d)-scoreable run: this run SETS the chunk-arm "
+                + "baseline; the §8(d) 'no regression beyond 1pp' rule applies from the NEXT "
+                + "run onward");
+        return out;
+    }
 }
