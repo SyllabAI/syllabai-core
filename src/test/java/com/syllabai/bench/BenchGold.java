@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * T-C13 harness (spec §3.4, §6): loads the frozen gold set v1 and verifies
+ * T-C13 harness (spec §3.4, §6): loads the frozen gold set and verifies
  * every class file against the manifest SHA-256 BEFORE anything runs —
  * fail-closed, mirroring {@code bench/gold_check.py}. Also enforces the
  * cross-file uniqueness of query ids and the quota-table totals recorded in

@@ -16,9 +16,9 @@ import java.util.Map;
  * {@code ContentVectorRetriever → ContentRetrievalService →
  * ChunkVectorRepository.search} (pgvector cosine {@code <=>} over the V11
  * {@code vector(768)} column, T-C07 scope EXISTS predicate, cosine floor 0.15,
- * kind-agnostic, NoReranker) executed against a REAL Postgres migrated
- * V1..V28 and loaded with the frozen snap-001 corpus, with the frozen
- * backfill artifact applied (embed-backfill-snap-001).
+ * kind-agnostic, NoReranker) executed against a REAL Postgres migrated by
+ * Flyway and loaded with the frozen snapshot corpus, with the frozen
+ * backfill artifact applied (BENCH_EMBED_ARTIFACT).
  *
  * <p>Compute-once-freeze-forever (sessions 92/94): the ONLY non-production
  * surface is the embedding call itself. Query vectors are served from the

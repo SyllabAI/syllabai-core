@@ -19,7 +19,7 @@ import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 
 /**
- * T-C13 harness (spec §4, §6): loads the frozen corpus snapshot (snap-001) and
+ * T-C13 harness (spec §4, §6): loads the env-selected frozen corpus snapshot and
  * verifies every file against the manifest's SHA-256 before anything runs —
  * fail-closed, the same discipline as the gold-set loader. The snapshot is the
  * ONLY corpus this harness scores against; production is never touched
@@ -67,8 +67,8 @@ public final class BenchSnapshot {
         for (JsonNode c : chunks) {
             ChunkRef chunk = new ChunkRef(c.path("chunk_ref").asText(), c.path("content").asText(""),
                     c.path("paper_state").asText("UNKNOWN"),
-                    // snap-001 records the kind under "kind" (the "document_kind" key never
-                    // existed in the snapshot; nothing consumed kind before T-C14's loader)
+                    // the manifests record the kind under "kind" (a "document_kind" key never
+                    // existed in the snapshots; nothing consumed kind before T-C14's loader)
                     c.path("kind").asText(c.path("document_kind").asText("UNKNOWN")),
                     c.path("paper_code").asText(null));
             chunksByRef.put(chunk.reference(), chunk);

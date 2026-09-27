@@ -131,8 +131,9 @@ public final class Run002A0 {
                 + "maxTopics=5, single-token floor 0.50; single-list RRF k=60; NoReranker");
         results.put("arm_status", "RUNNABLE  -  current production serving default; the baseline to beat");
         results.put("code_version", coreCommit);
-        results.put("gold_set", "gold-v1 (120 queries; frozen)");
-        results.put("snapshot", "snap-001 (" + snapshot.snapshotVersion() + ")");
+        results.put("gold_set", gold.manifest().path("set_version").asText("gold set")
+                + " (" + gold.records().size() + " queries; frozen)");
+        results.put("snapshot", snapshot.snapshotVersion() + " (frozen snapshot)");
         results.put("determinism_check", "PENDING");
         results.put("evaluation_contract", Map.of(
                 "spec_resolution_axis", "A0's native, scored axis: coverage of gold_spec_points by the "
@@ -292,7 +293,8 @@ public final class Run002A0 {
         md.append("**Code:** production `GraphKnowledgeRetriever` + `ReciprocalRankFusion` unmodified over ")
                 .append("snapshot-backed repo stubs; core version `").append(results.get("code_version"))
                 .append("`.\n");
-        md.append("**Date:** ").append(runDate).append(" | **Gold:** gold-v1 frozen | ")
+        md.append("**Date:** ").append(runDate).append(" | **Gold:** ")
+                .append(results.get("gold_set")).append(" | ")
                 .append("**Determinism:** double in-process run byte-identical.\n\n");
         md.append("## Evaluation contract\n\n- SpecPoint resolution (flagship, A0's native axis): ")
                 .append("coverage of gold spec points by the fused ranked topics (top-5).\n")

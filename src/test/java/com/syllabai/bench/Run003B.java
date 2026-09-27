@@ -28,7 +28,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  *
  * <p>Executor: the PRODUCTION code path ({@link ChunkLexicalRepository} SQL +
  * {@link Bm25Retriever} port semantics) against a REAL Postgres migrated with
- * the actual Flyway V1..V28 and loaded with the frozen snap-001 corpus. No
+ * the actual Flyway migrations and loaded with the frozen snapshot corpus. No
  * scorer is reimplemented: the measurement is the production code (spec §6 —
  * "the production retriever over snapshot-backed stubs... not a port").</p>
  *
@@ -64,7 +64,7 @@ public final class Run003B {
         BenchSnapshot snapshot = BenchSnapshot.load(snapshotDir);
         BenchGold gold = BenchGold.load(goldDir);
 
-        // ── 1. real Postgres, real migrations (V1..V28) ───────────────────────
+        // ── 1. real Postgres, real migrations (Flyway) ────────────────────────
         String url = required("BENCH_JDBC_URL");
         String user = required("BENCH_JDBC_USER");
         String pass = required("BENCH_JDBC_PASSWORD");
@@ -142,9 +142,10 @@ public final class Run003B {
         results.put("arm_status", "RUNNABLE — T-C14 landed (retriever + migration); benchmark arm only, "
                 + "NOT a production serving default");
         results.put("code_version", coreCommit);
-        results.put("gold_set", "gold-v1 (120 queries; frozen)");
-        results.put("snapshot", "snap-001 (" + snapshot.snapshotVersion() + ")");
-        results.put("executor", "production code over real Postgres migrated V1..V28 (Flyway), "
+        results.put("gold_set", gold.manifest().path("set_version").asText("gold set")
+                + " (" + gold.records().size() + " queries; frozen)");
+        results.put("snapshot", snapshot.snapshotVersion() + " (frozen snapshot)");
+        results.put("executor", "production code over a real Flyway-migrated Postgres, "
                 + "corpus loaded from the frozen snapshot; no scorer reimplemented. Arm = "
                 + "retrieval.Bm25Retriever through the RetrievalProvider fabric contract over "
                 + "ChunkLexicalRepository.searchServingEligible (T-C05 VALIDATED-only guard)");
@@ -434,7 +435,8 @@ public final class Run003B {
         md.append("**Arm:** ").append(results.get("arm")).append("\n");
         md.append("**Executor:** ").append(results.get("executor")).append(" — code `")
                 .append(results.get("code_version")).append("`.\n");
-        md.append("**Date:** ").append(runDate).append(" | **Gold:** gold-v1 frozen | ")
+        md.append("**Date:** ").append(runDate).append(" | **Gold:** ")
+                .append(results.get("gold_set")).append(" | ")
                 .append("**Determinism:** double retrieval pass, byte-identical aggregates.\n\n");
         md.append("## Overall (chunk axis, n=").append(labeledN).append(" labeled queries)\n\n");
         md.append("- **B (VALIDATED-served corpus, ").append(snapshot.chunks().values().stream()
