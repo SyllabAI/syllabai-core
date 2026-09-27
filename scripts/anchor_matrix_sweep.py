@@ -66,6 +66,20 @@ FULL MATRIX (trace 1a0e3e6722ee9855): all nine asks pinned — every sweep
 run is a complete regression gate: 4 refusal pins (A1/A2/A3/B2) + 3
 grounded-serve pins (B1/C1/D1) + 2 byte-stable controls (E1/E2).
 
+PARAPHRASE EXPANSION (trace 1a0e45b9b32ede41, operator: "authorize the
+H1 fix"): the deep-audit 2026-09-28 found the guard bypassable by
+paraphrase — the parser's QNUM grammar matched only 'question|q' + ASCII
+digits, so 'the tenth question of june 2019 paper 2' was classed
+not-a-paper-ask and SERVED wrong-paper bleed with citations (live
+evidence pre-fix: 6 cites incl. Jan-2022 QP chunks 125b1f13 + June-2019
+Q2/Q7 MS excerpts for a nonexistent Q10). Fix landed upstream d133e41
+(+ ae15cf4 test-contract correction), deployed and live-verified: the
+paraphrase now GUARD-REFUSES. Anchors A4/A5 pin the widened grammar as
+PARAPHRASE-DETECTION supports: they prove the widened parse reaches the
+same guard, they do NOT define the coverage class (a green run is proof
+about these strings, not about every possible phrasing). Matrix now
+4+2 refusal / 3 grounded-serve / 2 controls = 11 asks.
+
 GUARD-REFUSAL detection (upstream KaRagService contract): refused==true AND
 provider=="deterministic-paper-refusal" (the echoed-identity deterministic
 guard refusal — PAPER_IDENTITY_REFUSAL "I could not find question 10 from the
@@ -87,6 +101,8 @@ EXPECTED = {   # FULL MATRIX (trace 1a0e3e6722ee9855): all 9 asks pinned
     "A1 bank-Q10 drop-from":  "GUARD-REFUSAL",
     "A2 bank-Q10 bare":       "GUARD-REFUSAL",
     "A3 bank-Q10 alt-verb":   "GUARD-REFUSAL",
+    "A4 bank-Q10 word-ordinal": "GUARD-REFUSAL",
+    "A5 bank-Q10 number-interp": "GUARD-REFUSAL",
     "B1 bank-coverage P2-Q5": "SERVED(cites)",
     "B2 bank-coverage P1-Q3": "GUARD-REFUSAL",
     "C1 jan2022-2CR":         "SERVED(cites)",
@@ -102,6 +118,17 @@ RULES = {   # surfaced on drift: what a red means + the deliberate action requir
         "silently; adjudication changes need an operator decision record.",
     "A2 bank-Q10 bare": "Same rule as A1 (family anchor).",
     "A3 bank-Q10 alt-verb": "Same rule as A1 (family anchor).",
+    "A4 bank-Q10 word-ordinal":
+        "PARAPHRASE-DETECTION (code-coupled, refusal side). Red = the widened "
+        "qnum grammar regressed (word-ordinals stopped parsing) or identity "
+        "semantics changed deliberately. Fix the parser, or retire/flip with "
+        "that deliberate change in the same wave. A green run proves THIS "
+        "string parses and refuses — never the whole paraphrase class.",
+    "A5 bank-Q10 number-interp":
+        "PARAPHRASE-DETECTION (code-coupled, refusal side). Red = 'question "
+        "number N' interposition stopped parsing (or deliberate grammar "
+        "change). Fix the parser, or retire/flip deliberately in the same "
+        "wave. Same class caveat as A4.",
     "B1 bank-coverage P2-Q5":
         "GUARD-PRECISION sentinel (serve side). Red = guard refused a covered "
         "identity (precision regression) or Q5 coverage was removed. If a data "
@@ -171,6 +198,8 @@ ASKS = [
     ("A1 bank-Q10 drop-from",    "explain question 10 june 2019 paper 2"),
     ("A2 bank-Q10 bare",         "june 2019 paper 2 question 10"),
     ("A3 bank-Q10 alt-verb",     "how do i answer question 10 from june 2019 paper 2"),
+    ("A4 bank-Q10 word-ordinal", "the tenth question of june 2019 paper 2"),
+    ("A5 bank-Q10 number-interp", "question number 10 of june 2019 paper 2"),
     ("B1 bank-coverage P2-Q5",   "explain question 5 from june 2019 paper 2"),
     ("B2 bank-coverage P1-Q3",   "explain question 3 from june 2019 paper 1"),
     ("C1 jan2022-2CR",           "explain question 1 jan 2022 paper 2"),
