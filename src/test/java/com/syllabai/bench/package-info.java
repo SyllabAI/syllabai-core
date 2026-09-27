@@ -7,8 +7,8 @@
  * production default without a recorded benchmark win on the frozen gold set
  * (MASTER_SPEC integration rule 12). It measures; it never serves. Nothing in
  * this package may change production behavior, and harness code has no DB or
- * network access — it runs entirely over the frozen snapshot (snap-001) and
- * frozen gold set (gold-v1), both SHA-256-verified fail-closed before scoring.</p>
+ * network access — it runs entirely over the env-selected frozen snapshot and
+ * gold set, both SHA-256-verified fail-closed before scoring.</p>
  *
  * <p><strong>Layout (spec §6):</strong> {@link com.syllabai.bench.BenchSnapshot}
  * + {@link com.syllabai.bench.BenchGold} (fail-closed loaders),

@@ -44,8 +44,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * ts_rank_cd over V28 content_tsv, T-C07 scope + T-C05 VALIDATED serving) —
  * fused by the shipped {@code ReciprocalRankFusion} (k=60), rank-only,
  * score-free, NoReranker. Zero API calls at run time — the frozen
- * embed-backfill-snap-001 artifact carries both chunk and gold query vectors
- * (compute-once-freeze-forever, sessions 92/94/96).
+ * embed-backfill artifact (BENCH_EMBED_ARTIFACT) carries both chunk and gold
+ * query vectors (compute-once-freeze-forever, sessions 92/94/96).
  *
  * <p>Dual view (honesty rules, §10 ruling 1) — <em>T-C20 UPDATE: the production
  * vector surface is now itself VALIDATED-only (searchServingEligible), so on any
@@ -71,7 +71,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  *   BENCH_JDBC_URL=jdbc:postgresql://localhost:5433/postgres \
  *   BENCH_JDBC_USER=bench BENCH_JDBC_PASSWORD=bench \
  *   BENCH_SNAPSHOT=&lt;snapshot dir&gt; BENCH_GOLD=&lt;gold dir&gt; \
- *   BENCH_EMBED_ARTIFACT=&lt;embed-backfill-snap-001 dir&gt; \
+ *   BENCH_EMBED_ARTIFACT=&lt;embed artifact dir&gt; \
  *   BENCH_RUN_OUT=&lt;output dir&gt; BENCH_CORE_COMMIT=&lt;sha&gt; \
  *   [BENCH_RUN003B_RESULTS=...] [BENCH_RUN004A_RESULTS=...] [BENCH_RUN002A0_RESULTS=...] \
  *   java -cp target/test-classes:target/classes:&lt;deps&gt; com.syllabai.bench.Run005C
@@ -150,7 +150,7 @@ public final class Run005C {
 
         // ── 1. real Postgres, real migrations, frozen corpus ─────────────────
         Run003B.SnapshotLoad load = Run003B.loadSnapshot(jdbc, snapshot);
-        log("loading snap-001 corpus through the production loader");
+        log("loading " + snapshot.snapshotVersion() + " corpus through the production loader");
         int dbChunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
         if (dbChunks != snapshot.chunkCount()) {
             throw new IllegalStateException("document_chunks " + dbChunks
@@ -280,16 +280,17 @@ public final class Run005C {
                 + "RetrievalFabric: explicit arms [pgvector, bm25], central BoundaryPolicy, "
                 + "shipped ReciprocalRankFusion k=60, rank-only, NoReranker) over arm A's "
                 + "production vector path and arm B's production lexical path; chunk+query "
-                + "vectors replayed from the frozen artifact embed-backfill-snap-001, zero "
-                + "API calls at run time");
+                + "vectors replayed from the frozen artifact " + manifest.path("run_id").asText()
+                + ", zero API calls at run time");
         results.put("arm_status", "RUNNABLE — this run (the fabric orchestrator landed with the "
                 + "run; arm promotion must stay explicit, never injection-implied); benchmark "
                 + "arm only, NOT a production serving default — nothing in production "
                 + "constructs a RetrievalFabric yet");
         results.put("code_version", coreCommit);
-        results.put("gold_set", "gold-v1 (120 queries; frozen)");
-        results.put("snapshot", "snap-001 (" + snapshot.snapshotVersion() + ")");
-        results.put("executor", "production code over real Postgres migrated V1..V28 (Flyway), "
+        results.put("gold_set", gold.manifest().path("set_version").asText("gold set")
+                + " (" + gold.records().size() + " queries; frozen)");
+        results.put("snapshot", snapshot.snapshotVersion() + " (frozen snapshot)");
+        results.put("executor", "production code over a real Flyway-migrated Postgres, "
                 + "corpus loaded from the frozen snapshot; chunk vectors applied from the "
                 + "checksummed compute-once-freeze-forever artifact and query vectors served "
                 + "through the production EmbeddingProvider port; no retrieval SQL changed, "
@@ -558,11 +559,12 @@ public final class Run005C {
         StringBuilder md = new StringBuilder();
         md.append("# Run 005 — C hybrid arm, first recorded run (the retrieval fabric orchestrator)\n\n");
         md.append("**Status:** RECORDED — production hybrid arm on record (deterministic, offline ")
-                .append("replay, zero API calls; snapshot snap-001).\n");
+                .append("replay, zero API calls; snapshot ").append(results.get("snapshot")).append(").\n");
         md.append("**Arm:** ").append(results.get("arm")).append("\n");
         md.append("**Executor:** ").append(results.get("executor")).append(" — code `")
                 .append(results.get("code_version")).append("`.\n");
-        md.append("**Date:** ").append(runDate).append(" | **Gold:** gold-v1 frozen | ")
+        md.append("**Date:** ").append(runDate).append(" | **Gold:** ")
+                .append(results.get("gold_set")).append(" | ")
                 .append("**Determinism:** double retrieval pass, byte-identical aggregates (both views).\n\n");
 
         md.append("## Fabric provenance\n\n")

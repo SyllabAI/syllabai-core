@@ -18,7 +18,7 @@ import java.util.Map;
  *
  * <p>Unlike A0 (pure snapshot replay), arm B's native substrate is the
  * production SQL path, so its recorded run drives the production provider code
- * over a Flyway-migrated database loaded with snap-001's corpus — the
+ * over a Flyway-migrated database loaded with the frozen snapshot's corpus — the
  * measurement is the production code, not a port of it.</p>
  *
  * <p>Portable identity: gold chunk refs are {@code (document checksum,

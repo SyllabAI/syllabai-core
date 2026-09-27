@@ -30,8 +30,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * → {@code ChunkVectorRepository.searchServingEligible}: pgvector cosine over V11 vector(768),
  * T-C07 scope predicate; {@code ContentVectorRetriever} cosine floor 0.15,
  * kind-agnostic) against a REAL Postgres migrated with the actual Flyway
- * V1..V28 and loaded with the frozen snap-001 corpus, with the frozen
- * embedding backfill artifact (embed-backfill-snap-001, sessions 92/94)
+ * migrations and loaded with the frozen snapshot corpus, with the frozen
+ * embedding backfill artifact (BENCH_EMBED_ARTIFACT, sessions 92/94)
  * applied and verified fail-closed first. No scorer is reimplemented; the
  * measurement is the production code. Zero API calls at run time — the
  * artifact carries both chunk vectors (RETRIEVAL_DOCUMENT) and gold query
@@ -51,7 +51,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  *   BENCH_JDBC_URL=jdbc:postgresql://localhost:5433/bench \
  *   BENCH_JDBC_USER=bench BENCH_JDBC_PASSWORD=bench \
  *   BENCH_SNAPSHOT=&lt;snapshot dir&gt; BENCH_GOLD=&lt;gold dir&gt; \
- *   BENCH_EMBED_ARTIFACT=&lt;embed-backfill-snap-001 dir&gt; \
+ *   BENCH_EMBED_ARTIFACT=&lt;embed artifact dir&gt; \
  *   BENCH_RUN_OUT=&lt;output dir&gt; BENCH_CORE_COMMIT=&lt;sha&gt; \
  *   [BENCH_RUN003B_RESULTS=&lt;run-003-b results.json&gt;] \
  *   java -cp target/test-classes:target/classes:&lt;deps&gt; com.syllabai.bench.Run004A
@@ -117,7 +117,7 @@ public final class Run004A {
         Run003B.SnapshotLoad load = null;
         int dbChunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
         if (snapshot != null) {
-            log("loading snap-001 corpus through the production loader");
+            log("loading " + snapshot.snapshotVersion() + " corpus through the production loader");
             load = Run003B.loadSnapshot(jdbc, snapshot);
             dbChunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
             if (dbChunks != snapshot.chunkCount()) {
@@ -231,17 +231,18 @@ public final class Run004A {
                 + "ChunkVectorRepository.searchServingEligible: pgvector 1-(embedding <=> q) cosine over V11 "
                 + "vector(768), T-C07 scope EXISTS predicate + T-C05/T-C20 VALIDATED-only serving gate; "
                 + "ContentVectorRetriever cosine floor 0.15, kind-agnostic) "
-                + "— chunk+query vectors replayed from the frozen artifact embed-backfill-snap-001, "
-                + "zero API calls at run time, NoReranker");
+                + "— chunk+query vectors replayed from the frozen artifact "
+                + manifest.path("run_id").asText() + ", zero API calls at run time, NoReranker");
         results.put("arm_status", "RUNNABLE — frozen backfill artifact applied (" + applied + "/"
                 + dbChunks + " embedded); benchmark arm only, NOT a production serving default; the "
                 + "production embedding default is still the RETIRED text-embedding-004 (registered "
                 + "repair, separate slice)");
         results.put("code_version", coreCommit);
-        results.put("gold_set", "gold-v1 (120 queries; frozen)");
-        results.put("snapshot", snapshot != null ? "snap-001 (" + snapshot.snapshotVersion() + ")"
+        results.put("gold_set", gold.manifest().path("set_version").asText("gold set")
+                + " (" + gold.records().size() + " queries; frozen)");
+        results.put("snapshot", snapshot != null ? snapshot.snapshotVersion() + " (frozen snapshot)"
                 : "pre-loaded bench corpus (no snapshot dir)");
-        results.put("executor", "production code over real Postgres migrated V1..V28 (Flyway), corpus "
+        results.put("executor", "production code over a real Flyway-migrated Postgres, corpus "
                 + "loaded from the frozen snapshot; chunk vectors applied from the checksummed "
                 + "compute-once-freeze-forever artifact and query vectors served from it through the "
                 + "production EmbeddingProvider port; no scorer reimplemented — the retrieval surface is "
@@ -723,7 +724,8 @@ public final class Run004A {
         md.append("**Arm:** ").append(results.get("arm")).append("\n");
         md.append("**Executor:** ").append(results.get("executor")).append(" — code `")
                 .append(results.get("code_version")).append("`.\n");
-        md.append("**Date:** ").append(runDate).append(" | **Gold:** gold-v1 frozen | ")
+        md.append("**Date:** ").append(runDate).append(" | **Gold:** ")
+                .append(results.get("gold_set")).append(" | ")
                 .append("**Determinism:** double retrieval pass, byte-identical aggregates (both views).\n\n");
 
         md.append("## Embedding backfill provenance\n\n")

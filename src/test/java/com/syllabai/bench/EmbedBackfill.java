@@ -31,7 +31,7 @@ import java.util.function.IntFunction;
 
 /**
  * Embedding backfill runner (T-C13 arm A prerequisite; session 92). Computes
- * chunk embeddings for the frozen snap-001 corpus through the PRODUCTION
+ * chunk embeddings for the frozen snapshot corpus through the PRODUCTION
  * embedding path — the real {@code EmbeddingProvider} bean built by
  * {@code EmbeddingConfig} (same fail-fast dimension contract, same model
  * wiring), stored through the real {@link ChunkVectorRepository#storeEmbedding}
@@ -59,7 +59,7 @@ import java.util.function.IntFunction;
  * <p>Usage (mirrors Run003B env contract):
  * <pre>
  *   BENCH_JDBC_URL=... BENCH_JDBC_USER=... BENCH_JDBC_PASSWORD=... \
- *   BENCH_SNAPSHOT=&lt;snap-001 dir&gt; BENCH_GOLD=&lt;gold dir&gt; \
+ *   BENCH_SNAPSHOT=&lt;snapshot dir&gt; BENCH_GOLD=&lt;gold dir&gt; \
  *   BENCH_RUN_OUT=&lt;artifact out dir&gt; BENCH_CORE_COMMIT=&lt;sha&gt; \
  *   SYLLABAI_EMBEDDING_GEMINI_API_KEYS=key1[,key2;key3 ...] \
  *     (comma/semicolon/space separated; keys should come from DISTINCT Google
@@ -151,7 +151,7 @@ public final class EmbedBackfill {
             if (snapshot == null) {
                 throw new IllegalStateException("empty document_chunks and no snapshot provided — nothing to embed");
             }
-            log("empty schema — loading snap-001 corpus through the production loader");
+            log("empty schema — loading " + snapshot.snapshotVersion() + " corpus through the production loader");
             Run003B.loadSnapshot(jdbc, snapshot);
             dbChunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
         }
@@ -291,7 +291,8 @@ public final class EmbedBackfill {
         }
 
         Map<String, Object> manifest = new LinkedHashMap<>();
-        manifest.put("run_id", "embed-backfill-snap-001");
+        manifest.put("run_id", "embed-backfill-"
+                + (snapshot != null ? snapshot.snapshotVersion() : "adhoc"));
         manifest.put("model", model);
         manifest.put("dimension", dimension);
         manifest.put("task_types", Map.of("chunks", "RETRIEVAL_DOCUMENT", "queries", "RETRIEVAL_QUERY"));
