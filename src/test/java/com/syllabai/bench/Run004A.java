@@ -156,8 +156,11 @@ public final class Run004A {
         // §8(d) wiring (S8D_SCORING_HANDOFF_2026-09-28 §5): scored on BOTH views
         // when the snapshot carries the chunk→SP HV projection; absent
         // (snap-001..004) the recorded NOT SCOREABLE texts stay byte-identical.
-        final boolean hvPresent = snapshot.chunkSpecHvPresent();
-        final Map<String, Set<String>> hvCodes = snapshot.hvSpecCodesByChunkRef();
+        // snapshot may be null in the seeded-corpus replay mode (ArmAReplayIT):
+        // no snapshot => no projection => the absent path.
+        final boolean hvPresent = snapshot != null && snapshot.chunkSpecHvPresent();
+        final Map<String, Set<String>> hvCodes = snapshot == null
+                ? Map.of() : snapshot.hvSpecCodesByChunkRef();
         final List<ChunkSpecHvResolution.QueryResolution> hvRowsServed = new ArrayList<>();
         final List<ChunkSpecHvResolution.QueryResolution> hvRowsCompliant = new ArrayList<>();
         final List<String> hvGoldPoints = new ArrayList<>();
