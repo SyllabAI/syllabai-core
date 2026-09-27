@@ -76,7 +76,7 @@ class KaRagServiceTest {
                         List.of(), "gemini", 0.81)));
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("learner brief", "knowledge brief", List.of()));
-        when(generator.generate(anyString(), any())).thenReturn(
+        when(generator.generate(anyString(), any(), any())).thenReturn(
                 new TutorGenerator.GeneratedAnswer("Bonding is directional [1].", "model-x",
                         "groq"));
 
@@ -96,7 +96,7 @@ class KaRagServiceTest {
         assertThat(event.evidenceCount()).isEqualTo(2);
         assertThat(event.refused()).isFalse();
         assertThat(event.answerModel()).isEqualTo("model-x");
-        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v3");
+        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v4");
 
         // context assembly saw the evidence capped and topic-stamped
         ArgumentCaptor<List<EvidenceItem>> evidenceCaptor =
@@ -180,7 +180,7 @@ class KaRagServiceTest {
                         "MARK_SCHEME", "three", 3, 3, List.of(), "m", 0.7)));
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("b", "k", List.of()));
-        when(generator.generate(anyString(), any())).thenReturn(
+        when(generator.generate(anyString(), any(), any())).thenReturn(
                 new TutorGenerator.GeneratedAnswer("answer", "m", "p"));
 
         KaRagService capped = new KaRagService(knowledgeRetriever, vectorRetriever,
@@ -210,7 +210,7 @@ class KaRagServiceTest {
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("anon", "k", List.of()));
-        when(generator.generate(anyString(), any())).thenReturn(
+        when(generator.generate(anyString(), any(), any())).thenReturn(
                 new TutorGenerator.GeneratedAnswer("answer", "m", "p"));
 
         TutorAnswerView answer = service.ask(null, "bonding");
@@ -244,7 +244,7 @@ class KaRagServiceTest {
                 .thenReturn(List.of(vectorOnly, duplicate));
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("l", "k", List.of()));
-        when(generator.generate(anyString(), any())).thenReturn(
+        when(generator.generate(anyString(), any(), any())).thenReturn(
                 new TutorGenerator.GeneratedAnswer("grounded", "m", "p"));
 
         TutorAnswerView answer = service.ask(learnerId, "explain question 10 from june 2019 paper 2");
@@ -275,12 +275,144 @@ class KaRagServiceTest {
         when(paperQuestionResolver.resolve(anyString(), any(CurriculumScope.class))).thenReturn(List.of());
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("l", "k", List.of()));
-        when(generator.generate(anyString(), any())).thenReturn(
+        when(generator.generate(anyString(), any(), any())).thenReturn(
                 new TutorGenerator.GeneratedAnswer("a", "m", "p"));
 
         TutorAnswerView answer = service.ask(learnerId, "explain states of matter");
 
         assertThat(answer.refused()).isFalse();
         assertThat(answer.evidenceCount()).isEqualTo(1);
+    }
+
+    // ── s139 working memory ────────────────────────────────────────────────────
+
+    private void stubGroundedFollowUpFlow() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(new MatchedTopic(topicId, "C", "T", 0.4)),
+                        List.of(), List.of()));
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of(
+                EvidenceItem.fromChunk(UUID.randomUUID(), "ms-9", 1, UUID.randomUUID(), 3,
+                        "MARK_SCHEME", "moles = mass / Mr", 2, 2, List.of(), "gemini", 0.8)));
+        when(contextAssembler.assemble(any(), any(), any())).thenReturn(
+                new ContextAssembler.TutorContext("l", "k", List.of()));
+        when(generator.generate(anyString(), any(), any())).thenReturn(
+                new TutorGenerator.GeneratedAnswer("Follow-up answered [1].", "model-x", "groq"));
+    }
+
+    @Test
+    @DisplayName("working memory: a keyword-free follow-up retrieves on the enriched query, generates on the raw question")
+    void followUpRetrievalQueryCarriesConversationKeywords() {
+        stubGroundedFollowUpFlow();
+        List<ConversationTurn> history = List.of(
+                new ConversationTurn(ConversationTurn.ROLE_USER,
+                        "How do I calculate moles from mass and Mr?"),
+                new ConversationTurn(ConversationTurn.ROLE_ASSISTANT,
+                        "Use $n = m/Mr$ — divide mass by molar mass [1] [2]."));
+
+        TutorAnswerView answer = service.ask(learnerId, "why is that?", history);
+
+        assertThat(answer.refused()).isFalse();
+        // retrieval saw the conversation's vocabulary around the bare follow-up…
+        ArgumentCaptor<String> kgQuery = ArgumentCaptor.forClass(String.class);
+        verify(knowledgeRetriever).retrieve(kgQuery.capture(), anyInt(), eq(SCOPE));
+        assertThat(kgQuery.getValue()).contains("moles").contains("why is that?");
+        ArgumentCaptor<String> vectorQuery = ArgumentCaptor.forClass(String.class);
+        verify(vectorRetriever).retrieve(vectorQuery.capture(), anyInt(), eq(SCOPE));
+        // …rendered oldest-first with the question last
+        assertThat(vectorQuery.getValue()).endsWith("why is that?");
+        // …while generation answered the RAW follow-up with the history beside it
+        ArgumentCaptor<String> question = ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ConversationTurn>> historyCaptor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(generator).generate(question.capture(), historyCaptor.capture(), any());
+        assertThat(question.getValue()).isEqualTo("why is that?");
+        assertThat(historyCaptor.getValue()).hasSize(2);
+        // the research record marks the exchange as a follow-up
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).historyTurns()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("history is sanitized server-side: capped at 12 turns, markers stripped, oversized turns bounded")
+    void historySanitizedBeforePipelineUse() {
+        stubGroundedFollowUpFlow();
+        List<ConversationTurn> history = new java.util.ArrayList<>();
+        for (int i = 0; i < 14; i++) {
+            history.add(new ConversationTurn(ConversationTurn.ROLE_USER, "turn " + i));
+        }
+        // the assistant turn that must lose its citation markers (its numbers
+        // belong to sources absent from the next prompt)
+        history.add(new ConversationTurn(ConversationTurn.ROLE_ASSISTANT,
+                "The mole ratio is 2:1 [1] and [23] fixes it."));
+        history.add(new ConversationTurn(ConversationTurn.ROLE_USER, "ok"));
+        history.add(new ConversationTurn(ConversationTurn.ROLE_ASSISTANT,
+                "x".repeat(ConversationTurn.MAX_TURN_CHARS + 500)));
+
+        service.ask(learnerId, "and now?", history);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ConversationTurn>> historyCaptor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(generator).generate(anyString(), historyCaptor.capture(), any());
+        List<ConversationTurn> sanitized = historyCaptor.getValue();
+        assertThat(sanitized).hasSize(ConversationTurn.MAX_HISTORY_TURNS);
+        assertThat(sanitized.get(sanitized.size() - 3).text())
+                .isEqualTo("The mole ratio is 2:1 and fixes it.");
+        assertThat(sanitized.get(sanitized.size() - 1).text().length())
+                .isLessThanOrEqualTo(ConversationTurn.MAX_TURN_CHARS + 1);
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).historyTurns())
+                .isEqualTo(ConversationTurn.MAX_HISTORY_TURNS);
+    }
+
+    @Test
+    @DisplayName("refusal with history stays deterministic: no LLM call, event still carries the turn count")
+    void refusalWithHistoryStillDeterministic() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
+
+        TutorAnswerView answer = service.ask(learnerId, "why is that?", List.of(
+                new ConversationTurn(ConversationTurn.ROLE_USER, "what is chromatography?"),
+                new ConversationTurn(ConversationTurn.ROLE_ASSISTANT, "No grounded evidence yet.")));
+
+        assertThat(answer.refused()).isTrue();
+        assertThat(answer.provider()).isEqualTo("deterministic-refusal");
+        verify(generator, never()).generate(anyString(), any(), any());
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
+        assertThat(event.refused()).isTrue();
+        assertThat(event.historyTurns()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("retrievalQuery: no history = verbatim question; the window keeps the newest turns and the question")
+    void retrievalQueryBounds() {
+        assertThat(KaRagService.retrievalQuery("bonding?", List.of())).isEqualTo("bonding?");
+        assertThat(KaRagService.retrievalQuery("bonding?", null)).isEqualTo("bonding?");
+
+        List<ConversationTurn> history = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            history.add(new ConversationTurn(ConversationTurn.ROLE_USER, "turn" + i));
+        }
+        String enriched = KaRagService.retrievalQuery("why?", history);
+        // only the last RETRIEVAL_WINDOW_TURNS turns ride along, oldest-first, question last
+        assertThat(enriched).isEqualTo("turn6 turn7 turn8 turn9 why?");
+        assertThat(enriched).doesNotContain("turn5");
+
+        // a single huge turn is still included (one turn of context beats none),
+        // but the total stays bounded by question + one capped turn
+        String huge = "x".repeat(ConversationTurn.MAX_TURN_CHARS);
+        String two = KaRagService.retrievalQuery("why?", List.of(
+                new ConversationTurn(ConversationTurn.ROLE_USER, huge),
+                new ConversationTurn(ConversationTurn.ROLE_ASSISTANT, huge)));
+        assertThat(two.length())
+                .isLessThanOrEqualTo("why?".length() + 1 + ConversationTurn.MAX_TURN_CHARS + 1);
     }
 }

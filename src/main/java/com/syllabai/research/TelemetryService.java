@@ -198,6 +198,7 @@ public class TelemetryService {
         payload.put("answerModel", event.answerModel() == null ? "" : event.answerModel());
         payload.put("promptVersion", event.promptVersion());
         payload.put("latencyMs", event.latencyMs());
+        payload.put("historyTurns", event.historyTurns());
         payload.put("provenance", "ka-rag-pipeline/1.0.0");
         events.save(new TelemetryEvent(
                 event.learnerId() == null ? new UUID(0, 0) : event.learnerId(),

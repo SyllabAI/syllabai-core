@@ -24,6 +24,11 @@ import java.util.UUID;
  * @param interventionType deterministic tutor-policy intervention type name
  *                        (null on deterministic refusal, where no context is
  *                        assembled) — V23 signal provenance
+ * @param historyTurns   sanitized conversation turns sent with the ask (s139
+ *                        working memory; 0 = single-turn ask). Research
+ *                        dimension for the §3.5 chat-exchange record: whether
+ *                        an exchange was a follow-up changes how its
+ *                        retrieval provenance should be read.
  */
 public record TutorAnsweredEvent(
         UUID learnerId,
@@ -36,5 +41,6 @@ public record TutorAnsweredEvent(
         String promptVersion,
         double latencyMs,
         Instant occurredAt,
-        String interventionType) {
+        String interventionType,
+        int historyTurns) {
 }

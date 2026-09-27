@@ -31,7 +31,7 @@ import java.util.UUID;
  * @param refused          true when no evidence survived retrieval
  * @param answerModel      model identity (null on deterministic refusal)
  * @param promptVersion    registered prompt identity actually used, e.g.
- *                         "tutor-grounded/v3" (reused verbatim from the Tutor stack)
+ *                         "tutor-grounded/v4" (reused verbatim from the Tutor stack)
  * @param latencyMs        end-to-end pipeline latency
  * @param occurredAt       event time
  * @param interventionType deterministic tutor-policy intervention type name

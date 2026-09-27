@@ -58,6 +58,13 @@ public class KaRagService {
     private final int vectorCandidates;
     private final int evidenceLimit;
 
+    /** Working-memory retrieval budgets (s139): the enriched query keeps the
+     *  final question plus the most recent turns only — retrieval needs the
+     *  topical keywords of the immediately preceding exchange, and older
+     *  turns add drift, not signal. The question itself is never truncated. */
+    static final int RETRIEVAL_WINDOW_TURNS = 4;
+    static final int RETRIEVAL_QUERY_MAX_CHARS = 1200;
+
     public KaRagService(KnowledgeRetriever knowledgeRetriever,
                         VectorRetriever vectorRetriever,
                         PaperQuestionResolver paperQuestionResolver,
@@ -87,14 +94,38 @@ public class KaRagService {
     }
 
     /**
+     * Single-turn ask (anchored/legacy callers): identical to an ask with no
+     * conversation history.
+     *
      * @param learnerId asking learner (null allowed for anonymous preview)
      * @param query     the learner's question
      * @return grounded answer with citations, or a deterministic refusal
      */
     public TutorAnswerView ask(UUID learnerId, String query) {
-        if (query == null || query.isBlank()) {
+        return ask(learnerId, query, List.of());
+    }
+
+    /**
+     * Conversational ask (s139 working memory): the final question plus the
+     * client-held transcript of the same chat. History influences the ask in
+     * exactly two bounded ways — it enriches the RETRIEVAL query (so "why is
+     * that?" still finds the moles evidence the first turn matched) and it
+     * rides along to generation for reference resolution. It is never stored,
+     * never cited, and never widens the curriculum scope (T-C07 binds both
+     * retrieval surfaces regardless of what the history mentions).
+     *
+     * @param learnerId asking learner (null allowed for anonymous preview)
+     * @param question  the learner's question (the turn to answer now)
+     * @param history   prior turns of this chat, oldest first (client-supplied,
+     *                 sanitized here before any pipeline use)
+     * @return grounded answer with citations, or a deterministic refusal
+     */
+    public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history) {
+        if (question == null || question.isBlank()) {
             throw new IllegalArgumentException("question must not be blank");
         }
+        List<ConversationTurn> turns = ConversationTurn.sanitize(history);
+        String query = question.strip();
         long startedAt = System.nanoTime();
 
         // 0. active curriculum scope (T-C07, fail-closed): unresolved scope ⇒
@@ -102,10 +133,18 @@ public class KaRagService {
         // Never serve across curricula; never serve unscoped.
         CurriculumScope scope = curriculumScopes.resolveActive(learnerId).orElse(null);
 
+        // 0.5 working memory (s139): follow-ups like "why is that?" carry no
+        // topic vocabulary of their own — retrieval runs on the question
+        // enriched with the most recent turns (deterministic concatenation:
+        // the KG intent matcher stays a token-overlap function, no LLM rewrite,
+        // and the added tokens can only surface topics the scope already
+        // serves). Generation still sees the RAW question + the conversation.
+        String retrievalQuery = retrievalQuery(query, turns);
+
         // 1. deterministic intent + KG context
         KnowledgeRetriever.KnowledgeContext knowledge = scope == null
                 ? new KnowledgeRetriever.KnowledgeContext(List.of(), List.of(), List.of())
-                : knowledgeRetriever.retrieve(query, maxTopics, scope);
+                : knowledgeRetriever.retrieve(retrievalQuery, maxTopics, scope);
 
         // 2. hybrid retrieval: KG evidence + vector evidence
         List<EvidenceItem> kgCandidates = knowledge.topics().stream()
@@ -114,7 +153,7 @@ public class KaRagService {
                 .toList();
         List<EvidenceItem> vectorCandidatesList = scope == null
                 ? List.of()
-                : vectorRetriever.retrieve(query, vectorCandidates, scope);
+                : vectorRetriever.retrieve(retrievalQuery, vectorCandidates, scope);
 
         // 2.5 deterministic paper-question lead evidence (plan §7 lead items):
         // a paper-style ask ("explain question 10 from june 2019 paper 2")
@@ -124,7 +163,7 @@ public class KaRagService {
         // misses leave this list empty and the pipeline unchanged.
         List<EvidenceItem> pinned = scope == null
                 ? List.of()
-                : paperQuestionResolver.resolve(query, scope);
+                : paperQuestionResolver.resolve(retrievalQuery, scope);
 
         // 3. rank fusion (plan §7 per-kind weights — the P3 serving posture:
         // NOTE 1.0 > SYLLABUS 0.9 > QUESTION_PAPER 0.8 > TEXTBOOK 0.7 >
@@ -136,8 +175,9 @@ public class KaRagService {
 
         // 4. lead-first merge, dedup (a pinned chunk may also surface via the
         //    vector arm — the pinned lead wins), rerank + cap (v0: NoReranker
-        //    keeps the merged order)
-        List<EvidenceItem> reranked = reranker.rerank(query, fused);
+        //    keeps the merged order). The reranker scores against the enriched
+        //    query so follow-ups rank their own evidence correctly.
+        List<EvidenceItem> reranked = reranker.rerank(retrievalQuery, fused);
         Set<String> seen = new HashSet<>();
         List<EvidenceItem> merged = new ArrayList<>(pinned.size() + reranked.size());
         for (EvidenceItem item : pinned) {
@@ -165,7 +205,7 @@ public class KaRagService {
             generated = new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
         } else {
             context = contextAssembler.assemble(knowledge, evidence, learnerId);
-            generated = generator.generate(query, context);
+            generated = generator.generate(query, turns, context);
         }
         // V23 signal provenance: the deterministic policy decision for this ask
         String interventionType = context == null || context.interventionPlan() == null
@@ -179,10 +219,10 @@ public class KaRagService {
                 learnerId, query.strip(), matchedTopicIds(knowledge), evidence.size(),
                 evidence.stream().map(item -> item.source().name()).toList(),
                 refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
-                latencyMs, Instant.now(), interventionType));
+                latencyMs, Instant.now(), interventionType, turns.size()));
 
-        log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} ms)",
-                evidence.size(), knowledge.topics().size(), refused,
+        log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} history turn(s), {} ms)",
+                evidence.size(), knowledge.topics().size(), refused, turns.size(),
                 String.format(java.util.Locale.ROOT, "%.1f", latencyMs));
         return TutorAnswerView.of(generated.answer(), citations,
                 knowledge.topics().stream()
@@ -196,6 +236,42 @@ public class KaRagService {
         return knowledge.topics().stream()
                 .map(KnowledgeRetriever.KnowledgeContext.MatchedTopic::nodeId)
                 .toList();
+    }
+
+    /**
+     * Retrieval query for a conversational ask: the final question plus the
+     * most recent turns' text, oldest material trimmed first so the question
+     * and the immediately preceding exchange always survive. No labels — the
+     * KG tokenizer and the embedding model both want plain content. With no
+     * history this is the question verbatim (single-turn asks are unchanged).
+     */
+    static String retrievalQuery(String question, List<ConversationTurn> history) {
+        if (history == null || history.isEmpty()) {
+            return question;
+        }
+        List<String> parts = new ArrayList<>(history.size() + 1);
+        int used = question.length();
+        int from = Math.max(0, history.size() - RETRIEVAL_WINDOW_TURNS);
+        for (int i = history.size() - 1; i >= from; i--) {
+            String text = history.get(i).text().strip();
+            if (text.isEmpty()) {
+                continue;
+            }
+            if (used + text.length() > RETRIEVAL_QUERY_MAX_CHARS && !parts.isEmpty()) {
+                break;
+            }
+            parts.add(text);
+            used += text.length();
+            if (used >= RETRIEVAL_QUERY_MAX_CHARS) {
+                break;
+            }
+        }
+        // collected newest-first; render oldest-first with the question last
+        StringBuilder sb = new StringBuilder(used + 1);
+        for (int i = parts.size() - 1; i >= 0; i--) {
+            sb.append(parts.get(i)).append(' ');
+        }
+        return sb.append(question).toString().strip();
     }
 
     /** Pipeline identity: a chunk by its row, a KG node by its node id. */

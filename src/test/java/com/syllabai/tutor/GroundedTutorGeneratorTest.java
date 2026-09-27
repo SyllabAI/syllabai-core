@@ -73,7 +73,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v3");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v4");
     }
 
     @Test
@@ -87,6 +87,79 @@ class GroundedTutorGeneratorTest {
         // the v2 grounding rules survive verbatim inside v3
         assertThat(system).contains("Answer ONLY from the numbered SOURCES");
         assertThat(system).contains("at most 200 words plus citations");
+    }
+
+    @Test
+    @DisplayName("v4 pins the working-memory rule: earlier turns resolve references, never serve as sources")
+    void workingMemoryRulePinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("CONVERSATION SO FAR block, when present");
+        assertThat(system).contains("cite ONLY the SOURCES numbered in this message");
+        assertThat(system).contains("do not repeat an earlier answer verbatim");
+        // the v3 formatting rules survive verbatim inside v4
+        assertThat(system).contains("GitHub-flavored markdown");
+    }
+
+    @Test
+    @DisplayName("history renders as a CONVERSATION SO FAR block, oldest first, before the QUESTION")
+    void conversationBlockRendered() {
+        ContextAssembler.TutorContext context = new ContextAssembler.TutorContext("b", "k",
+                List.of(EvidenceItem.fromNode(UUID.randomUUID(), "C", "TOPIC", "T", null, 0.5)));
+        List<ConversationTurn> history = List.of(
+                new ConversationTurn(ConversationTurn.ROLE_USER, "How do I calculate moles?"),
+                new ConversationTurn(ConversationTurn.ROLE_ASSISTANT,
+                        "Divide mass by Mr: moles = mass/Mr."),
+                new ConversationTurn(ConversationTurn.ROLE_USER, "why is that?"));
+
+        generator.generate("why is that?", history, context);
+
+        String prompt = provider.lastRequest().userPrompt();
+        int conversationAt = prompt.indexOf("CONVERSATION SO FAR");
+        int questionAt = prompt.indexOf("QUESTION:\nwhy is that?");
+        assertThat(conversationAt).isGreaterThanOrEqualTo(0);
+        assertThat(questionAt).isGreaterThan(conversationAt);
+        assertThat(prompt).contains("LEARNER: How do I calculate moles?");
+        assertThat(prompt).contains("TUTOR: Divide mass by Mr: moles = mass/Mr.");
+        assertThat(prompt).contains("LEARNER: why is that?");
+        // oldest-first: the first learner turn precedes the tutor turn
+        assertThat(prompt.indexOf("LEARNER: How do I calculate moles?"))
+                .isLessThan(prompt.indexOf("TUTOR: Divide mass by Mr"));
+    }
+
+    @Test
+    @DisplayName("no history ⇒ no conversation block (anchored single-turn callers keep the v3 prompt shape)")
+    void noConversationBlockWhenNoHistory() {
+        generator.generate("single turn?",
+                new ContextAssembler.TutorContext("b", "k", List.of()));
+        assertThat(provider.lastRequest().userPrompt()).doesNotContain("CONVERSATION SO FAR");
+        assertThat(provider.lastRequest().userPrompt()).contains("QUESTION:\nsingle turn?");
+
+        generator.generate("empty list?", List.<ConversationTurn>of(),
+                new ContextAssembler.TutorContext("b", "k", List.of()));
+        assertThat(provider.lastRequest().userPrompt()).doesNotContain("CONVERSATION SO FAR");
+    }
+
+    @Test
+    @DisplayName("the conversation budget keeps the newest turns whole and bounds the prompt")
+    void conversationBudgetBounded() {
+        ContextAssembler.TutorContext context = new ContextAssembler.TutorContext("b", "k", List.of());
+        List<ConversationTurn> history = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            history.add(new ConversationTurn(ConversationTurn.ROLE_USER,
+                    "turn " + i + " " + "x".repeat(700)));
+        }
+
+        generator.generate("follow-up", history, context);
+
+        String prompt = provider.lastRequest().userPrompt();
+        // the oldest turns are dropped once the budget is spent…
+        assertThat(prompt).doesNotContain("turn 0 ");
+        // …while the newest turns survive whole
+        assertThat(prompt).contains("turn 9 ");
+        // and the block stays inside its budget (plus labels/newlines)
+        int from = prompt.indexOf("CONVERSATION SO FAR");
+        int to = prompt.indexOf("QUESTION:");
+        assertThat(to - from).isLessThanOrEqualTo(2400 + 400);
     }
 
     @Test

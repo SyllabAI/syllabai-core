@@ -4,6 +4,7 @@ import com.syllabai.infrastructure.llm.LlmProvider;
 import com.syllabai.infrastructure.llm.LlmProviderException;
 import com.syllabai.infrastructure.llm.LlmRequest;
 import com.syllabai.infrastructure.llm.LlmResponse;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,11 +16,18 @@ import org.springframework.stereotype.Component;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "3";
+    public static final String PROMPT_VERSION = "4";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
     private static final int MAX_TOTAL_EVIDENCE_CHARS = 4000;
+
+    /** Working-memory budgets (s139): one prior turn renders at most this
+     *  long in the prompt (tutor answers are ~200 words, so an untruncated
+     *  exchange fits; older turns lose their tail first — newest-last
+     *  retention keeps the turns the learner is most likely referring to). */
+    private static final int MAX_CONVERSATION_TURN_CHARS = 800;
+    private static final int MAX_TOTAL_CONVERSATION_CHARS = 2400;
 
     private final LlmProvider chain;
     private final double temperature;
@@ -35,6 +43,12 @@ public class GroundedTutorGenerator implements TutorGenerator {
 
     @Override
     public GeneratedAnswer generate(String query, ContextAssembler.TutorContext context) {
+        return generate(query, List.of(), context);
+    }
+
+    @Override
+    public GeneratedAnswer generate(String query, List<ConversationTurn> history,
+                                    ContextAssembler.TutorContext context) {
         if (!chain.available()) {
             throw new TutorGenerationException(
                     "LLM chain unavailable — set SYLLABAI_GROQ_API_KEY (free tier, ADR-009); "
@@ -42,7 +56,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
         }
         try {
             LlmResponse response = chain.generate(LlmRequest.withOptions(
-                    systemPrompt(), userPrompt(query, context), temperature, maxTokens));
+                    systemPrompt(), userPrompt(query, history, context), temperature, maxTokens));
             log.info("tutor answer generated via {} ({})", response.providerName(), response.model());
             return new GeneratedAnswer(response.text(), response.model(), response.providerName());
         } catch (LlmProviderException e) {
@@ -71,11 +85,19 @@ public class GroundedTutorGenerator implements TutorGenerator {
                   $\\ce{2H2 + O2 -> 2H2O}$; other mathematics as $...$ or $$...$$.
                   Convert sub/superscripts, arrows and state symbols from the SOURCES
                   into this notation. Never use HTML tags or Unicode sub/superscripts.
+                - A CONVERSATION SO FAR block, when present, is this learner's
+                  earlier chat in the same session. Answer the final QUESTION;
+                  use earlier turns only to resolve references ("it", "the second
+                  point", "that equation"). Earlier tutor messages are not sources:
+                  cite ONLY the SOURCES numbered in this message, and
+                  do not repeat an earlier answer verbatim — build on it.
                 """;
     }
 
-    String userPrompt(String query, ContextAssembler.TutorContext context) {
+    String userPrompt(String query, List<ConversationTurn> history,
+                      ContextAssembler.TutorContext context) {
         StringBuilder sb = new StringBuilder();
+        appendConversation(sb, history);
         sb.append("QUESTION:\n").append(query.strip()).append("\n\n");
         sb.append("LEARNER CONTEXT:\n").append(context.learnerBrief()).append("\n\n");
         sb.append("CURRICULUM CONTEXT:\n").append(context.knowledgeBrief()).append("\n\n");
@@ -99,6 +121,48 @@ public class GroundedTutorGenerator implements TutorGenerator {
                     .append(sourceLabel(evidence)).append(content.replace('\n', ' ')).append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * CONVERSATION SO FAR block, oldest first (the model reads the chat in
+     * order and the final QUESTION right after it). Empty history ⇒ the block
+     * is omitted entirely, so anchored single-turn callers (CLA) get the v3
+     * prompt shape unchanged apart from the v4 system rule.
+     *
+     * <p>Budget: newest turns are kept whole and the OLDEST are dropped once
+     * {@link #MAX_TOTAL_CONVERSATION_CHARS} is exhausted — a follow-up refers
+     * to the immediately preceding exchange far more often than to the first.
+     * History arrives pre-sanitized ({@link ConversationTurn#sanitize}); this
+     * method only bounds what reaches the prompt.</p>
+     */
+    private static void appendConversation(StringBuilder sb, List<ConversationTurn> history) {
+        if (history == null || history.isEmpty()) {
+            return;
+        }
+        // select newest-first until the budget is spent, then render oldest-first
+        List<String> kept = new ArrayList<>(history.size());
+        int used = 0;
+        for (int i = history.size() - 1; i >= 0; i--) {
+            ConversationTurn turn = history.get(i);
+            String bounded = bound(turn.text(), MAX_CONVERSATION_TURN_CHARS);
+            if (used + bounded.length() > MAX_TOTAL_CONVERSATION_CHARS && !kept.isEmpty()) {
+                break;
+            }
+            kept.add(bounded);
+            used += bounded.length();
+            if (used >= MAX_TOTAL_CONVERSATION_CHARS) {
+                break;
+            }
+        }
+        if (kept.isEmpty()) {
+            return;
+        }
+        sb.append("CONVERSATION SO FAR (earlier turns, citation markers removed):\n");
+        for (int i = kept.size() - 1; i >= 0; i--) {
+            ConversationTurn turn = history.get(history.size() - 1 - i);
+            sb.append(turn.isAssistant() ? "TUTOR: " : "LEARNER: ").append(kept.get(i)).append('\n');
+        }
+        sb.append('\n');
     }
 
     private String sourceLabel(EvidenceItem evidence) {
