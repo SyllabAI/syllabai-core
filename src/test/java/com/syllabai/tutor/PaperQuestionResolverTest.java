@@ -446,25 +446,26 @@ class PaperQuestionResolverTest {
     }
 
     @Test
-    @DisplayName("fail-open verdict: bank ambiguity (question resolves in several papers) never gates")
-    void ambiguousIdentityNeverGates() {
-        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 5,
-                null, false, "explain question 5 june 2019");
+    @DisplayName("fail-open verdict: bank ambiguity (question resolves in several SUGGESTED rows) does NOT "
+            + "disarm the guard — the 09-27 G1 live shape (JUN-2019 q10 on 1C/1CR)")
+    void ambiguousBankRowsStillGateWhenNothingBinds() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
+                null, false, "explain question 10 june 2019 paper 2");
         when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
                 .thenReturn(new FetchResult(parsed, true, false, List.of()));
         when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
                 .thenReturn(Optional.empty());
         when(chunks.findRowIdsByPaperIdentity("JUN", 2019, List.of(
-                "4CH1/1C", "4CH1/2C", "4CH1/1CR", "4CH1/2CR",
-                "4CH0/1C", "4CH0/2C", "4CH0/1CR", "4CH0/2CR")))
+                "4CH1/2C", "4CH1/2CR", "4CH0/2C", "4CH0/2CR")))
                 .thenReturn(List.of());
 
         PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
-                "explain question 5 june 2019", SCOPE);
+                "explain question 10 june 2019 paper 2", SCOPE);
 
         assertThat(resolution.items()).isEmpty();
-        assertThat(resolution.identityParsed()).isFalse();
-        assertThat(resolution.identityLabel()).isNull();
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel())
+                .isEqualTo("question 10 from the June 2019 paper 2");
     }
 
     @Test

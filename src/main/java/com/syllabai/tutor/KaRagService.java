@@ -231,9 +231,10 @@ public class KaRagService {
                 .toList();
 
         // 4.5 fail-open guard (09-27 adjudication direction (a)): the ask
-        // named a complete, unambiguous paper-question identity and NOT ONE
-        // validated anchor bound it (no bank row, no card, no content-store
-        // QP/MS). Left as-is, generic retrieval answers anyway from
+        // named a complete paper-question identity and NOT ONE validated
+        // anchor bound it (no bank row that serves, no card, no content-store
+        // QP/MS — bank ambiguity only flags SUGGESTED rows, which never
+        // serve). Left as-is, generic retrieval answers anyway from
         // textually-similar wrong-paper chunks and the generator preserves
         // the ask's paper framing — the confident misattribution class
         // ("june 2019 paper 2 question 10" answered from Jan-2022-1C chunks).

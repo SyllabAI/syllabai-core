@@ -70,12 +70,15 @@ import org.springframework.stereotype.Service;
  * not-a-paper ask (no parseable identity) returns empty with
  * {@code identityParsed=false} and the unmodified vector+KG path serves the
  * ask exactly as before; a <em>complete</em> paper-question identity
- * (question number + series + year, unambiguous in the bank) that binds NOT
- * ONE validated anchor returns empty with {@code identityParsed=true} — the
- * fail-open guard (09-27 adjudication, direction (a)): the caller must
- * refuse honestly instead of letting generic retrieval answer a named paper
- * question from textually-similar wrong-paper chunks. The resolver never
- * guesses, never widens.</p>
+ * (question number + series + year) that binds NOT ONE validated anchor
+ * returns empty with {@code identityParsed=true} — the fail-open guard
+ * (09-27 adjudication, direction (a)): the caller must refuse honestly
+ * instead of letting generic retrieval answer a named paper question from
+ * textually-similar wrong-paper chunks. Bank ambiguity (the question
+ * resolving in several rows) does NOT disarm the guard: a question that
+ * exists only in SUGGESTED bank rows is unservable by the serving law, and
+ * the 09-27 G1 probe proved that shape serves wrong-paper bleed when the
+ * guard is silenced. The resolver never guesses, never widens.</p>
  *
  * <p>"paper 1 / paper 2" phrasing maps to the home-unit candidates
  * {@code 1C}/{@code 2C} with the regional variants as deterministic
@@ -143,14 +146,17 @@ public class PaperQuestionResolver {
 
     /**
      * Resolution with its fail-open verdict. {@code identityParsed} is true
-     * exactly when the ask carried a complete, unambiguous paper-question
-     * identity (question number + series + year — the card tier's bindable
-     * definition, minus the bank's multi-paper ambiguity flag). An exception
-     * mid-resolution leaves the anchor state unknown, so the verdict
-     * degrades to {@code identityParsed=false}: the resolver never gates an
-     * ask on unknown state. (The content-store tier's own catch converts a
-     * store error into empty items — under a parsed identity that is a
-     * fail-closed refusal, never the wrong-paper serve.)
+     * exactly when the ask carried a complete paper-question identity
+     * (question number + series + year — the card tier's bindable
+     * definition). The bank's ambiguity flag does NOT disarm the verdict:
+     * it fires when the question resolves in several rows, which per the
+     * serving law can only mean SUGGESTED rows — unservable either way
+     * (09-27 G1 evidence: JUN-2019 q10 bank rows on SUGGESTED 1C/1CR).
+     * An exception mid-resolution leaves the anchor state unknown, so the
+     * verdict degrades to {@code identityParsed=false}: the resolver never
+     * gates an ask on unknown state. (The content-store tier's own catch
+     * converts a store error into empty items — under a parsed identity
+     * that is a fail-closed refusal, never the wrong-paper serve.)
      */
     public Resolution resolveWithVerdict(String query, CurriculumScope scope) {
         if (query == null || query.isBlank() || scope == null) {
@@ -174,8 +180,7 @@ public class PaperQuestionResolver {
                 }
             }
             ParsedFetchQuery parsed = fetch == null ? null : fetch.parsed();
-            boolean identityParsed = completeIdentity(parsed)
-                    && fetch != null && !fetch.ambiguous();
+            boolean identityParsed = completeIdentity(parsed) && fetch != null;
             List<EvidenceItem> pinned = new ArrayList<>(cardAnchored(query, parsed, scope));
             pinned.addAll(contentStoreAnchored(query, parsed, scope));
             return new Resolution(List.copyOf(pinned), identityParsed,
@@ -191,8 +196,7 @@ public class PaperQuestionResolver {
     /**
      * A complete paper-question identity: question number + series + year —
      * exactly the card tier's "bindable paper-style ask" definition. (A
-     * parseDefect fetch has an empty parse, which cannot satisfy this; the
-     * bank's multi-paper ambiguity flag is consulted by the caller.)
+     * parseDefect fetch has an empty parse, which cannot satisfy this.)
      */
     private static boolean completeIdentity(ParsedFetchQuery parsed) {
         return parsed != null && parsed.qnum() != null && parsed.year() != null
