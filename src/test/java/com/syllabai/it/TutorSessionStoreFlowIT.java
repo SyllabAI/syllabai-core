@@ -115,4 +115,48 @@ class TutorSessionStoreFlowIT {
         assertThat(sessionStore.view(other, foreign.sessionId()).turns()).isEmpty();
         assertThat(sessionStore.latest(learner)).isNull();
     }
+
+    @Test
+    @DisplayName("conversation list + delete (s143): summaries by recency, delete cascades the transcript")
+    void conversationListAndDelete() {
+        UUID learner = registerLearner();
+        var older = sessionStore.create(learner);
+        var newer = sessionStore.create(learner);
+
+        // append one exchange to each through the real ask path — the
+        // deterministic refusal appends both turns, no LLM spend
+        tutor.ask(learner, new TutorController.TutorAskRequest(
+                "What is a covalent bond?", null, older.sessionId()));
+        tutor.ask(learner, new TutorController.TutorAskRequest(
+                "How do I balance a redox half-equation?", null, newer.sessionId()));
+
+        var list = sessionStore.list(learner);
+        assertThat(list).hasSize(2);
+        // most recently active first; titles are the opening questions;
+        // counts are the stored turn rows (user + assistant)
+        assertThat(list.get(0).sessionId()).isEqualTo(newer.sessionId());
+        assertThat(list.get(0).title()).isEqualTo("How do I balance a redox half-equation?");
+        assertThat(list.get(0).turnCount()).isEqualTo(2);
+        assertThat(list.get(1).sessionId()).isEqualTo(older.sessionId());
+        assertThat(list.get(1).title()).isEqualTo("What is a covalent bond?");
+        assertThat(list.get(1).turnCount()).isEqualTo(2);
+
+        // ownership: another learner's list never includes these rows
+        UUID other = registerLearner();
+        assertThat(sessionStore.list(other)).isEmpty();
+
+        // delete the newer chat: the anchor AND its transcript rows go
+        sessionStore.delete(learner, newer.sessionId());
+        var after = sessionStore.list(learner);
+        assertThat(after).hasSize(1);
+        assertThat(after.get(0).sessionId()).isEqualTo(older.sessionId());
+        assertThatThrownBy(() -> sessionStore.view(learner, newer.sessionId()))
+                .isInstanceOf(NotFoundException.class);
+
+        // a foreign delete is indistinguishable from an unknown id and
+        // removes nothing from the owner
+        assertThatThrownBy(() -> sessionStore.delete(other, older.sessionId()))
+                .isInstanceOf(NotFoundException.class);
+        assertThat(sessionStore.view(learner, older.sessionId()).turns()).hasSize(2);
+    }
 }

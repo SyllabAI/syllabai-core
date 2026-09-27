@@ -149,6 +149,141 @@ class TutorSessionServiceTest {
         assertThat(service.latest(other)).isNotNull();
     }
 
+    // ── s143 conversation management: list + delete ──────────────────────────
+
+    /** minimal fake for the grouped-count projection */
+    private static TutorSessionTurnRepository.SessionTurnCount countOf(UUID sessionId, long n) {
+        return new TutorSessionTurnRepository.SessionTurnCount() {
+            @Override public UUID getSessionId() { return sessionId; }
+            @Override public long getTurnCount() { return n; }
+        };
+    }
+
+    @Test
+    @DisplayName("list returns summaries by recency: opening question as title, joined turn count")
+    void listSummaries() {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        // repository order IS the recency order the service must preserve
+        when(sessions.findByLearnerIdOrderByLastActiveAtDesc(learner))
+                .thenReturn(List.of(ownedSession(second, learner), ownedSession(first, learner)));
+        when(turns.countBySessionIdIn(any()))
+                .thenReturn(List.of(countOf(second, 6L), countOf(first, 2L)));
+        when(turns.findBySessionIdInAndSeq(any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenReturn(List.of(
+                        new TutorSessionTurn(second, 1, ConversationTurn.ROLE_USER,
+                                "How do I balance a redox half-equation?", 0, false,
+                                null, null, null, Instant.now()),
+                        // multi-line opening question collapses to one title line
+                        new TutorSessionTurn(first, 1, ConversationTurn.ROLE_USER,
+                                "what   is\n\na mole?", 0, false,
+                                null, null, null, Instant.now())));
+
+        List<TutorSessionService.SessionSummaryView> list = service.list(learner);
+
+        assertThat(list).hasSize(2);
+        assertThat(list.get(0).sessionId()).isEqualTo(second);
+        assertThat(list.get(0).title()).isEqualTo("How do I balance a redox half-equation?");
+        assertThat(list.get(0).turnCount()).isEqualTo(6);
+        assertThat(list.get(1).sessionId()).isEqualTo(first);
+        assertThat(list.get(1).title()).isEqualTo("what is a mole?");
+        assertThat(list.get(1).turnCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("list caps at MAX_LISTED_SESSIONS and never queries beyond the page")
+    void listCapped() {
+        List<TutorSession> many = new java.util.ArrayList<>();
+        for (int i = 0; i < TutorSessionService.MAX_LISTED_SESSIONS + 5; i++) {
+            many.add(ownedSession(UUID.randomUUID(), learner));
+        }
+        when(sessions.findByLearnerIdOrderByLastActiveAtDesc(learner)).thenReturn(many);
+        when(turns.countBySessionIdIn(any())).thenReturn(List.of());
+        when(turns.findBySessionIdInAndSeq(any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenReturn(List.of());
+
+        List<TutorSessionService.SessionSummaryView> list = service.list(learner);
+
+        assertThat(list).hasSize(TutorSessionService.MAX_LISTED_SESSIONS);
+        // the page fed to the batched queries is the capped one — the list
+        // must never become a transcript dump by accident
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Collection<UUID>> ids = ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(turns).countBySessionIdIn(ids.capture());
+        assertThat(ids.getValue()).hasSize(TutorSessionService.MAX_LISTED_SESSIONS);
+        assertThat(ids.getValue()).containsExactlyElementsOf(
+                many.stream().limit(TutorSessionService.MAX_LISTED_SESSIONS)
+                        .map(TutorSession::id).toList());
+    }
+
+    @Test
+    @DisplayName("list titles stay honest: long questions ellipsize, non-user seq-1 rows never title, empty chats have no title")
+    void listTitleHonesty() {
+        UUID chatty = UUID.randomUUID();
+        UUID defensive = UUID.randomUUID();
+        UUID empty = UUID.randomUUID();
+        when(sessions.findByLearnerIdOrderByLastActiveAtDesc(learner))
+                .thenReturn(List.of(ownedSession(chatty, learner),
+                        ownedSession(defensive, learner), ownedSession(empty, learner)));
+        when(turns.countBySessionIdIn(any())).thenReturn(List.of(
+                countOf(chatty, 4L), countOf(defensive, 2L)));
+        when(turns.findBySessionIdInAndSeq(any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenReturn(List.of(
+                        new TutorSessionTurn(chatty, 1, ConversationTurn.ROLE_USER,
+                                "x".repeat(500), 0, false, null, null, null, Instant.now()),
+                        // a defensive case: seq 1 exists but is NOT a user turn —
+                        // no title rather than a leaked answer row
+                        new TutorSessionTurn(defensive, 1, ConversationTurn.ROLE_ASSISTANT,
+                                "answer never titles the chat", 0, false, null, null, null,
+                                Instant.now())));
+
+        List<TutorSessionService.SessionSummaryView> list = service.list(learner);
+
+        assertThat(list.get(0).title()).hasSize(TutorSessionService.MAX_TITLE_CHARS);
+        assertThat(list.get(0).title()).endsWith("…");
+        assertThat(list.get(1).title()).isNull();
+        assertThat(list.get(2).title()).isNull();
+        assertThat(list.get(2).turnCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("a learner with no chats gets an empty list, not null")
+    void listEmpty() {
+        when(sessions.findByLearnerIdOrderByLastActiveAtDesc(learner)).thenReturn(List.of());
+        assertThat(service.list(learner)).isEmpty();
+        verify(turns, never()).countBySessionIdIn(any());
+    }
+
+    @Test
+    @DisplayName("delete removes the transcript rows then the session anchor")
+    void deleteRemovesTranscriptThenSession() {
+        UUID id = UUID.randomUUID();
+        TutorSession session = ownedSession(id, learner);
+        when(sessions.findByIdAndLearnerId(id, learner)).thenReturn(Optional.of(session));
+
+        service.delete(learner, id);
+
+        var inOrder = org.mockito.Mockito.inOrder(turns, sessions);
+        inOrder.verify(turns).deleteBySessionId(id);
+        inOrder.verify(sessions).delete(session);
+    }
+
+    @Test
+    @DisplayName("a foreign delete 404s exactly like an unknown id and removes nothing")
+    void deleteForeignIndistinguishable() {
+        UUID foreign = UUID.randomUUID();
+        UUID unknown = UUID.randomUUID();
+        when(sessions.findByIdAndLearnerId(foreign, learner)).thenReturn(Optional.empty());
+        when(sessions.findByIdAndLearnerId(unknown, learner)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.delete(learner, foreign))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> service.delete(learner, unknown))
+                .isInstanceOf(NotFoundException.class);
+        verify(turns, never()).deleteBySessionId(any());
+        verify(sessions, never()).delete(any(TutorSession.class));
+    }
+
     @Test
     @DisplayName("stored turn content is bounded (4000 chars) — hostile or runaway answers cannot bloat rows")
     void contentBounded() {
