@@ -103,6 +103,8 @@ class KaRagServiceTest {
         assertThat(event.evidenceCount()).isEqualTo(2);
         assertThat(event.refused()).isFalse();
         assertThat(event.answerModel()).isEqualTo("model-x");
+        // D2: a grounded answer carries the generator's provider identity
+        assertThat(event.answerProvider()).isEqualTo("groq");
         assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v5");
         // the single-turn overload is an unpersisted ask (s140: no session)
         assertThat(event.sessionId()).isNull();
@@ -429,6 +431,9 @@ class KaRagServiceTest {
         TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
         assertThat(event.refused()).isTrue();
         assertThat(event.historyTurns()).isEqualTo(2);
+        // D2: the generic grounding-gate refusal names its provider — the
+        // research telemetry distinguishes it from the guard's firing below
+        assertThat(event.answerProvider()).isEqualTo("deterministic-refusal");
     }
 
     // ── fail-open guard (09-27 adjudication, direction (a)) ───────────────────
@@ -468,6 +473,10 @@ class KaRagServiceTest {
         TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
         assertThat(event.refused()).isTrue();
         assertThat(event.evidenceCount()).isZero();
+        // D2: the guard's refusal is distinguishable in the research record
+        // from the generic grounding-gate refusal — this is the firing class
+        // the 09-27 G1 live evidence could not see
+        assertThat(event.answerProvider()).isEqualTo("deterministic-paper-refusal");
     }
 
     @Test

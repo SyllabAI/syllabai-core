@@ -13,6 +13,7 @@ import com.syllabai.shared.events.MasteryUpdatedEvent;
 import com.syllabai.shared.events.MisconceptionUpdatedEvent;
 import com.syllabai.shared.events.ReviewScheduledEvent;
 import com.syllabai.shared.events.SmartMarkCompletedEvent;
+import com.syllabai.shared.events.TutorAnsweredEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -176,5 +177,51 @@ class TelemetryServiceTest {
                 .containsEntry("marksAwarded", 1)
                 .containsEntry("revising", true)
                 .containsEntry("markerId", marker.toString());
+    }
+
+    // ── D2: the deterministic refusal provider persists (s145 rider) ────────
+
+    @Test
+    @DisplayName("D2: a tutor answer serializes answerProvider — the grounding-gate refusal is named")
+    void tutorAnsweredPersistsTheRefusalProvider() {
+        service.onTutorAnswered(new TutorAnsweredEvent(
+                LEARNER, "what is chromatography?", List.of(NODE), 0, List.of(),
+                true, null, "tutor-grounded/v5", 3.0, WHEN, null, 0, null,
+                "deterministic-refusal"));
+
+        verify(events).save(saved.capture());
+        TelemetryEvent row = saved.getValue();
+        assertThat(row.type()).isEqualTo(TelemetryEvent.Type.KA_RAG_COMPLETED);
+        assertThat(row.payload())
+                .containsEntry("refused", true)
+                .containsEntry("answerProvider", "deterministic-refusal")
+                .containsEntry("answerModel", "");
+    }
+
+    @Test
+    @DisplayName("D2: the fail-open guard's refusal is distinguishable from the grounding gate")
+    void tutorAnsweredPersistsThePaperRefusalProvider() {
+        service.onTutorAnswered(new TutorAnsweredEvent(
+                LEARNER, "explain question 10 from june 2019 paper 2", List.of(NODE), 0,
+                List.of(), true, null, "tutor-grounded/v5", 3.0, WHEN, null, 0, null,
+                "deterministic-paper-refusal"));
+
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().payload())
+                .containsEntry("answerProvider", "deterministic-paper-refusal");
+    }
+
+    @Test
+    @DisplayName("D2: a grounded answer carries the generator's provider name, never blank")
+    void tutorAnsweredPersistsTheGeneratorProvider() {
+        service.onTutorAnswered(new TutorAnsweredEvent(
+                LEARNER, "bonding question", List.of(NODE), 4,
+                List.of("MARK_SCHEME", "KNOWLEDGE_NODE"), false, "model-x",
+                "tutor-grounded/v5", 1200.0, WHEN, "EXPLANATION", 0, null, "groq"));
+
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().payload())
+                .containsEntry("answerProvider", "groq")
+                .containsEntry("answerModel", "model-x");
     }
 }

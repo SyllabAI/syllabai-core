@@ -33,6 +33,12 @@ import java.util.UUID;
  *                        (s140; null = an unpersisted ask — pre-v2 clients or
  *                        the CLA/SmartLesson surfaces). Links the §3.5
  *                        chat-exchange row to its stored transcript.
+ * @param answerProvider provider identity of the answer — on refusal this is
+ *                        the DETERMINISTIC refusal provider ("deterministic-refusal"
+ *                        or "deterministic-paper-refusal" — the fail-open guard's
+ *                        zeroed-pool refusal), so production telemetry distinguishes
+ *                        the two refusal paths (D2); on a grounded answer it is the
+ *                        generator's provider name. Never null on the KaRag path.
  */
 public record TutorAnsweredEvent(
         UUID learnerId,
@@ -47,5 +53,6 @@ public record TutorAnsweredEvent(
         Instant occurredAt,
         String interventionType,
         int historyTurns,
-        UUID sessionId) {
+        UUID sessionId,
+        String answerProvider) {
 }

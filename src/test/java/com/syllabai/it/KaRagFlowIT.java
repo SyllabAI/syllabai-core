@@ -202,6 +202,8 @@ class KaRagFlowIT {
                 .isEqualTo(answer.evidenceCount());
         assertThat(last.payload().get("refused")).isEqualTo(false);
         assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v5");
+        // D2 (s145): a grounded answer carries the generator's provider name
+        assertThat(last.payload().get("answerProvider")).isEqualTo("stub");
         // s139: the direct service call is single-turn — historyTurns reads 0
         assertThat(((Number) last.payload().get("historyTurns")).intValue()).isZero();
 
@@ -263,6 +265,11 @@ class KaRagFlowIT {
         var events = telemetry.findByLearnerIdOrderByOccurredAtDesc(learnerId,
                 org.springframework.data.domain.PageRequest.of(0, 20));
         assertThat(events.get(0).payload().get("refused")).isEqualTo(true);
+        // D2 (s145): the deterministic grounding-gate refusal names its provider
+        // — the research record distinguishes it from the fail-open guard's
+        // "deterministic-paper-refusal" (KaRagServiceTest pins that path)
+        assertThat(events.get(0).payload().get("answerProvider"))
+                .isEqualTo("deterministic-refusal");
     }
 
     // ── deterministic fake embeddings (shared shape with ContentPipelineIT) ──

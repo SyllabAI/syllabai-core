@@ -172,7 +172,8 @@ class WeaknessTargetingFlowIT {
         events.publishEvent(new TutorAnsweredEvent(
                 askingLearner, "what is a covalent bond?", List.of(TOPIC_T2_1),
                 3, List.of("KNOWLEDGE_NODE"), false, "openai/gpt-oss-120b",
-                "tutor-grounded/v1", 700.0, Instant.now(), "EXPLANATION", 0, null));
+                "tutor-grounded/v1", 700.0, Instant.now(), "EXPLANATION", 0, null,
+                "stub-provider"));
 
         // 3. weakness options over HTTP: T1.1 is weak with BOTH transparent reasons
         HttpResponse<String> options = get(

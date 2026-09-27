@@ -196,6 +196,11 @@ public class TelemetryService {
         payload.put("evidenceSources", event.evidenceSources());
         payload.put("refused", event.refused());
         payload.put("answerModel", event.answerModel() == null ? "" : event.answerModel());
+        // D2: persist the deterministic refusal provider — production telemetry
+        // distinguishes "deterministic-refusal" (the grounding gate) from
+        // "deterministic-paper-refusal" (the fail-open guard's zeroed-pool
+        // refusal); on a grounded answer this is the generator's provider name
+        payload.put("answerProvider", event.answerProvider() == null ? "" : event.answerProvider());
         payload.put("promptVersion", event.promptVersion());
         payload.put("latencyMs", event.latencyMs());
         payload.put("historyTurns", event.historyTurns());

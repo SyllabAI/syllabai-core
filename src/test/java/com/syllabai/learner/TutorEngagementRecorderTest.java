@@ -39,7 +39,8 @@ class TutorEngagementRecorderTest {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 learner, "Why is NaCl ionic?", List.of(topicA, topicB),
                 5, List.of("KNOWLEDGE_NODE", "DOCUMENT_CHUNK"), false,
-                "openai/gpt-oss-120b", "tutor-grounded/v1", 2100.0, when, "EXPLANATION", 0, null));
+                "openai/gpt-oss-120b", "tutor-grounded/v1", 2100.0, when, "EXPLANATION", 0, null,
+                "stub-provider"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =
@@ -65,7 +66,8 @@ class TutorEngagementRecorderTest {
         UUID weakMatch = UUID.randomUUID();
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 learner, "odd question", List.of(weakMatch),
-                0, List.of(), true, null, "tutor-grounded/v1", 4.0, Instant.now(), null, 0, null));
+                0, List.of(), true, null, "tutor-grounded/v1", 4.0, Instant.now(), null, 0, null,
+                "stub-provider"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =
@@ -82,7 +84,8 @@ class TutorEngagementRecorderTest {
     void anonymousPreviewWritesNothing() {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 null, "preview question", List.of(UUID.randomUUID()),
-                3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1", 10.0, Instant.now(), null, 0, null));
+                3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1", 10.0, Instant.now(), null, 0, null,
+                "stub-provider"));
         verify(engagements, never()).saveAll(anyList());
     }
 
@@ -91,7 +94,8 @@ class TutorEngagementRecorderTest {
     void noMatchNoRows() {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 UUID.randomUUID(), "hello?", List.of(),
-                0, List.of(), true, null, "tutor-grounded/v1", 2.0, Instant.now(), null, 0, null));
+                0, List.of(), true, null, "tutor-grounded/v1", 2.0, Instant.now(), null, 0, null,
+                "stub-provider"));
         verify(engagements, never()).saveAll(anyList());
     }
 
@@ -157,7 +161,8 @@ class TutorEngagementRecorderTest {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 UUID.randomUUID(), "explain moles", List.of(UUID.randomUUID()),
                 3, List.of("KNOWLEDGE_NODE"), false, "m", "tutor-grounded/v1",
-                100.0, Instant.now(), "EXPLANATION", 0, null));
+                100.0, Instant.now(), "EXPLANATION", 0, null,
+                "stub-provider"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =
@@ -182,7 +187,8 @@ class TutorEngagementRecorderTest {
         recorder.onTutorAnswered(new TutorAnsweredEvent(
                 learner, "I don't understand ionic bonding", List.of(topic),
                 4, List.of("KNOWLEDGE_NODE"), false,
-                "openai/gpt-oss-120b", "tutor-grounded/v1", 1800.0, when, "EXPLANATION", 0, null));
+                "openai/gpt-oss-120b", "tutor-grounded/v1", 1800.0, when, "EXPLANATION", 0, null,
+                "stub-provider"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TutorTopicEngagement>> captor =

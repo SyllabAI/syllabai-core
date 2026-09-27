@@ -274,7 +274,12 @@ public class KaRagService {
                 learnerId, query.strip(), matchedTopicIds(knowledge), evidence.size(),
                 evidence.stream().map(item -> item.source().name()).toList(),
                 refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
-                latencyMs, Instant.now(), interventionType, turns.size(), sessionId));
+                latencyMs, Instant.now(), interventionType, turns.size(), sessionId,
+                // D2: the provider persists the deterministic refusal identity
+                // ("deterministic-refusal" vs "deterministic-paper-refusal") so
+                // the research telemetry distinguishes the guard's firings from
+                // the generic grounding-gate refusal
+                generated.provider()));
 
         log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} history turn(s), {} ms)",
                 evidence.size(), knowledge.topics().size(), refused, turns.size(),

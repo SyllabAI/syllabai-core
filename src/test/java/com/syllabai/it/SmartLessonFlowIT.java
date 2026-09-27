@@ -216,7 +216,8 @@ class SmartLessonFlowIT {
         events.publishEvent(new TutorAnsweredEvent(
                 learner, "I don't understand ionic bonding", List.of(TOPIC_T2_1),
                 4, List.of("KNOWLEDGE_NODE"), false, "openai/gpt-oss-120b",
-                "tutor-grounded/v1", 900.0, Instant.now(), "EXPLANATION", 0, null));
+                "tutor-grounded/v1", 900.0, Instant.now(), "EXPLANATION", 0, null,
+                "stub-provider"));
 
         // B: recompute — the advance target changed for the correct reason:
         // their own doubt signal jumps the queue
