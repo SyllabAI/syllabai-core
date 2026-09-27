@@ -32,8 +32,17 @@ import java.util.zip.GZIPInputStream;
  */
 public final class BenchSnapshot {
 
+    /**
+     * One frozen chunk row. {@code subjectId} is the optional {@code subject_id}
+     * projection (absent in snap-001..003; the at-flip generation's exporter
+     * projects it so the post-flip freeze carries the card axis' subject
+     * identity). It is verification/census evidence for the serving-flip
+     * generation — the bench container stamps every chunk with the bench
+     * scope's own subject (single-subject topology, Run003B.loadSnapshot), so
+     * this field is never a gate input inside the container.
+     */
     public record ChunkRef(String reference, String content, String paperState, String kind,
-                           String paperCode) {
+                           String paperCode, String subjectId) {
     }
 
     public record Edge(String relation, String source, String target) {
@@ -70,7 +79,11 @@ public final class BenchSnapshot {
                     // the manifests record the kind under "kind" (a "document_kind" key never
                     // existed in the snapshots; nothing consumed kind before T-C14's loader)
                     c.path("kind").asText(c.path("document_kind").asText("UNKNOWN")),
-                    c.path("paper_code").asText(null));
+                    c.path("paper_code").asText(null),
+                    // optional subject_id projection (missing node and JSON null both fold
+                    // to null) — snap-001..003 carry no such field; the at-flip
+                    // generation's exporter projects it (see the ChunkRef javadoc)
+                    c.path("subject_id").asText(null));
             chunksByRef.put(chunk.reference(), chunk);
         }
         if (declaredChunks >= 0 && chunksByRef.size() != declaredChunks) {

@@ -304,6 +304,19 @@ public final class Run003B {
         // per document — so the loader emits one exam_papers row PER DOCUMENT with
         // its own state (the closest the snapshot allows to the production
         // paper-per-session model; recorded in the run report).
+        //
+        // AT-FLIP ENABLEMENT (T-C27 trigger-A generation; recorded 2026-09-27): the
+        // documents rows now carry validation_state from the same per-document
+        // paper_state, and every chunk is stamped with the bench scope's subject —
+        // so a post-flip snapshot (paper_state VALIDATED on promoted docs/cards)
+        // serves through BOTH searchServingEligible branches exactly as production
+        // does (branch 1 paper-anchored QP/MS, branch 2 doc-VALIDATED cards).
+        // Backward-compatible by construction: snap-001..003 rows are uniformly
+        // SUGGESTED, and V29's documents.validation_state default IS 'SUGGESTED' —
+        // the explicit insert is value-identical, branch 2 stays dead, and the
+        // recorded r3/r4 runs (sha-pinned dispatches) are untouched. The snapshot
+        // rows' optional subject_id projection (absent in snap-001..003) is
+        // verification/census evidence only — never a gate input here.
         Map<String, List<BenchSnapshot.ChunkRef>> byDoc = new LinkedHashMap<>();
         Map<String, String> paperStateByDoc = new LinkedHashMap<>();
         Map<String, String> kindByDoc = new LinkedHashMap<>();
@@ -328,20 +341,20 @@ public final class Run003B {
                             insert into documents (id, document_id, schema_version, doc_version, kind, source_uri,
                                 mime_type, checksum, checksum_algorithm, page_count, element_count,
                                 text_element_count, chunk_count, source_engine, source_engine_version,
-                                canonical_json, created_at)
+                                canonical_json, validation_state, created_at)
                             values (?, ?, '1.0', 1, ?, 'bench://snapshot', 'application/pdf', ?, 'SHA-256',
-                                1, 1, 1, ?, 'bench', 'snap-001', '{}', ?)
+                                1, 1, 1, ?, 'bench', 'snap-001', '{}', ?, ?)
                             """,
-                    rowId, docId, kind, docId, chunks.size(), now);
+                    rowId, docId, kind, docId, chunks.size(), paperStateByDoc.get(docId), now);
             for (BenchSnapshot.ChunkRef chunk : chunks) {
                 int ordinal = Integer.parseInt(chunk.reference().substring(chunk.reference().lastIndexOf(':') + 1));
                 jdbc.update("""
                                 insert into document_chunks (id, document_row_id, chunk_index, content,
-                                    page_start, page_end, element_ids, token_estimate, created_at)
-                                values (?, ?, ?, ?, 1, 1, '[]', 10, ?)
+                                    page_start, page_end, element_ids, token_estimate, subject_id, created_at)
+                                values (?, ?, ?, ?, 1, 1, '[]', 10, ?, ?)
                                 """,
                         UUID.nameUUIDFromBytes(("bench-chunk|" + chunk.reference()).getBytes(StandardCharsets.UTF_8)),
-                        rowId, ordinal, chunk.content(), now);
+                        rowId, ordinal, chunk.content(), subjectId, now);
             }
             docCount++;
         }
