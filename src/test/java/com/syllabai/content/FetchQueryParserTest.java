@@ -64,6 +64,52 @@ class FetchQueryParserTest {
     }
 
     @Test
+    @DisplayName("H1 paraphrase widening: word numbers, ordinals, 'number N' interposition, NFKC digits")
+    void paraphraseQuestionNumbers() {
+        // ordinal-led forms (the H1 bypass class — previously parsed as not-a-paper-ask)
+        assertThat(FetchQueryParser.parse("the tenth question of june 2019 paper 2").qnum()).isEqualTo(10);
+        assertThat(FetchQueryParser.parse("explain the 10th question of june 2019 paper 2").qnum()).isEqualTo(10);
+        assertThat(FetchQueryParser.parse("how do i solve third question jan 2022 paper 1").qnum()).isEqualTo(3);
+        // keyword-led word numbers
+        assertThat(FetchQueryParser.parse("what was question ten in june 2019 paper 2").qnum()).isEqualTo(10);
+        assertThat(FetchQueryParser.parse("question twenty one jan 2022 paper 1").qnum()).isEqualTo(21);
+        assertThat(FetchQueryParser.parse("question twenty-one jan 2022 paper 1").qnum()).isEqualTo(21);
+        assertThat(FetchQueryParser.parse("question ninth june 2019 paper 2").qnum()).isEqualTo(9);
+        // 'number/no' interposition (mirrors the resolver's 'paper number 1' hint)
+        assertThat(FetchQueryParser.parse("the question number 10 of june 2019 paper 2").qnum()).isEqualTo(10);
+        assertThat(FetchQueryParser.parse("question no. 3 june 2019 paper 1").qnum()).isEqualTo(3);
+        assertThat(FetchQueryParser.parse("q no 5 summer 2021").qnum()).isEqualTo(5);
+        // digit ordinals after the keyword
+        assertThat(FetchQueryParser.parse("question 10th of june 2019 paper 2").qnum()).isEqualTo(10);
+        // NFKC: full-width digits bind like ASCII ones
+        assertThat(FetchQueryParser.parse("question １０ june 2019 paper 2").qnum()).isEqualTo(10);
+        // part letters still bind on keyword-led forms
+        ParsedFetchQuery pb = FetchQueryParser.parse("question number 4 part b jan 2020 paper 1");
+        assertThat(pb.qnum()).isEqualTo(4);
+        assertThat(pb.part()).isEqualTo("b");
+        // the widened parse carries a COMPLETE identity (guard trigger fields)
+        ParsedFetchQuery p = FetchQueryParser.parse("tenth question of june 2019 paper 2");
+        assertThat(p.series()).isEqualTo("JUN");
+        assertThat(p.year()).isEqualTo(2019);
+        assertThat(p.qnum()).isEqualTo(10);
+        assertThat(p.hasExplicitPaper()).isTrue();
+    }
+
+    @Test
+    @DisplayName("H1 non-goals: ordinary prose with numbers must not gain a question number")
+    void paraphraseNonGoals() {
+        // plain digits without an ordinal suffix never lead a question phrase
+        assertThat(FetchQueryParser.parse("10 questions about moles in june 2019").qnum()).isNull();
+        assertThat(FetchQueryParser.parse("I scored 10 in june 2019 paper 2").qnum()).isNull();
+        // 'questions' plural is not the keyword
+        assertThat(FetchQueryParser.parse("questions 10 and 11 june 2019").qnum()).isNull();
+        // word numbers unrelated to the question keyword stay unbound
+        assertThat(FetchQueryParser.parse("tell me about the ten main topics").qnum()).isNull();
+        // empty parse stays honest
+        assertThat(FetchQueryParser.parse("tell me about electrolysis").qnum()).isNull();
+    }
+
+    @Test
     @DisplayName("intent hints: answer/mark scheme/solution ⇒ MS-seeking; what did/ask ⇒ QP-seeking")
     void intentHints() {
         assertThat(FetchQueryParser.parse("question 6 summer 2011 mark scheme").msSeeking()).isTrue();

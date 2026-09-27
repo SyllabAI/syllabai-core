@@ -1,8 +1,14 @@
 package com.syllabai.content;
 
+import java.text.Normalizer;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Deterministic Fetch query parser (R4, plan §7 FETCH): regex over the
@@ -21,8 +27,20 @@ import java.util.regex.Pattern;
  *   <li>series word: summer/june → JUN, january/jan → JAN,
  *       november/october → NOV;</li>
  *   <li>year: 4-digit 1900–2099 (first match);</li>
- *   <li>question number: {@code question 6}, {@code q4}, {@code Q7b} —
- *       optional single part letter a–h captured separately;</li>
+ *   <li>question number, keyword-led: {@code question 6}, {@code q4},
+ *       {@code Q7b}, {@code question number 3}, {@code question no. 10},
+ *       {@code question 10th}, {@code question ten}, {@code question tenth
+ *       part b} — optional single part letter a–h captured separately;</li>
+ *   <li>question number, ordinal-led: {@code 10th question},
+ *       {@code tenth question} — the number binds, the part letter does not
+ *       (the identity binds on the number alone);</li>
+ *   <li>word numbers one–forty-nine in cardinal and ordinal form
+ *       ("tenth", "twenty one", "thirty-first"); letter-adjacent hyphens are
+ *       folded to spaces before parsing ("twenty-one" → "twenty one") and the
+ *       query is NFKC-normalized first, so full-width digits
+ *       ("question １０") bind like ASCII ones — the H1 paraphrase audit
+ *       (2026-09-28) showed the digit-only grammar let phrased identities
+ *       bypass the fail-open paper guard as "not a paper ask";</li>
  *   <li>intent hint: "answer/mark scheme/solution" ⇒ mark-scheme-seeking,
  *       "what did/what was/ask" ⇒ question-paper-seeking (the same probes the
  *       gold compiler used — tier ordering of QP vs MS evidence, plan §9).</li>
@@ -32,6 +50,13 @@ import java.util.regex.Pattern;
  * metadata the bank SQL can filter on. A query carrying none of the
  * vocabulary parses to an all-empty result and the caller treats it as a
  * parse defect (logged, vector fallback allowed per plan §7).</p>
+ *
+ * <p>Guard posture note (H1 audit): widening the question-number grammar
+ * widens what counts as a <em>stated paper identity</em>, so an ask like
+ * "the first question is about electrolysis in june 2019" now parses as a
+ * (possibly accidental) identity and fails closed through the paper guard
+ * instead of serving generic retrieval. The over-refusal direction is the
+ * deliberate trade — honest echo beats wrong-paper confidence.</p>
  */
 public final class FetchQueryParser {
 
@@ -60,8 +85,68 @@ public final class FetchQueryParser {
     static final Pattern SERIES_JAN = Pattern.compile("\\b(january|jan)\\b", Pattern.CASE_INSENSITIVE);
     static final Pattern SERIES_NOV = Pattern.compile("\\b(november|october)\\b", Pattern.CASE_INSENSITIVE);
     static final Pattern YEAR = Pattern.compile("\\b(19|20)(\\d{2})\\b");
-    static final Pattern QNUM = Pattern.compile("\\b(?:question|q)\\.?\\s*(\\d{1,2})\\s*([a-h])?\\b",
+
+    /**
+     * Word numbers bound as question references — cardinals and ordinals,
+     * one to forty-nine. Keyed lowercase; the space form is canonical because
+     * letter-adjacent hyphens are folded to spaces during normalization.
+     */
+    private static final Map<String, Integer> WORD_QNUMS = buildWordQnums();
+
+    private static Map<String, Integer> buildWordQnums() {
+        Map<String, Integer> m = new HashMap<>();
+        String[] card = {"one", "two", "three", "four", "five", "six", "seven",
+                "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+                "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
+        String[] ord = {"first", "second", "third", "fourth", "fifth", "sixth",
+                "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
+                "thirteenth", "fourteenth", "fifteenth", "sixteenth",
+                "seventeenth", "eighteenth", "nineteenth"};
+        for (int i = 0; i < card.length; i++) {
+            m.put(card[i], i + 1);
+            m.put(ord[i], i + 1);
+        }
+        String[] tens = {"twenty", "thirty", "forty"};
+        String[] tensOrd = {"twentieth", "thirtieth", "fortieth"};
+        for (int t = 0; t < tens.length; t++) {
+            m.put(tens[t], 20 + 10 * t);
+            m.put(tensOrd[t], 20 + 10 * t);
+            for (int u = 0; u < 9; u++) {
+                m.put(tens[t] + " " + card[u], 21 + 10 * t + u);
+                m.put(tens[t] + " " + ord[u], 21 + 10 * t + u);
+            }
+        }
+        return Map.copyOf(m);
+    }
+
+    /** The word-number vocabulary as one regex alternation, longest-first. */
+    private static final String WORD_QNUM_ALT = WORD_QNUMS.keySet().stream()
+            .sorted(Comparator.comparingInt(String::length).reversed())
+            .map(Pattern::quote)
+            .collect(Collectors.joining("|"));
+
+    /**
+     * Question number led by the keyword: "question 10", "q4", "Q7b",
+     * "question number 3", "question no. 10", "question 10th", "question ten",
+     * "question tenth part b". Group 1 captures ASCII digits (ordinal suffix
+     * tolerated outside the group), group 2 a word number, group 3 the part
+     * letter a–h.
+     */
+    static final Pattern QNUM = Pattern.compile(
+            "\\b(?:question|q)\\.?\\s*(?:(?:number|no)\\.?\\s*)?"
+                    + "(?:(\\d{1,2})(?:st|nd|rd|th)?|(" + WORD_QNUM_ALT + "))"
+                    + "\\s*(?:part\\s*)?([a-h])?\\b",
             Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Question number led by its ordinal: "10th question", "tenth question".
+     * The part letter is not bound on these forms — the identity binds on the
+     * number alone.
+     */
+    static final Pattern QNUM_LEADING_ORDINAL = Pattern.compile(
+            "\\b(?:(\\d{1,2})(?:st|nd|rd|th)|(" + WORD_QNUM_ALT + "))\\s+(?:question|q)\\b",
+            Pattern.CASE_INSENSITIVE);
+
     static final Pattern MS_SEEKING = Pattern.compile("\\b(answer|mark\\s+scheme|solution|markscheme)\\b",
             Pattern.CASE_INSENSITIVE);
     static final Pattern QP_SEEKING = Pattern.compile("\\b(what did|what was|ask)\\b",
@@ -75,12 +160,16 @@ public final class FetchQueryParser {
         if (query == null || query.isBlank()) {
             return new ParsedFetchQuery(null, null, null, null, null, null, false, "");
         }
-        String q = query.strip();
+        // NFKC folds full-width digits/letters ("question １０") to ASCII; the
+        // letter-adjacent hyphen fold turns "twenty-one" into the map's
+        // canonical "twenty one" without touching "4CH0-1C" (digit-adjacent).
+        String q = Normalizer.normalize(query.strip(), Normalizer.Form.NFKC);
+        q = q.replaceAll("(?<=\\p{L})-(?=\\p{L})", " ");
 
         String paperCode = null;
         Matcher code = PAPER_CODE.matcher(q);
         if (code.find()) {
-            paperCode = code.group(1).toUpperCase() + "/" + code.group(2).toUpperCase().replace(" ", "");
+            paperCode = code.group(1).toUpperCase(Locale.ROOT) + "/" + code.group(2).toUpperCase(Locale.ROOT).replace(" ", "");
         }
 
         // bare unit only when no full code was matched ("paper 2C", "the 1CR paper")
@@ -88,7 +177,7 @@ public final class FetchQueryParser {
         if (paperCode == null) {
             Matcher bare = BARE_UNIT.matcher(q);
             if (bare.find()) {
-                unit = bare.group(1) + bare.group(2).toUpperCase();
+                unit = bare.group(1) + bare.group(2).toUpperCase(Locale.ROOT);
             }
         }
 
@@ -111,8 +200,17 @@ public final class FetchQueryParser {
         String part = null;
         Matcher n = QNUM.matcher(q);
         if (n.find()) {
-            qnum = Integer.parseInt(n.group(1));
-            part = n.group(2) == null ? null : n.group(2).toLowerCase();
+            qnum = n.group(1) != null
+                    ? Integer.valueOf(n.group(1))
+                    : WORD_QNUMS.get(n.group(2).toLowerCase(Locale.ROOT));
+            part = n.group(3) == null ? null : n.group(3).toLowerCase(Locale.ROOT);
+        } else {
+            Matcher o = QNUM_LEADING_ORDINAL.matcher(q);
+            if (o.find()) {
+                qnum = o.group(1) != null
+                        ? Integer.valueOf(o.group(1))
+                        : WORD_QNUMS.get(o.group(2).toLowerCase(Locale.ROOT));
+            }
         }
 
         boolean msSeeking = MS_SEEKING.matcher(q).find() || !QP_SEEKING.matcher(q).find();
