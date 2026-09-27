@@ -1,0 +1,68 @@
+name: anchor-sweep
+
+# The 9-anchor paper-identity matrix, run against the LIVE PRODUCTION tutor
+# surface. This is a deployed-contract MONITOR, not a build gate: it does not
+# gate merges and it does not exercise preview deploys.
+#
+# Anchors (FULL MATRIX — full rationale in scripts/anchor_matrix_sweep.py):
+#   GUARD-REFUSAL  A1/A2/A3 (june-2019-P2-Q10 fail-open family), B2 (june-2019-P1-Q3)
+#   SERVED(cites)  B1 (june-2019-P2-Q5), C1 (jan-2022-2CR), D1 (jan-2016-2C legacy)
+#   FULL-PIN(1C)   E1/E2 controls (jan-2022-1C-Q4 trio 2d265267/125b1f13/9c965f1e)
+#
+# Semantics the operator must keep in mind:
+#   - The guard must REFUSE uncovered identities (A-family, B2) and must NOT
+#     refuse covered ones (B1, C1, D1) — the matrix is bidirectional.
+#   - DATA-COUPLED anchors (B2, C1) go red BY DESIGN when an ingest or
+#     adjudication wave changes pool composition. Retire or flip those
+#     anchors deliberately in the same change that moves the data — never
+#     silently. A red scheduled run is a decision prompt, not necessarily a
+#     production defect.
+#
+# Provenance: sandbox traces 1a0df738373ddec9 (sweep) -> 1a0e2ce15fc02b5d
+# (anchor swap) -> 1a0e323dbeb8a161 (B2 pin) -> 1a0e3d5e56d0c801 (B1 pin) ->
+# 1a0e3e6722ee9855 (C1/D1 full matrix) -> 1a0e41994f6d6ac5 (this migration).
+
+on:
+  schedule:
+    - cron: "30 20 * * *" # 20:30 UTC == 02:30 Asia/Dhaka (UTC+6, no DST)
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Tutor surface base URL (default: production)"
+        required: false
+        default: "https://syllabai-core.onrender.com"
+
+concurrency:
+  group: anchor-sweep
+  cancel-in-progress: false # never cancel an in-flight monitor run
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the 9-anchor matrix
+        env:
+          SWEEP_BASE: ${{ github.event.inputs.base_url || 'https://syllabai-core.onrender.com' }}
+        run: |
+          python3 scripts/anchor_matrix_sweep.py 2>&1 | tee sweep_output.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          {
+            echo "## Anchor matrix result"
+            echo '```'
+            grep -E "ANCHORS:|PASS|FAIL" sweep_output.log 2>/dev/null | tail -n 12
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
