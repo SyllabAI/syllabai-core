@@ -39,8 +39,11 @@ public class TutorSessionTurn {
     @Column(name = "seq", nullable = false)
     private int seq;
 
-    /** USER or ASSISTANT — mirrors {@link ConversationTurn} roles exactly */
-    @Column(name = "role", nullable = false, length = 8)
+    /** user | assistant — mirrors {@link ConversationTurn} roles exactly.
+     *  Width 16, not 8: 'assistant' is NINE characters. The V42 varchar(8)
+     *  rolled back every session append with "value too long" and 500'd
+     *  every session-anchored ask until the 2026-09-27 hotfix (V44). */
+    @Column(name = "role", nullable = false, length = 16)
     private String role;
 
     @Column(name = "content", nullable = false)
