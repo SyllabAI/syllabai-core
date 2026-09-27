@@ -195,6 +195,15 @@ public final class Run005C {
         List<Long> servedNanos = new ArrayList<>();
         List<Long> compliantNanos = new ArrayList<>();
 
+        // §8(d) wiring (S8D_SCORING_HANDOFF_2026-09-28 §5): scored on BOTH views
+        // when the snapshot carries the chunk→SP HV projection; absent
+        // (snap-001..004) the recorded NOT SCOREABLE texts stay byte-identical.
+        final boolean hvPresent = snapshot.chunkSpecHvPresent();
+        final Map<String, Set<String>> hvCodes = snapshot.hvSpecCodesByChunkRef();
+        final List<ChunkSpecHvResolution.QueryResolution> hvRowsServed = new ArrayList<>();
+        final List<ChunkSpecHvResolution.QueryResolution> hvRowsCompliant = new ArrayList<>();
+        final List<String> hvGoldPoints = new ArrayList<>();
+
         for (BenchGold.GoldRecord rec : gold.records()) {
             Map<String, Integer> tierByRef = new LinkedHashMap<>();
             rec.goldEvidence().forEach(e -> tierByRef.put(e.chunkRef(), e.tier()));
@@ -238,6 +247,13 @@ public final class Run005C {
                     servedNanos.get(servedNanos.size() - 1)));
             perQueryCompliant.put(rec.id(), perQuery(compliantRefs, scores(compliant),
                     compliantNanos.get(compliantNanos.size() - 1)));
+            if (hvPresent) {
+                hvRowsServed.add(ChunkSpecHvResolution.scoreQuery(rec.id(), servedRefs,
+                        rec.goldSpecPoints(), hvCodes));
+                hvRowsCompliant.add(ChunkSpecHvResolution.scoreQuery(rec.id(), compliantRefs,
+                        rec.goldSpecPoints(), hvCodes));
+                hvGoldPoints.addAll(rec.goldSpecPoints());
+            }
         }
 
         // ── 5. aggregation (both views, dual-denominator context) ────────────
@@ -264,7 +280,10 @@ public final class Run005C {
 
         // ── 6. §8 gate arithmetic (ruling 1: evaluated on the ALL denominator
         //      = the served view) + prior-arm context ─────────────────────────
-        Map<String, Object> gate = gateArithmetic(servedOverall, violations);
+        final Map<String, Object> hvAggServed = hvPresent
+                ? ChunkSpecHvResolution.aggregate(hvRowsServed) : Map.of();
+        Map<String, Object> gate = gateArithmetic(servedOverall, violations,
+                hvPresent ? hvAggServed : null);
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("A0_run_002", overallOf(run002a0Results, "chunk_axis", "all_chunks"));
         context.put("B_run_003", overallOf(run003bResults, "chunk_axis", "validated_only_served"));
@@ -327,7 +346,12 @@ public final class Run005C {
                         + "scoring; the frozen replay excludes the production query-embedding "
                         + "call, so a deployed hybrid adds one embedding round-trip to these "
                         + "numbers (recorded as the §8(e) caveat)",
-                "spec_resolution_axis", "NOT SCOREABLE for arm C: zero HUMAN_VALIDATED "
+                "spec_resolution_axis", hvPresent
+                        ? "SCORED for arm C on BOTH views (see spec_resolution_hv): the snapshot "
+                        + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
+                        + "the served ALL-denominator view per §10 ruling 1, the compliant view "
+                        + "reported alongside"
+                        : "NOT SCOREABLE for arm C: zero HUMAN_VALIDATED "
                         + "chunk→spec mapping rows in the snapshot (concept_attachments = 0, "
                         + "the T-C06/F-168 mapping substrate is pending) — a resolution number "
                         + "would be fabrication; recorded as a named data gap"));
@@ -377,6 +401,12 @@ public final class Run005C {
                 "H1/H2/H3/I", "UNAVAILABLE — prerequisites unchanged"));
         results.put("per_query_chunks", perQueryServed);
         results.put("per_query_compliant", perQueryCompliant);
+        if (hvPresent) {
+            results.put("spec_resolution_hv", ChunkSpecHvResolution.section(snapshot,
+                    Map.of("served_view_all_denominator", hvAggServed,
+                            "compliant_view", ChunkSpecHvResolution.aggregate(hvRowsCompliant)),
+                    ChunkSpecHvResolution.unbridgedGoldPoints(hvGoldPoints, hvCodes)));
+        }
         if (!context.isEmpty()) {
             results.put("context_prior_arms", context);
         }
@@ -401,6 +431,30 @@ public final class Run005C {
                 stable.writeValueAsString(servedOverall), "served view");
         checkEquals(stable.writeValueAsString(BenchMetrics.aggregateChunks(secondCompliant)),
                 stable.writeValueAsString(compliantOverall), "compliant view");
+        if (hvPresent) {
+            // the second pass re-runs the fabric; recompute §8(d) on the replayed lists
+            List<ChunkSpecHvResolution.QueryResolution> hvSecondServed = new ArrayList<>();
+            List<ChunkSpecHvResolution.QueryResolution> hvSecondCompliant = new ArrayList<>();
+            for (BenchGold.GoldRecord rec : gold.records()) {
+                if (rec.goldEvidence().isEmpty()) {
+                    continue;
+                }
+                List<String> againServed = refs(servedFabric.retrieve(
+                        StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
+                hvSecondServed.add(ChunkSpecHvResolution.scoreQuery(rec.id(), againServed,
+                        rec.goldSpecPoints(), hvCodes));
+                List<String> againCompliant = refs(compliantFabric.retrieve(
+                        StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
+                hvSecondCompliant.add(ChunkSpecHvResolution.scoreQuery(rec.id(), againCompliant,
+                        rec.goldSpecPoints(), hvCodes));
+            }
+            checkEquals(stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvSecondServed)),
+                    stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvRowsServed)),
+                    "§8(d) served view");
+            checkEquals(stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvSecondCompliant)),
+                    stable.writeValueAsString(ChunkSpecHvResolution.aggregate(hvRowsCompliant)),
+                    "§8(d) compliant view");
+        }
         results.put("determinism_check", "PASS — scoring recomputed twice in-process (second "
                 + "full retrieval pass), both views' aggregates byte-identical; serialization "
                 + "byte-stable");
@@ -483,7 +537,8 @@ public final class Run005C {
 
     /** Ratified §8 v1.0 arithmetic (ruling 1): evaluated on the ALL denominator = served view. */
     private static Map<String, Object> gateArithmetic(Map<String, Object> servedOverall,
-                                                      int violations) {
+                                                      int violations,
+                                                      Map<String, Object> hvAggServed) {
         double recall10 = asDouble(servedOverall.get("recall@10"));
         double mrr = asDouble(servedOverall.get("mrr"));
         double ndcg10 = asDouble(servedOverall.get("ndcg@10"));
@@ -500,8 +555,17 @@ public final class Run005C {
         gate.put("a_recall@10", Map.of("value", recall10, "floor", GATE_RECALL10, "pass", a));
         gate.put("b_mrr", Map.of("value", mrr, "floor", GATE_MRR, "pass", b));
         gate.put("c_ndcg@10", Map.of("value", ndcg10, "floor", GATE_NDCG10, "pass", c));
-        gate.put("d_spec_resolution", "NOT SCOREABLE — zero HUMAN_VALIDATED chunk→SP rows "
-                + "(named data gap; nothing to regress, nothing to claim)");
+        if (hvAggServed != null && !hvAggServed.isEmpty()) {
+            gate.put("d_spec_resolution", "SCORED (spec_resolution_hv): full-coverage "
+                    + hvAggServed.get("spec_points_full_coverage_rate") + " · micro-average "
+                    + hvAggServed.get("spec_points_micro_average") + " on the ALL-denominator view over "
+                    + hvAggServed.get("gold_points_total") + " gold points — first §8(d)-scoreable run: "
+                    + "this run SETS the chunk-arm baseline; the §8(d) 'no regression beyond 1pp' "
+                    + "rule applies from the next run onward, and no promotion claim is made on (d) here");
+        } else {
+            gate.put("d_spec_resolution", "NOT SCOREABLE — zero HUMAN_VALIDATED chunk→SP rows "
+                    + "(named data gap; nothing to regress, nothing to claim)");
+        }
         gate.put("e_p95_latency", "NOT EVALUABLE FROM RECORDS — A0 p95 was not recorded; this "
                 + "run records retrieval-only p50/p95 (frozen replay excludes the production "
                 + "query-embedding call, which a deployed hybrid adds)");
@@ -659,9 +723,10 @@ public final class Run005C {
                 .append("- Compliant-starved queries: ").append(compliantStarved)
                 .append(" (served non-empty but every eligible-rank hit sits on a non-VALIDATED ")
                 .append("paper).\n")
-                .append("- SpecificationPoint resolution: NOT SCOREABLE (zero HUMAN_VALIDATED ")
-                .append("chunk-to-SP mapping rows; T-C06/F-168 substrate pending) — recorded as a ")
-                .append("named data gap, never fabricated.\n\n");
+                .append(ChunkSpecHvResolution.reportLine(results,
+                        "- SpecificationPoint resolution: NOT SCOREABLE (zero HUMAN_VALIDATED "
+                                + "chunk-to-SP mapping rows; T-C06/F-168 substrate pending) — recorded as a "
+                                + "named data gap, never fabricated.\n\n"));
 
         md.append("## Reading\n\n")
                 .append("- The fabric is production code but NOT a serving default: nothing in ")

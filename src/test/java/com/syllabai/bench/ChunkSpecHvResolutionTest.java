@@ -114,4 +114,28 @@ class ChunkSpecHvResolutionTest {
         assertTrue(((Number) ChunkSpecHvResolution.aggregate(rows)
                 .get("spec_points_full_coverage_rate")).doubleValue() == 1.0);
     }
+
+    @Test
+    void reportLineReturnsAbsentTextVerbatimWhenSectionMissing() {
+        String absent = "- SpecificationPoint resolution: NOT SCOREABLE (original arm text).\n";
+        assertEquals(absent, ChunkSpecHvResolution.reportLine(Map.of(), absent));
+    }
+
+    @Test
+    void sectionCarriesCensusCaveatAndReportLineReadsTheAllView() {
+        // minimal snapshot stub is impossible (final class) — exercise section via
+        // the real loader fixture path instead: reuse BenchSnapshotChunkSpecHvTest
+        // for census; here verify reportLine reads a section-shaped map directly.
+        Map<String, Object> agg = ChunkSpecHvResolution.aggregate(List.of(
+                ChunkSpecHvResolution.scoreQuery("q1", List.of("ref-a:1"),
+                        List.of("4CH1-1.1"), HV)));
+        Map<String, Object> section = Map.of(
+                "views", Map.of("served_view_all_denominator", agg),
+                "projection_census", Map.of("rows", 210));
+        Map<String, Object> results = Map.of("spec_resolution_hv", section);
+        String line = ChunkSpecHvResolution.reportLine(results, "ABSENT");
+        assertTrue(line.contains("SCORED"));
+        assertTrue(line.contains(String.valueOf(agg.get("spec_points_full_coverage_rate"))));
+        assertFalse(line.equals("ABSENT"));
+    }
 }
