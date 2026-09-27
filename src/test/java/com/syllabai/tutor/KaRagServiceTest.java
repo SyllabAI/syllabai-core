@@ -96,7 +96,7 @@ class KaRagServiceTest {
         assertThat(event.evidenceCount()).isEqualTo(2);
         assertThat(event.refused()).isFalse();
         assertThat(event.answerModel()).isEqualTo("model-x");
-        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v2");
+        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v3");
 
         // context assembly saw the evidence capped and topic-stamped
         ArgumentCaptor<List<EvidenceItem>> evidenceCaptor =

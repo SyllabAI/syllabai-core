@@ -73,7 +73,20 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v2");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v3");
+    }
+
+    @Test
+    @DisplayName("v3 pins the markdown + mhchem formatting rules (s138 rendering contract)")
+    void formattingRulesPinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("GitHub-flavored markdown");
+        assertThat(system).contains("mhchem");
+        assertThat(system).contains("$\\ce{H2O}$");
+        assertThat(system).contains("Never use HTML tags or Unicode sub/superscripts");
+        // the v2 grounding rules survive verbatim inside v3
+        assertThat(system).contains("Answer ONLY from the numbered SOURCES");
+        assertThat(system).contains("at most 200 words plus citations");
     }
 
     @Test

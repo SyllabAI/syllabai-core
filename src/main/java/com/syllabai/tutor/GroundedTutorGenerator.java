@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "2";
+    public static final String PROMPT_VERSION = "3";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
@@ -64,6 +64,13 @@ public class GroundedTutorGenerator implements TutorGenerator {
                 - Do not reveal internal probabilities, model names, diagnostic rules, or
                   private learner-state details to the learner.
                 - Be concise: at most 200 words plus citations.
+                - Formatting: GitHub-flavored markdown — short paragraphs, bold key terms,
+                  bullet lists where they aid scanning; no heading lines.
+                - Every chemical species, ion, formula and equation is LaTeX with mhchem,
+                  inline in dollar signs: $\\ce{H2O}$, $\\ce{Cu^2+}$,
+                  $\\ce{2H2 + O2 -> 2H2O}$; other mathematics as $...$ or $$...$$.
+                  Convert sub/superscripts, arrows and state symbols from the SOURCES
+                  into this notation. Never use HTML tags or Unicode sub/superscripts.
                 """;
     }
 
@@ -114,7 +121,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
         return safe.length() <= max ? safe : safe.substring(0, max) + "…";
     }
 
-    /** registered prompt identity, e.g. "tutor-grounded/v2" — public since V24:
+    /** registered prompt identity, e.g. "tutor-grounded/v3" — public since V24:
      * the CLA pipeline reuses this prompt verbatim and must record the SAME
      * identity (contract: compose the Tutor's generation stack; a duplicated
      * constant would create drift risk). */
