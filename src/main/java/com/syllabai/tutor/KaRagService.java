@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -24,9 +25,13 @@ import com.syllabai.shared.events.TutorAnsweredEvent;
  * <ul>
  *   <li>intent is deterministic (no LLM entity invention, §7);</li>
  *   <li>retrieval is hybrid — KG and vector evidence are fused by rank, so
- *       neither source is the sole mechanism;</li>
+ *       that neither source is the sole mechanism;</li>
  *   <li>generation is grounded — with zero surviving evidence the service
  *       refuses (deterministically, no LLM call) rather than hallucinating;</li>
+ *   <li>a parsed paper-question identity that binds zero validated anchors
+ *       refuses deterministically too (the fail-open guard, 09-27
+ *       adjudication direction (a)) — generic retrieval never answers a
+ *       named paper question the corpus cannot bind;</li>
  *   <li>every answer emits a {@code TutorAnsweredEvent} so the research
  *       record (§18) captures the full retrieval provenance.</li>
  * </ul>
@@ -42,6 +47,20 @@ public class KaRagService {
             answering would mean guessing — which SyllabAI never does. Try naming the
             topic (e.g. "moles", "bonding", "equilibria") or ask your teacher to
             ingest the relevant material.""";
+
+    /**
+     * The fail-open guard's refusal (09-27 adjudication, direction (a)): the
+     * ask carried a complete paper-question identity but zero validated
+     * anchors bound it. The echoed identity ({@code %s}) makes the refusal
+     * verifiable on the surface — the answer never cites wrong-paper chunks.
+     */
+    static final String PAPER_IDENTITY_REFUSAL = """
+            I can't answer that from the validated course material yet. I could not
+            find %s in the validated corpus — the paper or question may not be
+            ingested yet, or it may still be awaiting validation. Answering would
+            mean guessing, which SyllabAI never does. Try naming the topic (e.g.
+            "moles", "bonding", "equilibria") or ask your teacher to ingest the
+            relevant material.""";
 
     private final KnowledgeRetriever knowledgeRetriever;
     private final VectorRetriever vectorRetriever;
@@ -168,11 +187,16 @@ public class KaRagService {
         // a paper-style ask ("explain question 10 from june 2019 paper 2")
         // binds session+paper+number by metadata and pins the exact question's
         // chunks at the HEAD of the pool — outside RRF, where per-kind weights
-        // would rank identity cards (0.3) below everything else. Resolver
-        // misses leave this list empty and the pipeline unchanged.
-        List<EvidenceItem> pinned = scope == null
-                ? List.of()
-                : paperQuestionResolver.resolve(retrievalQuery, scope);
+        // would rank identity cards (0.3) below everything else. The verdict
+        // travels with the items: a complete identity that bound nothing is
+        // the fail-open guard's trigger (step 4.5), not a pass-through. The
+        // identity is parsed from the retrieval query (s139: with history the
+        // enriched query still carries the current turn's paper vocabulary —
+        // single-turn asks are byte-identical to the pre-s139 behavior).
+        PaperQuestionResolver.Resolution resolution = scope == null
+                ? PaperQuestionResolver.Resolution.notPaperAsk()
+                : paperQuestionResolver.resolveWithVerdict(retrievalQuery, scope);
+        List<EvidenceItem> pinned = resolution.items();
 
         // 3. rank fusion (plan §7 per-kind weights — the P3 serving posture:
         // NOTE 1.0 > SYLLABUS 0.9 > QUESTION_PAPER 0.8 > TEXTBOOK 0.7 >
@@ -206,12 +230,33 @@ public class KaRagService {
                         : item.withTopicIds(matchedTopicIds(knowledge)))
                 .toList();
 
+        // 4.5 fail-open guard (09-27 adjudication direction (a)): the ask
+        // named a complete, unambiguous paper-question identity and NOT ONE
+        // validated anchor bound it (no bank row, no card, no content-store
+        // QP/MS). Left as-is, generic retrieval answers anyway from
+        // textually-similar wrong-paper chunks and the generator preserves
+        // the ask's paper framing — the confident misattribution class
+        // ("june 2019 paper 2 question 10" answered from Jan-2022-1C chunks).
+        // Zero the pool: the deterministic refusal below fires with the
+        // identity echoed and citations empty.
+        boolean identityBoundUnserved = resolution.identityParsed() && pinned.isEmpty();
+        if (identityBoundUnserved) {
+            log.info("KA-RAG fail-open guard: identity [{}] bound no validated anchor; "
+                    + "deterministic refusal", resolution.identityLabel());
+            evidence = List.of();
+        }
+
         // 5. grounding gate: no evidence → refuse, deterministically, no LLM
         TutorGenerator.GeneratedAnswer generated;
         boolean refused = evidence.isEmpty();
         ContextAssembler.TutorContext context = null;
         if (refused) {
-            generated = new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
+            generated = identityBoundUnserved
+                    ? new TutorGenerator.GeneratedAnswer(PAPER_IDENTITY_REFUSAL.formatted(
+                            Objects.requireNonNullElse(resolution.identityLabel(),
+                                    "that paper question")),
+                            null, "deterministic-paper-refusal")
+                    : new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
         } else {
             context = contextAssembler.assemble(knowledge, evidence, learnerId);
             generated = generator.generate(query, turns, context);

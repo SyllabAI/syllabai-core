@@ -419,4 +419,131 @@ class PaperQuestionResolverTest {
         assertThat(pinned).hasSize(1);
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
     }
+
+    // ── fail-open verdict (09-27 adjudication, direction (a)) ─────────────
+
+    @Test
+    @DisplayName("fail-open verdict: a complete identity that binds nothing reports identityParsed=true "
+            + "with the echoed label (the A1 misattribution shape)")
+    void completeIdentityWithNoAnchorIsTheGuardVerdict() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
+                null, false, "explain question 10 june 2019 paper 2");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenReturn(Optional.empty());
+        when(chunks.findRowIdsByPaperIdentity("JUN", 2019,
+                List.of("4CH1/2C", "4CH1/2CR", "4CH0/2C", "4CH0/2CR")))
+                .thenReturn(List.of());
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10 june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel())
+                .isEqualTo("question 10 from the June 2019 paper 2");
+    }
+
+    @Test
+    @DisplayName("fail-open verdict: bank ambiguity (question resolves in several papers) never gates")
+    void ambiguousIdentityNeverGates() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 5,
+                null, false, "explain question 5 june 2019");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenReturn(Optional.empty());
+        when(chunks.findRowIdsByPaperIdentity("JUN", 2019, List.of(
+                "4CH1/1C", "4CH1/2C", "4CH1/1CR", "4CH1/2CR",
+                "4CH0/1C", "4CH0/2C", "4CH0/1CR", "4CH0/2CR")))
+                .thenReturn(List.of());
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 5 june 2019", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isFalse();
+        assertThat(resolution.identityLabel()).isNull();
+    }
+
+    @Test
+    @DisplayName("fail-open verdict: an incomplete identity (no series/year) is not a paper ask")
+    void incompleteIdentityIsNotAPaperAsk() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, null, null, 10,
+                null, false, "explain question 10");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isFalse();
+        verifyNoInteractions(documents, chunks);
+    }
+
+    @Test
+    @DisplayName("fail-open verdict: a served bank anchor keeps identityParsed=true with its items")
+    void bankServedVerdictCarriesItems() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery("4CH1/2C", null, "JUN", 2019, 10,
+                null, false, "june 2019 question 10");
+        FetchPaperHit paper = new FetchPaperHit(UUID.randomUUID(), "4CH1/2C", "June 2019",
+                "JUN", 2019, "VALIDATED", "qp-doc-1", null, null);
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of(paper)));
+        UUID rowId = UUID.randomUUID();
+        Document qp = document(rowId, "qp-doc-1", Document.Kind.QUESTION_PAPER, "SUGGESTED", "QP.md");
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-1"))
+                .thenReturn(Optional.of(qp));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(rowId)).thenReturn(List.of(
+                chunk(7, "10 (a) The diagram shows the apparatus a teacher uses", "10")));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10 from june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).hasSize(1);
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel())
+                .isEqualTo("question 10 from the June 2019 paper 2C");
+    }
+
+    @Test
+    @DisplayName("fail-open verdict: a content-store failure under a parsed identity is fail-closed "
+            + "(empty items + identityParsed=true), never the wrong-paper serve")
+    void storeFailureUnderParsedIdentityRefuses() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
+                null, false, "explain question 10 june 2019 paper 2");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenReturn(Optional.empty());
+        when(chunks.findRowIdsByPaperIdentity("JUN", 2019,
+                List.of("4CH1/2C", "4CH1/2CR", "4CH0/2C", "4CH0/2CR")))
+                .thenThrow(new IllegalStateException("store unavailable"));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10 june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("fail-open verdict: a mid-resolution card failure degrades to not-a-paper-ask "
+            + "(never gates on unknown state)")
+    void cardFailureDegradesToNotPaperAsk() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
+                null, false, "explain question 10 june 2019 paper 2");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenThrow(new IllegalStateException("documents unavailable"));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10 june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isFalse();
+    }
 }

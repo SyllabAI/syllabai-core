@@ -61,10 +61,17 @@ class KaRagServiceTest {
     private final UUID learnerId = UUID.randomUUID();
     private final UUID topicId = UUID.randomUUID();
 
+    /** The resolver mock default: not a paper ask (the pre-guard pipeline shape). */
+    private void resolverReturns(PaperQuestionResolver.Resolution resolution) {
+        when(paperQuestionResolver.resolveWithVerdict(anyString(), any(CurriculumScope.class)))
+                .thenReturn(resolution);
+    }
+
     @Test
     @DisplayName("grounded flow: scope resolved once, KG + vector evidence fuse, generate, cite, publish event")
     void groundedFlow() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         KnowledgeContext knowledge = new KnowledgeContext(
                 List.of(new MatchedTopic(topicId, "IALCHEM2018-U1-T3",
                         "Bonding and Structure", 0.5)),
@@ -111,6 +118,7 @@ class KaRagServiceTest {
     @DisplayName("grounding gate: zero evidence → deterministic refusal, NO LLM call")
     void refusalOnEmptyEvidence() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
@@ -157,6 +165,7 @@ class KaRagServiceTest {
     @DisplayName("T-C07: the SAME resolved scope reaches both retrieval surfaces")
     void sameScopeReachesBothSurfaces() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
@@ -171,6 +180,7 @@ class KaRagServiceTest {
     @DisplayName("evidenceLimit caps the final evidence set")
     void evidenceCapped() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of(
@@ -206,6 +216,7 @@ class KaRagServiceTest {
     @DisplayName("anonymous ask (null learner) flows through with a null learner event")
     void anonymousAsk() {
         when(curriculumScopes.resolveActive(null)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(new MatchedTopic(topicId, "C", "T", 0.4)),
                         List.of(), List.of()));
@@ -234,8 +245,10 @@ class KaRagServiceTest {
         EvidenceItem pinned = EvidenceItem.fromChunk(UUID.randomUUID(), "qp-1", 1, pinnedChunk, 7,
                 "QUESTION_PAPER", "10 (a) The diagram shows the apparatus", 3, 3,
                 List.of(), "paper-question-resolver", 1.0);
-        when(paperQuestionResolver.resolve(eq("explain question 10 from june 2019 paper 2"), eq(SCOPE)))
-                .thenReturn(List.of(pinned));
+        when(paperQuestionResolver.resolveWithVerdict(
+                eq("explain question 10 from june 2019 paper 2"), eq(SCOPE)))
+                .thenReturn(PaperQuestionResolver.Resolution.served(List.of(pinned),
+                        "question 10 from the June 2019 paper 2"));
         // the vector arm surfaces the SAME chunk (dedup must keep the pinned lead)
         // plus one fusion-only chunk
         EvidenceItem duplicate = pinned.withFusedScore(0.9);
@@ -274,7 +287,7 @@ class KaRagServiceTest {
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of(
                 EvidenceItem.fromChunk(UUID.randomUUID(), "qp-1", 1, UUID.randomUUID(), 0,
                         "QUESTION_PAPER", "states of matter", 1, 1, List.of(), "gemini", 0.7)));
-        when(paperQuestionResolver.resolve(anyString(), any(CurriculumScope.class))).thenReturn(List.of());
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(contextAssembler.assemble(any(), any(), any())).thenReturn(
                 new ContextAssembler.TutorContext("l", "k", List.of()));
         when(generator.generate(anyString(), any(), any())).thenReturn(
@@ -290,6 +303,7 @@ class KaRagServiceTest {
 
     private void stubGroundedFollowUpFlow() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(new MatchedTopic(topicId, "C", "T", 0.4)),
                         List.of(), List.of()));
@@ -397,6 +411,7 @@ class KaRagServiceTest {
     @DisplayName("refusal with history stays deterministic: no LLM call, event still carries the turn count")
     void refusalWithHistoryStillDeterministic() {
         when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
         when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
                 .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
         when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
@@ -408,11 +423,67 @@ class KaRagServiceTest {
         assertThat(answer.refused()).isTrue();
         assertThat(answer.provider()).isEqualTo("deterministic-refusal");
         verify(generator, never()).generate(anyString(), any(), any());
+
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(events).publishEvent(eventCaptor.capture());
         TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
         assertThat(event.refused()).isTrue();
         assertThat(event.historyTurns()).isEqualTo(2);
+    }
+
+    // ── fail-open guard (09-27 adjudication, direction (a)) ───────────────────
+
+    @Test
+    @DisplayName("fail-open guard: a parsed identity that bound zero anchors refuses deterministically — "
+            + "the vector arm's wrong-paper bleed never reaches the learner (09-27 adjudication)")
+    void identityBoundUnservedRefusesInsteadOfBleeding() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
+        // the bleed: wrong-paper chunks the generic pool would have served with confidence
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of(
+                EvidenceItem.fromChunk(UUID.randomUUID(), "ms-bleed", 1, UUID.randomUUID(), 14,
+                        "MARK_SCHEME", "6 bonding electrons, 2 non-bonding on each atom", 15, 15,
+                        List.of(), "gemini", 0.83)));
+        // the ask parses completely (question 10, JUN 2019, paper 2) but nothing validated binds
+        when(paperQuestionResolver.resolveWithVerdict(
+                eq("explain question 10 from june 2019 paper 2"), eq(SCOPE)))
+                .thenReturn(new PaperQuestionResolver.Resolution(List.of(), true,
+                        "question 10 from the June 2019 paper 2"));
+
+        TutorAnswerView answer = service.ask(learnerId, "explain question 10 from june 2019 paper 2");
+
+        assertThat(answer.refused()).isTrue();
+        // the echoed identity sits on one line of the refusal text block
+        assertThat(answer.answer()).contains("find question 10 from the June 2019 paper 2");
+        assertThat(answer.citations()).isEmpty();
+        assertThat(answer.evidenceCount()).isZero();
+        assertThat(answer.provider()).isEqualTo("deterministic-paper-refusal");
+        verify(generator, never()).generate(anyString(), any(), any());
+        verify(contextAssembler, never()).assemble(any(), any(), any());
+
+        // the refusal still publishes its research event (honest telemetry)
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        TutorAnsweredEvent event = (TutorAnsweredEvent) eventCaptor.getValue();
+        assertThat(event.refused()).isTrue();
+        assertThat(event.evidenceCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("fail-open guard does not touch the generic refusal: a non-paper ask keeps REFUSAL + marker")
+    void nonPaperAskKeepsTheGenericRefusal() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(List.of(), List.of(), List.of()));
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
+
+        TutorAnswerView answer = service.ask(learnerId, "photosynthesis in plants");
+
+        assertThat(answer.refused()).isTrue();
+        assertThat(answer.answer()).doesNotContain("could not find");
+        assertThat(answer.provider()).isEqualTo("deterministic-refusal");
     }
 
     @Test

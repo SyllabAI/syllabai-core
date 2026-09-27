@@ -65,10 +65,17 @@ import org.springframework.stereotype.Service;
  *
  * <p>Serving law (T-C20) holds on every tier: REJECTED never serves; the
  * paper/document validation gate mirrors
- * {@code ChunkVectorRepository#searchServingEligible}. Ambiguity is honest:
- * when a paper identity cannot be bound (no explicit unit, several candidate
- * cards), the resolver returns empty and the unmodified vector+KG path serves
- * the ask exactly as before — the resolver never guesses, never widens.</p>
+ * {@code ChunkVectorRepository#searchServingEligible}. Emptiness is honest
+ * and two-valued, and {@link #resolveWithVerdict} separates the cases: a
+ * not-a-paper ask (no parseable identity) returns empty with
+ * {@code identityParsed=false} and the unmodified vector+KG path serves the
+ * ask exactly as before; a <em>complete</em> paper-question identity
+ * (question number + series + year, unambiguous in the bank) that binds NOT
+ * ONE validated anchor returns empty with {@code identityParsed=true} — the
+ * fail-open guard (09-27 adjudication, direction (a)): the caller must
+ * refuse honestly instead of letting generic retrieval answer a named paper
+ * question from textually-similar wrong-paper chunks. The resolver never
+ * guesses, never widens.</p>
  *
  * <p>"paper 1 / paper 2" phrasing maps to the home-unit candidates
  * {@code 1C}/{@code 2C} with the regional variants as deterministic
@@ -109,8 +116,45 @@ public class PaperQuestionResolver {
      * Empty result is the honest outcome — never a guess, never a widening.
      */
     public List<EvidenceItem> resolve(String query, CurriculumScope scope) {
+        return resolveWithVerdict(query, scope).items();
+    }
+
+    /**
+     * The resolve outcome: the pinned lead items plus the fail-open verdict.
+     * {@code identityParsed=true} with empty items is the guard's trigger —
+     * the ask carried a complete paper-question identity and nothing
+     * validated bound it; the caller refuses, it does not fall back to
+     * generic retrieval. {@code identityLabel} is the human-readable echo of
+     * the parsed identity for the refusal sentence.
+     */
+    public record Resolution(List<EvidenceItem> items, boolean identityParsed,
+                             String identityLabel) {
+
+        /** Not a paper ask — the pipeline serves the unmodified path. */
+        public static Resolution notPaperAsk() {
+            return new Resolution(List.of(), false, null);
+        }
+
+        /** The identity bound (bank tier) — items always non-empty here. */
+        public static Resolution served(List<EvidenceItem> items, String identityLabel) {
+            return new Resolution(List.copyOf(items), true, identityLabel);
+        }
+    }
+
+    /**
+     * Resolution with its fail-open verdict. {@code identityParsed} is true
+     * exactly when the ask carried a complete, unambiguous paper-question
+     * identity (question number + series + year — the card tier's bindable
+     * definition, minus the bank's multi-paper ambiguity flag). An exception
+     * mid-resolution leaves the anchor state unknown, so the verdict
+     * degrades to {@code identityParsed=false}: the resolver never gates an
+     * ask on unknown state. (The content-store tier's own catch converts a
+     * store error into empty items — under a parsed identity that is a
+     * fail-closed refusal, never the wrong-paper serve.)
+     */
+    public Resolution resolveWithVerdict(String query, CurriculumScope scope) {
         if (query == null || query.isBlank() || scope == null) {
-            return List.of();
+            return Resolution.notPaperAsk();
         }
         FetchResult fetch;
         try {
@@ -126,18 +170,73 @@ public class PaperQuestionResolver {
             if (fetch != null) {
                 List<EvidenceItem> bankAnchored = bankAnchored(fetch);
                 if (!bankAnchored.isEmpty()) {
-                    return bankAnchored;
+                    return Resolution.served(bankAnchored, identityLabel(fetch.parsed(), query));
                 }
             }
             ParsedFetchQuery parsed = fetch == null ? null : fetch.parsed();
+            boolean identityParsed = completeIdentity(parsed)
+                    && fetch != null && !fetch.ambiguous();
             List<EvidenceItem> pinned = new ArrayList<>(cardAnchored(query, parsed, scope));
             pinned.addAll(contentStoreAnchored(query, parsed, scope));
-            return List.copyOf(pinned);
+            return new Resolution(List.copyOf(pinned), identityParsed,
+                    identityParsed ? identityLabel(parsed, query) : null);
         } catch (RuntimeException e) {
             LOG.warn("paper-question resolver: resolution failed ({}); serving the unmodified path",
                     e.getClass().getSimpleName());
-            return List.of();
+            // anchor state unknown mid-flight — never gate the ask on unknown
+            return Resolution.notPaperAsk();
         }
+    }
+
+    /**
+     * A complete paper-question identity: question number + series + year —
+     * exactly the card tier's "bindable paper-style ask" definition. (A
+     * parseDefect fetch has an empty parse, which cannot satisfy this; the
+     * bank's multi-paper ambiguity flag is consulted by the caller.)
+     */
+    private static boolean completeIdentity(ParsedFetchQuery parsed) {
+        return parsed != null && parsed.qnum() != null && parsed.year() != null
+                && parsed.series() != null && !parsed.series().isBlank();
+    }
+
+    /**
+     * Human-readable echo of the parsed identity for the honest-refusal
+     * sentence: "question 10 from the June 2019 paper 2". The paper suffix
+     * follows the binding priority (explicit code → bare unit → "paper N"
+     * hint); an ask that named no paper reads "… the June 2019 papers".
+     */
+    private static String identityLabel(ParsedFetchQuery parsed, String query) {
+        if (parsed == null) {
+            return "that paper question";
+        }
+        String seriesToken = parsed.series() == null ? "" : parsed.series().strip();
+        String series = switch (seriesToken) {
+            case "JAN" -> "January";
+            case "JUN" -> "June";
+            case "NOV" -> "November";
+            default -> seriesToken;
+        };
+        StringBuilder label = new StringBuilder("question ").append(parsed.qnum());
+        if (!series.isEmpty()) {
+            label.append(" from the ").append(series);
+        }
+        if (parsed.year() != null) {
+            label.append(series.isEmpty() ? " from " : " ").append(parsed.year());
+        }
+        String unit = parsed.paperCode() != null
+                ? unitFromPaperCode(parsed.paperCode()) : parsed.unit();
+        if (unit == null || unit.isBlank()) {
+            Matcher hint = PAPER_HINT.matcher(query == null ? "" : query);
+            if (hint.find()) {
+                unit = hint.group(1);
+            }
+        }
+        if (unit != null && !unit.isBlank()) {
+            label.append(" paper ").append(unit.toUpperCase());
+        } else {
+            label.append(" papers");
+        }
+        return label.toString();
     }
 
     // ── tier 1: bank anchor ─────────────────────────────────────────────────
