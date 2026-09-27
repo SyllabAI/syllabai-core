@@ -165,6 +165,51 @@ public final class BenchSnapshot {
             }
             this.chunkSpecHvPresent = true;
             this.chunkSpecHvCensus = loadChunkSpecHv(mapper.readTree(Files.readAllBytes(hvFile)));
+            // handoff §4 census gate (fail-closed): the export contract records
+            // the projection census under counts.hv_projection and the loader
+            // asserts the parsed census equals it — a manifest that declares no
+            // census, or one that disagrees with the pinned bytes, is export
+            // bookkeeping drift and aborts the load rather than scoring on it.
+            // (The snap-005 freeze values are 210/209/164/181 + 1 miss; the
+            // exporter computes them live from the artifact, never hardcodes.)
+            verifyHvCensusAgainstManifest(manifest, this.chunkSpecHvCensus);
+        }
+    }
+
+    /**
+     * Asserts the parsed {@code chunk_spec_hv.json} census against the
+     * manifest's {@code counts.hv_projection} block (handoff §4): rows /
+     * rows_with_refs / distinct_chunk_refs / distinct_spec_codes must be
+     * declared and equal; anchor_kinds.MISS must equal the miss-code count
+     * when declared. Any mismatch or missing block fails closed.
+     */
+    private static void verifyHvCensusAgainstManifest(JsonNode manifest,
+                                                      ChunkSpecHvCensus census) {
+        JsonNode declared = manifest.path("counts").path("hv_projection");
+        if (declared.isMissingNode()) {
+            throw new IllegalStateException("chunk_spec_hv.json present but the manifest "
+                    + "declares no counts.hv_projection census (fail-closed, handoff §4: the "
+                    + "export contract records the census the loader must assert against)");
+        }
+        requireCensusEquals(declared.path("rows"), census.rows(), "rows");
+        requireCensusEquals(declared.path("rows_with_refs"), census.rowsWithRefs(),
+                "rows_with_refs");
+        requireCensusEquals(declared.path("distinct_chunk_refs"), census.distinctRefs(),
+                "distinct_chunk_refs");
+        requireCensusEquals(declared.path("distinct_spec_codes"), census.distinctCodes(),
+                "distinct_spec_codes");
+        JsonNode miss = declared.path("anchor_kinds").path("MISS");
+        if (!miss.isMissingNode()) {
+            requireCensusEquals(miss, census.missCodes().size(), "anchor_kinds.MISS");
+        }
+    }
+
+    private static void requireCensusEquals(JsonNode declaredNode, int parsed, String field) {
+        if (!declaredNode.isInt() || declaredNode.asInt() != parsed) {
+            throw new IllegalStateException("counts.hv_projection census drift on " + field
+                    + ": manifest declares "
+                    + (declaredNode.isMissingNode() ? "nothing" : declaredNode.asText())
+                    + " but chunk_spec_hv.json parses " + parsed + " (fail-closed, handoff §4)");
         }
     }
 

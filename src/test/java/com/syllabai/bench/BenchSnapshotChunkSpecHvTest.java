@@ -118,6 +118,44 @@ class BenchSnapshotChunkSpecHvTest {
         assertThrows(IllegalStateException.class, () -> BenchSnapshot.load(dir));
     }
 
+    // ── handoff §4 census gate (fail-closed against the manifest record) ───
+
+    @Test
+    void censusDriftAgainstManifestFailsClosed() throws Exception {
+        // the manifest declares snap-005's real census (210/209/164/181) but
+        // the pinned artifact parses the 5-row fixture census -> drift aborts
+        writeSnapshot(true, realProjection(), """
+                {"rows": 210, "rows_with_refs": 209, "distinct_chunk_refs": 164,
+                 "distinct_spec_codes": 181,
+                 "anchor_kinds": {"CLEAN": 205, "MULTI": 4, "MISS": 1}}""");
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> BenchSnapshot.load(dir));
+        assertTrue(ex.getMessage().contains("census drift"), ex.getMessage());
+    }
+
+    @Test
+    void missingManifestCensusBlockFailsClosed() throws Exception {
+        // the file is pinned but counts.hv_projection is absent -> the export
+        // contract records the census; a manifest without it never scores
+        writeSnapshot(true, realProjection(), null);
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> BenchSnapshot.load(dir));
+        assertTrue(ex.getMessage().contains("counts.hv_projection"), ex.getMessage());
+    }
+
+    @Test
+    void censusGateAcceptsTheMatchingManifestRecord() throws Exception {
+        // the declared census equals the parsed census -> loads clean
+        // (fixture: 5 rows / 4 with refs / 3 distinct refs / 5 codes / 1 miss)
+        writeSnapshot(true, realProjection(), """
+                {"rows": 5, "rows_with_refs": 4, "distinct_chunk_refs": 3,
+                 "distinct_spec_codes": 5,
+                 "anchor_kinds": {"CLEAN": 3, "MULTI": 1, "MISS": 1}}""");
+        BenchSnapshot snapshot = BenchSnapshot.load(dir);
+        assertTrue(snapshot.chunkSpecHvPresent());
+        assertEquals(5, snapshot.chunkSpecHvCensus().rows());
+    }
+
     // ── fixture ───────────────────────────────────────────────────────────
 
     /**
@@ -158,6 +196,21 @@ class BenchSnapshotChunkSpecHvTest {
     }
 
     private void writeSnapshot(boolean pinHv, String hvJson) throws Exception {
+        // fixture census derived from realProjection(): 5 rows / 4 with refs /
+        // 3 distinct refs (:1 :2 :4) / 5 distinct codes / CLEAN 3 + MULTI 1 + MISS 1
+        writeSnapshot(pinHv, hvJson, """
+                {"rows": 5, "rows_with_refs": 4, "distinct_chunk_refs": 3,
+                 "distinct_spec_codes": 5,
+                 "anchor_kinds": {"CLEAN": 3, "MULTI": 1, "MISS": 1}}""");
+    }
+
+    /**
+     * Full fixture: {@code withCensus == null} omits counts.hv_projection
+     * (the missing-block guard); otherwise the manifest declares the given
+     * census block alongside the pin.
+     */
+    private void writeSnapshot(boolean pinHv, String hvJson, String withCensus)
+            throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         ArrayNode chunks = mapper.createArrayNode();
         // the five note-chunk refs the fixture projection points at
@@ -192,7 +245,11 @@ class BenchSnapshotChunkSpecHvTest {
         manifest.put("snapshot_version", "snap-s8d-test");
         ObjectNode hashes = manifest.putObject("files_sha256");
         sha.forEach(hashes::put);
-        manifest.putObject("counts").put("chunks", 5);
+        ObjectNode counts = manifest.putObject("counts");
+        counts.put("chunks", 5);
+        if (pinHv && hvJson != null && withCensus != null) {
+            counts.set("hv_projection", mapper.readTree(withCensus));
+        }
 
         Files.write(dir.resolve("chunks.jsonl.gz"), gzip(chunkBytes));
         for (String name : new String[] {"spec_points.json", "misconceptions.json",
