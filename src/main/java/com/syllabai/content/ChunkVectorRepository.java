@@ -59,6 +59,44 @@ public class ChunkVectorRepository {
 
     private final JdbcTemplate jdbc;
 
+    // ── T-C31 empty-path diagnostic predicates ─────────────────────────────
+    // These MUST stay in lockstep with the WHERE clauses of search() /
+    // searchServingEligible() below — ChunkVectorRepositoryDiagnoseTest asserts
+    // (whitespace-normalized) that each serving SQL contains its matching
+    // fragment, so the funnel can never silently drift from the gate it mirrors.
+
+    /** The curriculum-scope EXISTS predicate (both branches) WITHOUT the
+     *  validation gates — the T-C07 scope stage shared by the neutral search. */
+    static final String SCOPE_EXISTS_NO_VALIDATION = """
+            exists (
+                  select 1 from exam_papers p
+                  join subjects s on s.id = p.subject_id
+                  where s.curriculum_version_id = ?
+                    and (p.question_paper_document_id = d.document_id
+                      or p.mark_scheme_document_id = d.document_id))
+         or exists (
+                  select 1 from subjects s2
+                  where s2.curriculum_version_id = ?
+                    and s2.id = c.subject_id)
+            """;
+
+    /** The curriculum-scope EXISTS predicate WITH the T-C20 VALIDATED-only
+     *  gates on both branches — the exact serving-eligible scope stage. */
+    static final String SCOPE_EXISTS_VALIDATED = """
+            exists (
+                  select 1 from exam_papers p
+                  join subjects s on s.id = p.subject_id
+                  where s.curriculum_version_id = ?
+                    and p.validation_state = 'VALIDATED'
+                    and (p.question_paper_document_id = d.document_id
+                      or p.mark_scheme_document_id = d.document_id))
+         or exists (
+                  select 1 from subjects s2
+                  where s2.curriculum_version_id = ?
+                    and s2.id = c.subject_id
+                    and d.validation_state = 'VALIDATED')
+            """;
+
     public ChunkVectorRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
@@ -190,6 +228,52 @@ public class ChunkVectorRepository {
                 (rs, i) -> mapHit(rs),
                 literal, CURRENT_EMBED_REV, curriculumVersionId, curriculumVersionId,
                 literal, limit);
+    }
+
+    /**
+     * T-C31 serving-emptiness observability: the stage funnel behind an EMPTY
+     * search, in two round-trips. Call ONLY after
+     * {@link #searchServingEligible(float[], Document.Kind, UUID, int)} has
+     * returned empty — never on the happy path (the happy path must not grow
+     * queries). The {@code servingEligible} count runs the EXACT
+     * {@code searchServingEligible} WHERE predicate (same
+     * {@link #SCOPE_EXISTS_VALIDATED} fragment, drift-guarded by test), so the
+     * classification can never name a stage the serving gate does not actually
+     * gate.
+     *
+     * <p>Read-only, zero writes, no serving semantics change: an empty result
+     * stays empty — this only names WHY it is empty (T-C23: all three
+     * empty-causes used to return the identical {@code 200 + []}).</p>
+     */
+    public SearchEmptyDiagnostics diagnoseEmpty(Document.Kind kind, UUID curriculumVersionId) {
+        if (curriculumVersionId == null) {
+            throw new IllegalArgumentException(
+                    "curriculumVersionId is mandatory — diagnostics never run unscoped (T-C07)");
+        }
+        String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
+        String funnelSql = """
+                select count(*) as chunks_in_scope,
+                       count(*) filter (where c.embedding is not null) as embedded_in_scope,
+                       count(*) filter (where c.embedding is not null
+                                          and c.embed_rev = ?) as in_scope_at_rev
+                from document_chunks c
+                join documents d on d.id = c.document_row_id
+                where """ + SCOPE_EXISTS_NO_VALIDATION + kindFilter;
+        SearchEmptyDiagnostics funnel = jdbc.queryForObject(funnelSql,
+                (rs, i) -> new SearchEmptyDiagnostics(rs.getLong("chunks_in_scope"),
+                        rs.getLong("embedded_in_scope"), rs.getLong("in_scope_at_rev"), 0),
+                CURRENT_EMBED_REV, curriculumVersionId, curriculumVersionId);
+        String eligibleSql = """
+                select count(*)
+                from document_chunks c
+                join documents d on d.id = c.document_row_id
+                where c.embedding is not null
+                  and c.embed_rev = ?
+                  and """ + SCOPE_EXISTS_VALIDATED + kindFilter;
+        Long eligible = jdbc.queryForObject(eligibleSql, Long.class,
+                CURRENT_EMBED_REV, curriculumVersionId, curriculumVersionId);
+        return new SearchEmptyDiagnostics(funnel.chunksInScope(), funnel.embeddedInScope(),
+                funnel.inScopeAtRev(), eligible == null ? 0L : eligible);
     }
 
     private ChunkHit mapHit(java.sql.ResultSet rs) throws java.sql.SQLException {

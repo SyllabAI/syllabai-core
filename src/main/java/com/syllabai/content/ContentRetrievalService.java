@@ -61,4 +61,21 @@ public class ContentRetrievalService {
         return vectors.searchServingEligible(queryVector, kind, scope.curriculumVersionId(),
                 boundedLimit);
     }
+
+    /**
+     * T-C31 serving-emptiness observability: the stage funnel behind an EMPTY
+     * search. Call ONLY after {@link #search(String, Document.Kind, CurriculumScope, int)}
+     * has returned an empty list — never on the happy path. Read-only, zero
+     * writes, no serving-semantics change: an empty result stays empty; this
+     * only names WHY ({@link SearchEmptyCause}, the T-C23 three-identical-
+     * {@code 200+[]}-causes fix). Null scope stays a hard rejection —
+     * diagnostics never run unscoped either.
+     */
+    public SearchEmptyDiagnostics diagnoseEmpty(Document.Kind kind, CurriculumScope scope) {
+        if (scope == null) {
+            throw new IllegalArgumentException(
+                    "curriculum scope is mandatory — diagnostics never run unscoped (T-C07)");
+        }
+        return vectors.diagnoseEmpty(kind, scope.curriculumVersionId());
+    }
 }
