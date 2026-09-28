@@ -145,7 +145,8 @@ class CardServingBoundaryIT {
                     page_end, element_ids, token_estimate, subject_id, created_at)
                 values (?, ?, 0, ?, 1, 1, '[]'::jsonb, 24, ?, now())
                 """, chunkId, rowId, content, subjectId);
-        vectors.storeEmbedding(chunkId, queryVector(content), "it-card-boundary");
+        assertThat(vectors.storeEmbedding(chunkId, queryVector(content), "it-card-boundary"))
+                .as("embedding stored for " + documentId).isEqualTo(1);
     }
 
     private List<ChunkHit> vectorServing() {
@@ -179,17 +180,20 @@ class CardServingBoundaryIT {
         Subject subject = subjects.save(new Subject(cv, "4CH1-BND", "Chemistry (card boundary)"));
         subjectId = subject.id();
 
-        // paper A: VALIDATED — the compliant control corpus
+        // paper A: VALIDATED — the compliant control corpus. NOTE: exam_papers.
+        // question/mark_scheme_document_id holds the documents.document_id STRING
+        // (production semantics, probed 2026-09-28: 90 string matches, 0 row-UUID),
+        // NOT the documents row id.
         ExamPaper paperA = examPapers.save(new ExamPaper(subjectId, "IT validated paper",
                 "Edexcel", "IGCSE", null, null, "4CH1-BND/1C",
-                DOC_QP_A.toString(), DOC_MS_A.toString(),
+                "it-card-bnd-qp-a", "it-card-bnd-ms-a",
                 ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
         paperA.validate();
         examPapers.save(paperA);
         // paper B: born SUGGESTED (entity default) — the boundary exclusion control
         examPapers.save(new ExamPaper(subjectId, "IT suggested paper",
                 "Edexcel", "IGCSE", null, null, "4CH1-BND/2C",
-                DOC_QP_B.toString(), DOC_MS_B.toString(),
+                "it-card-bnd-qp-b", "it-card-bnd-ms-b",
                 ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
 
         insertDocument(DOC_QP_A, "it-card-bnd-qp-a", Document.Kind.QUESTION_PAPER, "SUGGESTED", CONTENT_QP_A);
@@ -201,9 +205,43 @@ class CardServingBoundaryIT {
         insertDocument(DOC_CARD_2, "it-card-bnd-card-2", Document.Kind.EXTERNAL_QUESTIONS, "SUGGESTED", CONTENT_CARD_2);
 
         // seed sanity: the neutral surfaces see ALL six chunks — the data matches;
-        // only the serving gate decides what serves
-        assertThat(vectorNeutral()).hasSize(6);
-        assertThat(lexicalNeutral()).hasSize(6);
+        // only the serving gate decides what serves. Self-diagnosing on failure:
+        // one CI cycle must pinpoint which premise of the boundary proof broke.
+        List<ChunkHit> vectorSeeded = vectorNeutral();
+        if (vectorSeeded.size() != 6 || lexicalNeutral().size() != 6) {
+            Integer docs = jdbc.queryForObject(
+                    "select count(*) from documents where source_uri = 'it://card-boundary'", Integer.class);
+            Integer chunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
+            Integer embedded = jdbc.queryForObject(
+                    "select count(*) from document_chunks where embedding is not null", Integer.class);
+            Integer maxRev = jdbc.queryForObject(
+                    "select coalesce(max(embed_rev), -1) from document_chunks", Integer.class);
+            Integer chunksWithSubject = jdbc.queryForObject(
+                    "select count(*) from document_chunks where subject_id = ?", Integer.class, subjectId);
+            Integer subjectsInScope = jdbc.queryForObject(
+                    "select count(*) from subjects where curriculum_version_id = ?", Integer.class, scopeId);
+            Integer papersInScope = jdbc.queryForObject(
+                    "select count(*) from exam_papers where subject_id = ?", Integer.class, subjectId);
+            Integer branch2Matches = jdbc.queryForObject("""
+                    select count(*) from document_chunks c
+                      join subjects s2 on s2.id = c.subject_id
+                     where s2.curriculum_version_id = ?""", Integer.class, scopeId);
+            Integer paperBranchMatches = jdbc.queryForObject("""
+                    select count(*) from document_chunks c
+                      join documents d on d.id = c.document_row_id
+                     where exists (select 1 from exam_papers p
+                                    join subjects s on s.id = p.subject_id
+                                   where s.curriculum_version_id = ?
+                                     and (p.question_paper_document_id = d.document_id
+                                       or p.mark_scheme_document_id = d.document_id))""",
+                    Integer.class, scopeId);
+            throw new IllegalStateException("seed sanity failed: vectorNeutral=" + vectorSeeded.size()
+                    + " docs=" + docs + " chunks=" + chunks + " embedded=" + embedded
+                    + " maxRev=" + maxRev + " chunksWithSubject=" + chunksWithSubject
+                    + " subjectsInScope=" + subjectsInScope + " papersInScope=" + papersInScope
+                    + " branch2Matches=" + branch2Matches + " paperBranchMatches=" + paperBranchMatches
+                    + " scopeId=" + scopeId + " subjectId=" + subjectId);
+        }
     }
 
     @Test
