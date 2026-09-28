@@ -7,8 +7,11 @@ import com.syllabai.shared.NotFoundException;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ContentDocumentController {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    private static final Logger LOG = LoggerFactory.getLogger(ContentDocumentController.class);
+
+    /** T-C31: additive machine-readable empty-cause header — the JSON body stays a bare array. */
+    static final String EMPTY_CAUSE_HEADER = "X-Search-Empty-Cause";
 
     private final ContentIngestionService ingestion;
     private final DocumentEmbeddingService embedding;
@@ -97,18 +105,40 @@ public class ContentDocumentController {
      * same service, not on this endpoint. Curriculum-scoped like every serving
      * path (T-C07): an unresolved active curriculum yields an empty result —
      * never an unscoped search.
+     *
+     * <p>T-C31 serving-emptiness observability: on an EMPTY result only, the
+     * response carries the additive {@link #EMPTY_CAUSE_HEADER} header naming
+     * WHY it is empty ({@link SearchEmptyCause} — the T-C23 fix: all three
+     * empty-causes used to return the identical {@code 200 + []}) and a
+     * structured log line records the stage funnel. The JSON body stays a bare
+     * array on every path — wire-compatible with all existing consumers — and
+     * the happy path runs exactly the queries it ran before.</p>
      */
     @GetMapping("/search")
-    public List<ChunkHitView> search(@CurrentUserId UUID requesterId,
+    public ResponseEntity<List<ChunkHitView>> search(@CurrentUserId UUID requesterId,
                                      @RequestParam @NotBlank String query,
                                      @RequestParam(required = false) Document.Kind kind,
                                      @RequestParam(defaultValue = "10") int limit) {
-        return curriculumScopes.resolveActive(requesterId)
-                .map(scope -> retrieval.search(query, kind, scope, limit))
-                .orElse(List.of())
-                .stream()
-                .map(ChunkHitView::from)
-                .toList();
+        var scope = curriculumScopes.resolveActive(requesterId);
+        if (scope.isEmpty()) {
+            LOG.info("search_empty cause=SCOPE_UNRESOLVED requester={}", requesterId);
+            return ResponseEntity.ok()
+                    .header(EMPTY_CAUSE_HEADER, SearchEmptyCause.SCOPE_UNRESOLVED.name())
+                    .body(List.of());
+        }
+        List<ChunkHit> hits = retrieval.search(query, kind, scope.get(), limit);
+        if (!hits.isEmpty()) {
+            return ResponseEntity.ok().body(hits.stream().map(ChunkHitView::from).toList());
+        }
+        SearchEmptyDiagnostics diagnostics = retrieval.diagnoseEmpty(kind, scope.get());
+        SearchEmptyCause cause = diagnostics.cause();
+        LOG.info("search_empty cause={} kind={} chunksInScope={} embeddedInScope={} "
+                        + "inScopeAtRev={} servingEligible={}",
+                cause, kind, diagnostics.chunksInScope(), diagnostics.embeddedInScope(),
+                diagnostics.inScopeAtRev(), diagnostics.servingEligible());
+        return ResponseEntity.ok()
+                .header(EMPTY_CAUSE_HEADER, cause.name())
+                .body(List.of());
     }
 
     private CanonicalDocumentDto parse(String rawJson) {
