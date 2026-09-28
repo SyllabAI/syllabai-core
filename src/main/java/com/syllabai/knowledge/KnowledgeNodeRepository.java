@@ -1,5 +1,6 @@
 package com.syllabai.knowledge;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +44,21 @@ public interface KnowledgeNodeRepository extends JpaRepository<KnowledgeNode, UU
             SELECT n.id FROM knowledge_nodes n WHERE n.id IN (SELECT id FROM subtree)
             """, nativeQuery = true)
     List<UUID> findSubtreeIds(@Param("rootId") UUID rootId);
+
+    /**
+     * Batched ownership predicate for the serving-scope resolver (T-C23
+     * ticket-2 N+1 fix): TRUE when any of the given subtree ids is a
+     * UNIT/TOPIC/SUBTOPIC node with VALIDATED status — the exact predicate the
+     * resolver used to evaluate with one {@code findById} per subtree node
+     * (~340 reads per search). The subtree id set still comes from
+     * {@link #findSubtreeIds}, which stays the single source of truth for the
+     * subtree definition — the recursive CTE is never duplicated here, and the
+     * enums bind through the entity's {@code STRING} mapping (no literal drift).
+     */
+    boolean existsByIdInAndNodeTypeInAndValidationStatus(
+            Collection<UUID> ids,
+            Collection<NodeType> nodeTypes,
+            KnowledgeNode.ValidationStatus validationStatus);
 
     /**
      * Direct prerequisite ids of a node (first hop, REQUIRES_PREREQUISITE into this node).

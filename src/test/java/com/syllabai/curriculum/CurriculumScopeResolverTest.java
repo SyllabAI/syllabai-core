@@ -2,13 +2,20 @@ package com.syllabai.curriculum;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.NodeType;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +30,10 @@ import org.junit.jupiter.api.Test;
  * papers (chunk side); exactly one owner resolves, zero or two owners refuse
  * (never serve across curricula); DRAFT versions and rootless subjects are
  * invisible.
+ *
+ * <p>T-C32 pins the read pattern too: the VALIDATED-structure question is
+ * answered with ONE batched repository predicate over the subtree id set —
+ * resolution never reads nodes one-by-one (the ~340-reads-per-search N+1).</p>
  */
 class CurriculumScopeResolverTest {
 
@@ -59,8 +70,8 @@ class CurriculumScopeResolverTest {
     @DisplayName("the single owning ACTIVE version resolves with its subject-root subtree as the surface")
     void singleOwnerResolves() {
         when(knowledgeNodes.findSubtreeIds(rootId)).thenReturn(List.of(rootId, structureId));
-        when(knowledgeNodes.findById(structureId)).thenReturn(Optional.of(
-                node(structureId, NodeType.SUBTOPIC, KnowledgeNode.ValidationStatus.VALIDATED)));
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(true);
 
         Optional<CurriculumScope> scope = resolver.resolveActive(learnerId);
 
@@ -74,8 +85,8 @@ class CurriculumScopeResolverTest {
     @DisplayName("no owning surface (nothing VALIDATED, no papers) → empty, never a guess")
     void noOwnerRefuses() {
         when(knowledgeNodes.findSubtreeIds(rootId)).thenReturn(List.of(rootId));
-        when(knowledgeNodes.findById(rootId)).thenReturn(Optional.of(
-                node(rootId, NodeType.SUBTOPIC, KnowledgeNode.ValidationStatus.SUGGESTED)));
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(false);
         when(examPapers.existsBySubjectId(any())).thenReturn(false);
 
         assertThat(resolver.resolveActive(learnerId)).isEmpty();
@@ -85,8 +96,8 @@ class CurriculumScopeResolverTest {
     @DisplayName("paper surface alone is ownership (chunk-only curricula still scope)")
     void paperSurfaceIsOwnership() {
         when(knowledgeNodes.findSubtreeIds(rootId)).thenReturn(List.of(rootId));
-        when(knowledgeNodes.findById(rootId)).thenReturn(Optional.of(
-                node(rootId, NodeType.TOPIC, KnowledgeNode.ValidationStatus.UNVALIDATED)));
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(false);
         when(examPapers.existsBySubjectId(any())).thenReturn(true);
 
         Optional<CurriculumScope> scope = resolver.resolveActive(learnerId);
@@ -98,9 +109,12 @@ class CurriculumScopeResolverTest {
     @Test
     @DisplayName("SUGGESTED/UNVALIDATED structure is invisible — §7 gate holds at resolution too")
     void suggestedStructureIsInvisible() {
+        // the batched predicate answers for the whole subtree: no VALIDATED
+        // structure → no KG ownership (the VALIDATED literal itself is pinned
+        // in resolveNeverReadsPerNode below)
         when(knowledgeNodes.findSubtreeIds(rootId)).thenReturn(List.of(rootId, structureId));
-        when(knowledgeNodes.findById(structureId)).thenReturn(Optional.of(
-                node(structureId, NodeType.SUBTOPIC, KnowledgeNode.ValidationStatus.SUGGESTED)));
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(false);
         when(examPapers.existsBySubjectId(any())).thenReturn(false);
 
         assertThat(resolver.resolveActive(learnerId)).isEmpty();
@@ -122,6 +136,9 @@ class CurriculumScopeResolverTest {
 
         assertThat(scope).isPresent();
         assertThat(scope.get().intentSurfaceNodeIds()).isEmpty(); // empty surface matches nothing
+        // empty subtree fails closed WITHOUT touching the batched predicate
+        verify(knowledgeNodes, never()).existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any());
     }
 
     @Test
@@ -142,8 +159,8 @@ class CurriculumScopeResolverTest {
         when(subjects.findByCurriculumVersionIdOrderByCode(secondCvId))
                 .thenReturn(List.of(secondSubject));
         when(knowledgeNodes.findSubtreeIds(any())).thenReturn(List.of(structureId));
-        when(knowledgeNodes.findById(structureId)).thenReturn(Optional.of(
-                node(structureId, NodeType.SUBTOPIC, KnowledgeNode.ValidationStatus.VALIDATED)));
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(true);
 
         assertThat(resolver.resolveActive(learnerId)).isEmpty();
     }
@@ -159,6 +176,30 @@ class CurriculumScopeResolverTest {
         assertThat(resolver.resolveActive(learnerId)).isEmpty();
     }
 
+    @Test
+    @DisplayName("T-C32 regression: resolution never reads nodes one-by-one — one batched predicate per subject root")
+    void resolveNeverReadsPerNode() {
+        List<UUID> subtree = List.of(rootId, structureId, UUID.randomUUID(), UUID.randomUUID());
+        when(knowledgeNodes.findSubtreeIds(rootId)).thenReturn(subtree);
+        when(knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                anyCollection(), anyCollection(), any())).thenReturn(true);
+
+        assertThat(resolver.resolveActive(learnerId)).isPresent();
+
+        // the N+1 is dead: zero per-node reads on the resolution path
+        verify(knowledgeNodes, never()).findById(any());
+        // the batched predicate ran exactly once (one subject root) and carried
+        // the FULL subtree id set, the pinned structure-type list, and the
+        // VALIDATED literal (the §7 gate, now server-side)
+        verify(knowledgeNodes, times(1)).existsByIdInAndNodeTypeInAndValidationStatus(
+                argThat((Collection<UUID> ids) -> ids != null
+                        && ids.size() == subtree.size()
+                        && ids.containsAll(subtree)),
+                argThat((Collection<NodeType> types) -> types != null && types.size() == 3
+                        && types.containsAll(List.of(NodeType.UNIT, NodeType.TOPIC, NodeType.SUBTOPIC))),
+                eq(KnowledgeNode.ValidationStatus.VALIDATED));
+    }
+
     private Subject subjectWithRoot() {
         Subject s = new Subject(
                 new CurriculumVersion("Edexcel", "IGCSE", "4CH1-2017", "t", CurriculumVersion.Status.ACTIVE),
@@ -166,13 +207,6 @@ class CurriculumScopeResolverTest {
         setId(s, "id", UUID.randomUUID());
         setId(s, "knowledgeNodeId", rootId);
         return s;
-    }
-
-    private KnowledgeNode node(UUID id, NodeType type, KnowledgeNode.ValidationStatus status) {
-        KnowledgeNode n = new KnowledgeNode("TEST-" + id, type, "test node", null,
-                status, "test", "test");
-        setId(n, "id", id);
-        return n;
     }
 
     private static void setId(Object entity, String field, UUID value) {
