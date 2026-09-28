@@ -18,7 +18,7 @@ import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.shared.BadRequestException;
-import java.io.ByteArrayInputStream;
+import com.syllabai.shared.ZipSafety;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -31,8 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -365,31 +363,36 @@ public class SmeQuestionIngestService {
     }
 
     private ParsedPackage unzip(byte[] zipBytes) {
+        return unzip(zipBytes, ZipSafety.Limits.defaults());
+    }
+
+    // deep-audit 09-28 M3: extraction runs under absolute decompression budgets
+    // (per-entry / total / entry-count) via the shared bounded walker — the
+    // compressed multipart cap bounds nothing, compression ratio is attacker-
+    // chosen and readAllBytes() used to allocate the full uncompressed entry
+    // before any check could run. The test-visible overload pins the caps.
+    ParsedPackage unzip(byte[] zipBytes, ZipSafety.Limits limits) {
         Map<String, byte[]> assetBytes = new HashMap<>();
-        String packageJson = null;
-        try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
-            ZipEntry entry;
-            while ((entry = zin.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                byte[] data = zin.readAllBytes();
-                String name = entry.getName();
+        String[] packageJson = new String[1];
+        try {
+            ZipSafety.readEach(zipBytes, limits, (name, data) -> {
                 if ("package.json".equals(name)) {
-                    packageJson = new String(data, StandardCharsets.UTF_8);
+                    packageJson[0] = new String(data, StandardCharsets.UTF_8);
                 } else if (name.startsWith("assets/")) {
                     assetBytes.put(name.substring("assets/".length()), data);
                 }
-            }
+            });
+        } catch (BadRequestException e) {
+            throw e;
         } catch (IOException e) {
             throw new BadRequestException("could not read the corpus package (not a ZIP?)");
         }
-        if (packageJson == null) {
+        if (packageJson[0] == null) {
             throw new BadRequestException("package.json missing from the corpus package");
         }
         final SmeQuestionPackageDtos.Package pkg;
         try {
-            pkg = JSON.readValue(packageJson, SmeQuestionPackageDtos.Package.class);
+            pkg = JSON.readValue(packageJson[0], SmeQuestionPackageDtos.Package.class);
         } catch (IOException e) {
             throw new BadRequestException(
                     "package.json is not valid sme-question-package JSON");

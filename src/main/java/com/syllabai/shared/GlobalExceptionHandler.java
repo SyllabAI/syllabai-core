@@ -75,13 +75,25 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(com.syllabai.tutor.TutorGenerationException.class)
     ResponseEntity<ApiError> tutorUnavailable(com.syllabai.tutor.TutorGenerationException ex) {
-        return build(HttpStatus.SERVICE_UNAVAILABLE, "tutor_unavailable", ex.getMessage());
+        // deep-audit 09-28 M2: the boundary NEVER trusts the exception text —
+        // generator messages may embed upstream provider error bodies (untrusted
+        // third-party content) or ops configuration guidance. Full detail stays
+        // server-side (cause chain + the chain's WARN logs); the client gets the
+        // fixed honest text.
+        log.warn("tutor unavailable 503 served (detail suppressed from body): {}", ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "tutor_unavailable",
+                com.syllabai.tutor.GroundedTutorGenerator.UNAVAILABLE_MESSAGE);
     }
 
     @ExceptionHandler(com.syllabai.smartmark.SmartFeedbackGenerationException.class)
     ResponseEntity<ApiError> smartFeedbackUnavailable(
             com.syllabai.smartmark.SmartFeedbackGenerationException ex) {
-        return build(HttpStatus.SERVICE_UNAVAILABLE, "smart_feedback_unavailable", ex.getMessage());
+        // deep-audit 09-28 M2: same posture as the tutor boundary — the served
+        // message is fixed, never the exception text.
+        log.warn("smart feedback unavailable 503 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "smart_feedback_unavailable",
+                "the marking feedback engine is temporarily unavailable — try again shortly");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -126,6 +138,28 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
     ResponseEntity<ApiError> authentication(org.springframework.security.core.AuthenticationException ex) {
         return build(HttpStatus.UNAUTHORIZED, "invalid_credentials", "invalid credentials");
+    }
+
+    // deep-audit 09-28 M4: the JSON body limit's streamed path aborts mid-read
+    // with this exception (chunked bodies have no declared length, so the cap
+    // fires while Jackson is reading) — serve the same 413 shape the filter's
+    // Content-Length fast path writes directly.
+    @ExceptionHandler(com.syllabai.http.JsonBodyLimitFilter.BodyTooLargeException.class)
+    ResponseEntity<ApiError> bodyTooLarge(
+            com.syllabai.http.JsonBodyLimitFilter.BodyTooLargeException ex) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "payload_too_large",
+                "request body exceeds the allowed size");
+    }
+
+    // deep-audit 09-28 M5: method-security denials (@PreAuthorize) surface here
+    // as AccessDeniedException — the catch-all below would swallow them into
+    // opaque 500s. Spring Security's documented pattern: rethrow, so the
+    // ExceptionTranslationFilter produces the standard 403 (401 only when the
+    // caller is anonymous, which the route rules already prevent).
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    void rethrowAccessDenied(org.springframework.security.access.AccessDeniedException ex)
+            throws org.springframework.security.access.AccessDeniedException {
+        throw ex;
     }
 
     @ExceptionHandler(Exception.class)

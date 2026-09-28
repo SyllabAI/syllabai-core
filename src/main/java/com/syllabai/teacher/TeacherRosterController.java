@@ -1,5 +1,7 @@
 package com.syllabai.teacher;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.syllabai.identity.Role;
 import com.syllabai.identity.UserRepository;
 import com.syllabai.teacher.dto.TeacherViews;
@@ -19,6 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/teacher")
+// deep-audit 09-28 M5: method-level role check mirroring the route rule
+// in SecurityConfig (defense in depth — the route matchers stay authoritative;
+// a future route change that drops the matcher still hits this layer)
+@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
 public class TeacherRosterController {
 
     private final UserRepository users;

@@ -1,5 +1,7 @@
 package com.syllabai.teacher;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.syllabai.assessment.ExamPaper;
 import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.assessment.MarkScheme;
@@ -33,6 +35,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/teacher/content")
+// deep-audit 09-28 M5: method-level role check mirroring the route rule
+// in SecurityConfig (defense in depth — the route matchers stay authoritative;
+// a future route change that drops the matcher still hits this layer)
+@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
 public class ContentController {
 
     private final PastPaperIngestionService ingestion;

@@ -54,6 +54,13 @@ public class GroundedTutorGenerator implements TutorGenerator {
     private static final int MAX_CONVERSATION_TURN_CHARS = 800;
     private static final int MAX_TOTAL_CONVERSATION_CHARS = 2400;
 
+    /** deep-audit 09-28 M2: the ONLY client-visible tutor 503 message. Every
+     *  generation-failure path throws with this fixed text — upstream provider
+     *  error bodies (untrusted third-party content) and ops configuration
+     *  guidance stay in server logs via the cause chain / WARN logs. */
+    public static final String UNAVAILABLE_MESSAGE =
+            "the tutor is temporarily unavailable — please try again shortly";
+
     private final LlmProvider chain;
     private final double temperature;
     private final int maxTokens;
@@ -75,9 +82,14 @@ public class GroundedTutorGenerator implements TutorGenerator {
     public GeneratedAnswer generate(String query, List<ConversationTurn> history,
                                     ContextAssembler.TutorContext context) {
         if (!chain.available()) {
-            throw new TutorGenerationException(
-                    "LLM chain unavailable — set SYLLABAI_GROQ_API_KEY (free tier, ADR-009); "
-                            + "grounded answers are impossible without a provider");
+            // deep-audit 09-28 M2: the message served to the learner stays fixed
+            // and client-safe — ops configuration guidance (which env var to set,
+            // which ADR governs the provider) belongs in server logs, not in a
+            // learner-facing 503 body. The chain's own state is logged at WARN
+            // by the failover layer when providers fail.
+            log.warn("tutor generation refused: LLM chain unavailable (no configured "
+                    + "provider in the chain, ADR-009 free tier)");
+            throw new TutorGenerationException(UNAVAILABLE_MESSAGE);
         }
         try {
             String nonce = nonce();
@@ -98,7 +110,14 @@ public class GroundedTutorGenerator implements TutorGenerator {
             }
             return new GeneratedAnswer(sanitized, response.model(), response.providerName());
         } catch (LlmProviderException e) {
-            throw new TutorGenerationException("LLM chain failed: " + e.getMessage(), e);
+            // deep-audit 09-28 M2: the chain message embeds upstream provider
+            // error text (SDK summaries, HTTP response bodies from Groq/Gemini/
+            // OpenRouter — up to ~200 chars per provider). That text is UNTRUSTED
+            // third-party content (and can echo learner-influenced filter trips
+            // back at the learner); it must never reach a client body. The cause
+            // chain + the chain's WARN log keep full server-side diagnosability;
+            // the served message is the fixed, honest client text.
+            throw new TutorGenerationException(UNAVAILABLE_MESSAGE, e);
         }
     }
 

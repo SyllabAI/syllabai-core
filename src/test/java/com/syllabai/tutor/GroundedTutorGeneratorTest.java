@@ -359,6 +359,31 @@ class GroundedTutorGeneratorTest {
         assertThatThrownBy(() -> offline.generate("q?",
                 new ContextAssembler.TutorContext("b", "k", List.of())))
                 .isInstanceOf(TutorGenerationException.class)
-                .hasMessageContaining("LLM chain unavailable");
+                .hasMessage(GroundedTutorGenerator.UNAVAILABLE_MESSAGE);
+    }
+
+    @Test
+    @DisplayName("M2: a failing chain never embeds upstream provider error text "
+            + "in the client-visible message")
+    void chainFailureMessageIsClientSafe() {
+        // the chain's message deliberately carries upstream provider error text
+        // (that is its server-side diagnosability contract) — the generator must
+        // NOT propagate it into the TutorGenerationException message
+        FakeLlmProvider poisoned = FakeLlmProvider.named("groq").alwaysFails(
+                com.syllabai.infrastructure.llm.LlmFailureClass.RATE_LIMITED,
+                "HttpClientErrorException: 429 Too Many Requests: {\"error\":{\"message\":"
+                        + "\"Rate limit for org-SECRET-INTERNAL\"}}");
+        GroundedTutorGenerator failing =
+                new GroundedTutorGenerator(poisoned, 0.2, 900);
+        assertThatThrownBy(() -> failing.generate("q?",
+                new ContextAssembler.TutorContext("b", "k", List.of())))
+                .isInstanceOf(TutorGenerationException.class)
+                .hasMessage(GroundedTutorGenerator.UNAVAILABLE_MESSAGE)
+                .hasMessageNotContaining("org-SECRET-INTERNAL")
+                .hasMessageNotContaining("429")
+                .hasMessageNotContaining("HttpClientErrorException")
+                .cause()
+                .isInstanceOf(com.syllabai.infrastructure.llm.LlmProviderException.class)
+                .hasMessageContaining("org-SECRET-INTERNAL");   // full detail stays server-side
     }
 }

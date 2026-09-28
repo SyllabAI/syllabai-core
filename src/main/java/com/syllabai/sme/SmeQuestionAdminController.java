@@ -1,5 +1,7 @@
 package com.syllabai.sme;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +19,10 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/v1/admin/question-bank")
+// deep-audit 09-28 M5: method-level role check mirroring the route rule
+// in SecurityConfig (defense in depth — the route matchers stay authoritative;
+// a future route change that drops the matcher still hits this layer)
+@PreAuthorize("hasRole('ADMIN')")
 public class SmeQuestionAdminController {
 
     private final SmeQuestionIngestService ingest;

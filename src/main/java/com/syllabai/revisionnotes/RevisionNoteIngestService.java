@@ -2,7 +2,7 @@ package com.syllabai.revisionnotes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.syllabai.shared.BadRequestException;
-import java.io.ByteArrayInputStream;
+import com.syllabai.shared.ZipSafety;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -10,8 +10,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -118,35 +116,40 @@ public class RevisionNoteIngestService {
     }
 
     private ParsedPackage unzip(byte[] zipBytes) {
+        return unzip(zipBytes, ZipSafety.Limits.defaults());
+    }
+
+    // deep-audit 09-28 M3: extraction runs under absolute decompression budgets
+    // via the shared bounded walker (per-entry / total / entry-count). The
+    // service-level '..' name check is retained (same rejection text as before);
+    // the walker adds the structural traversal guard and the caps.
+    ParsedPackage unzip(byte[] zipBytes, ZipSafety.Limits limits) {
         Map<String, byte[]> assetBytes = new LinkedHashMap<>();
-        byte[] packageJson = null;
-        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
-            ZipEntry entry;
-            while ((entry = zip.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                byte[] content = zip.readAllBytes();
-                if (entry.getName().contains("..")) {
+        byte[][] packageJson = new byte[1][];
+        try {
+            ZipSafety.readEach(zipBytes, limits, (name, content) -> {
+                if (name.contains("..")) {
                     throw new BadRequestException(
                             "revision-notes package contains an unsafe entry path: "
-                                    + entry.getName());
+                                    + name);
                 }
-                if (entry.getName().equals("package.json")) {
-                    packageJson = content;
-                } else if (entry.getName().startsWith("assets/")) {
-                    assetBytes.put(entry.getName().substring("assets/".length()), content);
+                if (name.equals("package.json")) {
+                    packageJson[0] = content;
+                } else if (name.startsWith("assets/")) {
+                    assetBytes.put(name.substring("assets/".length()), content);
                 }
-            }
+            });
+        } catch (BadRequestException e) {
+            throw e;
         } catch (IOException e) {
             throw new BadRequestException("revision-notes package is not a readable ZIP");
         }
-        if (packageJson == null) {
+        if (packageJson[0] == null) {
             throw new BadRequestException("revision-notes package is missing package.json");
         }
         try {
             RevisionNoteDtos.RevisionNotePackage pkg = JSON.readValue(
-                    new String(packageJson, StandardCharsets.UTF_8),
+                    new String(packageJson[0], StandardCharsets.UTF_8),
                     RevisionNoteDtos.RevisionNotePackage.class);
             return new ParsedPackage(pkg, assetBytes);
         } catch (IOException e) {

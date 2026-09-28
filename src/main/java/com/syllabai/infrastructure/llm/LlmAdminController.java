@@ -1,5 +1,7 @@
 package com.syllabai.infrastructure.llm;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.context.annotation.Lazy;
@@ -13,6 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/admin/llm")
+// deep-audit 09-28 M5: method-level role check mirroring the route rule
+// in SecurityConfig (defense in depth — the route matchers stay authoritative;
+// a future route change that drops the matcher still hits this layer)
+@PreAuthorize("hasRole('ADMIN')")
 public class LlmAdminController {
 
     private final FailoverLlmChain chain;

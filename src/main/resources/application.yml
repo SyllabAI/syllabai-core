@@ -120,6 +120,14 @@ syllabai:
     password-per-ip: 10
     llm-per-learner: 20          # above the anchor sweep's ~11 asks/learner/run
 
+  # deep-audit 09-28 M4: JSON request bodies have no servlet-level cap (the
+  # multipart limits only cover multipart/form-data). The JsonBodyLimitFilter
+  # rejects bodies over this budget with 413 before any controller reads them —
+  # a huge teacher draft / marking batch / OCR pair can no longer OOM the pod.
+  http:
+    max-json-body-bytes: 2097152 # 2 MiB — far above the largest legit body
+                                 # (GLM OCR canonical pair, a few hundred KB)
+
   llm:
     groq:
       enabled: ${SYLLABAI_GROQ_ENABLED:true}

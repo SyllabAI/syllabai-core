@@ -1,5 +1,7 @@
 package com.syllabai.content;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.syllabai.curriculum.CurriculumScopeResolver;
 import com.syllabai.identity.CurrentUserId;
@@ -29,6 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/teacher/content/documents")
+// deep-audit 09-28 M5: method-level role check mirroring the route rule
+// in SecurityConfig (defense in depth — the route matchers stay authoritative;
+// a future route change that drops the matcher still hits this layer)
+@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
 public class ContentDocumentController {
 
     private static final ObjectMapper JSON = new ObjectMapper();

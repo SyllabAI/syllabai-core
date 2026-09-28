@@ -210,4 +210,15 @@ class SmeQuestionIngestServiceTest {
         }
         return bos.toByteArray();
     }
+
+    @Test
+    @DisplayName("M3: extraction runs under decompression budgets — a package "
+            + "whose package.json exceeds the per-entry cap rejects fail-closed")
+    void zipExtractionIsBounded() throws Exception {
+        byte[] zip = zip(pkg(List.of(mcq("sme-a"))), Map.of());
+        assertThatThrownBy(() -> service.unzip(zip,
+                new com.syllabai.shared.ZipSafety.Limits(10, 100, 10)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("per-entry budget");
+    }
 }
