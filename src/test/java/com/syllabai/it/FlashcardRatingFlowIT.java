@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -93,6 +94,12 @@ class FlashcardRatingFlowIT {
                 "ItLearner123!", "It Learner")).user().id();
     }
 
+    /** learner-scoped row count — tests share one DB, so a global count() is
+     *  ordering-sensitive and would be a flaky assertion. */
+    private long rowsOf(UUID learner) {
+        return ratingRows.findByLearnerIdOrderByOccurredAtDesc(learner, Pageable.unpaged()).size();
+    }
+
     @Test
     @DisplayName("rating persists on a resolved subtopic anchor, surfaces newest-first in /state, and re-rating appends")
     void happyPathAppendAndState() {
@@ -114,7 +121,7 @@ class FlashcardRatingFlowIT {
         FlashcardRatingView rerate = ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_testCard1", "still-learning", SUBTOPIC_CODE));
         assertThat(rerate.rating()).isEqualTo("still-learning");
-        assertThat(ratingRows.count()).isEqualTo(3);
+        assertThat(rowsOf(learner)).isEqualTo(3);
 
         LearnerStateView state = stateController.state(learner);
         assertThat(state.flashcardRatings()).hasSize(3);
@@ -135,7 +142,7 @@ class FlashcardRatingFlowIT {
     @DisplayName("fail-closed attribution: unknown anchor and non-subtopic anchor are 404 and persist nothing")
     void failClosedAttribution() {
         UUID learner = newLearner();
-        long before = ratingRows.count();
+        long before = rowsOf(learner);
 
         assertThatThrownBy(() -> ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_x1", "know", "4CH1-S99-z")))
@@ -145,7 +152,7 @@ class FlashcardRatingFlowIT {
                 new FlashcardRatingRequest("fl_x2", "know", SUBJECT_CODE)))
                 .isInstanceOf(NotFoundException.class);
 
-        assertThat(ratingRows.count()).isEqualTo(before);
+        assertThat(rowsOf(learner)).isEqualTo(before);
     }
 
     @Test

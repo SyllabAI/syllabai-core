@@ -143,11 +143,16 @@ class CardServingBoundaryIT {
                     'it', '1', ?::jsonb, ?, now())
                 """, rowId, documentId, kind.name(), documentId, "{}", state);
         UUID chunkId = rowId("chunk|" + documentId);
+        // Stamp the seed at the CURRENT serving revision — a fresh testcontainer
+        // DB has no pre-existing pool to re-stamp (the 665d7aa prod cut-over
+        // re-stamped the 965-chunk VALIDATED pool in the same window as the
+        // constant flip), so without this the seed rows sit at the column
+        // default (rev 1) and the rev-gated searches return 0 hits.
         jdbc.update("""
                 insert into document_chunks (id, document_row_id, chunk_index, content, page_start,
-                    page_end, element_ids, token_estimate, subject_id, created_at)
-                values (?, ?, 0, ?, 1, 1, '[]'::jsonb, 24, ?, now())
-                """, chunkId, rowId, content, subjectId);
+                    page_end, element_ids, token_estimate, subject_id, embed_rev, created_at)
+                values (?, ?, 0, ?, 1, 1, '[]'::jsonb, 24, ?, ?, now())
+                """, chunkId, rowId, content, subjectId, ChunkVectorRepository.CURRENT_EMBED_REV);
         assertThat(vectors.storeEmbedding(chunkId, queryVector(content), "it-card-boundary"))
                 .as("embedding stored for " + documentId).isEqualTo(1);
     }
