@@ -26,7 +26,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li><strong>auth tier</strong> — pre-authentication identity endpoints,
  *       keyed by client IP, so credential brute force and account spam burn
  *       through a bounded budget per host;</li>
- *   <li><strong>LLM tier</strong> — {@code POST /api/v1/tutor/ask} and
+ *   <li><strong>LLM tier</strong> — {@code POST /api/v1/tutor/ask},
+ *       {@code POST /api/v1/tutor/ask/stream} and
  *       {@code POST /api/v1/learners/me/cla/ask}, keyed by learner (the JWT
  *       user id the {@code JwtAuthenticationFilter} placed on the request —
  *       this filter runs AFTER it inside the chain), with an IP fallback.
@@ -136,6 +137,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return new Budget("auth:password", clientIp(request), properties.passwordPerIp());
         }
         if (post && ("/api/v1/tutor/ask".equals(path)
+                // the SSE twin spends the same tokens — one tier, same budget
+                || "/api/v1/tutor/ask/stream".equals(path)
                 || "/api/v1/learners/me/cla/ask".equals(path)
                 // Smart Mark surfaces drive the LLM chain too — smart-mark runs
                 // the marking pipeline ONCE PER PART, feedback-explanation and

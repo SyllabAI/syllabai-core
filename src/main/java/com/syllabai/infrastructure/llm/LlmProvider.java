@@ -1,6 +1,7 @@
 package com.syllabai.infrastructure.llm;
 
 import java.util.List;
+import reactor.core.publisher.Flux;
 
 /**
  * Port for chat-completion providers (Master Spec §26 — "Never place provider-specific
@@ -22,6 +23,20 @@ public interface LlmProvider {
      *         treat this as a failover signal
      */
     LlmResponse generate(LlmRequest request);
+
+    /**
+     * Stream a completion as incremental {@link LlmDelta}s. The default
+     * implementation degrades gracefully to a single-delta stream over
+     * {@link #generate} — providers that do not implement token streaming (and
+     * any future port implementation) still satisfy the streaming contract, at
+     * first-token latency equal to the full blocking call. Failover semantics
+     * are the chain's concern (see {@link FailoverLlmChain#stream}); a provider
+     * implementation reports its own failures through the Flux's error signal
+     * with the same {@link LlmProviderException} contract as {@link #generate}.
+     */
+    default Flux<LlmDelta> stream(LlmRequest request) {
+        return Flux.defer(() -> Flux.just(LlmDelta.of(generate(request))));
+    }
 
     /** Health/rate-budget snapshot for observability (§32). */
     LlmProviderHealth health();

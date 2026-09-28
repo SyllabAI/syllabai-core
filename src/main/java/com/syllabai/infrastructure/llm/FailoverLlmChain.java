@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 /**
  * The §26.1 free-tier chain: Groq (primary) → Gemini 2.5 Flash (fallback) →
@@ -56,24 +57,12 @@ public class FailoverLlmChain implements LlmProvider {
 
     @Override
     public LlmResponse generate(LlmRequest request) {
-        LlmRequest effectiveRequest = request;
-        List<LlmProvider> candidates;
-        if (request.experimentId() != null && !request.experimentId().isBlank()) {
-            ExperimentPin pin = resolvePin(request.experimentId());
-            LlmProvider pinned = requirePinned(request.experimentId(), pin);
-            // §26.1 research pinning: experiment pin > caller model > provider default.
-            // A pin that names a model always wins over a caller-supplied model — otherwise
-            // any caller could silently drift a registered experiment off its model.
-            if (pin.model() != null && !pin.model().isBlank()) {
-                effectiveRequest = request.withModel(pin.model());
-            }
-            candidates = List.of(pinned);
-        } else {
-            candidates = orderedAvailable();
-        }
-        if (candidates.isEmpty()) {
+        Routing routing = routingOf(request);
+        if (routing.candidates().isEmpty()) {
             throw new LlmProviderException("chain", "no available LLM provider in chain", null);
         }
+        LlmRequest effectiveRequest = routing.request();
+        List<LlmProvider> candidates = routing.candidates();
         LlmProviderException last = null;
         List<String> failures = new ArrayList<>();
         for (LlmProvider provider : candidates) {
@@ -103,6 +92,57 @@ public class FailoverLlmChain implements LlmProvider {
                 last == null ? LlmFailureClass.UNKNOWN : last.failureClass());
     }
 
+    /**
+     * Streamed generation through the chain (tutor SSE tranche). Failover
+     * semantics match {@link #generate} EXACTLY up to the first token: an
+     * error arriving before any delta moves the stream to the next candidate
+     * (the client has received nothing of this provider's output, so a
+     * restart is invisible). Once the first delta is emitted the stream is
+     * COMMITTED to that provider — a mid-stream failure propagates as a Flux
+     * error (the caller surfaces an honest error event) because resuming on a
+     * second provider would duplicate or interleave text.
+     *
+     * <p>Experiment pinning applies identically: a pinned experiment streams
+     * from its pinned provider alone, never failing over.</p>
+     */
+    @Override
+    public Flux<LlmDelta> stream(LlmRequest request) {
+        Routing routing = routingOf(request);
+        if (routing.candidates().isEmpty()) {
+            return Flux.error(new LlmProviderException("chain", "no available LLM provider in chain", null));
+        }
+        return streamWithFailover(routing.candidates(), routing.request(), new ArrayList<>());
+    }
+
+    private Flux<LlmDelta> streamWithFailover(List<LlmProvider> candidates, LlmRequest request,
+                                              List<String> failures) {
+        if (candidates.isEmpty()) {
+            // same aggregate contract as the exhausted generate() path
+            String detail = String.join(" | ", failures);
+            log.warn("LLM stream exhausted before first token ({} of {} candidates failed): {}",
+                    failures.size(), failures.size(), detail);
+            return Flux.error(new LlmProviderException("chain",
+                    "all providers failed before first token [" + detail + "]",
+                    null, LlmFailureClass.UNKNOWN));
+        }
+        LlmProvider head = candidates.get(0);
+        List<LlmProvider> rest = candidates.subList(1, candidates.size());
+        return head.stream(request)
+                .transform(flux -> flux.switchOnFirst((first, inner) -> {
+                    if (first.isOnError()) {
+                        Throwable t = first.getThrowable();
+                        LlmProviderException e = t instanceof LlmProviderException pe ? pe
+                                : new LlmProviderException(head.name(), String.valueOf(t), t,
+                                        LlmFailureClass.UNKNOWN);
+                        failures.add(head.name() + ": " + e.getMessage()
+                                + " (classified " + e.failureClass() + ")");
+                        return streamWithFailover(rest, request, failures);
+                    }
+                    // first delta (or an empty-complete) — committed to this provider
+                    return inner;
+                }));
+    }
+
     @Override
     public LlmProviderHealth health() {
         // composite health: configured when any member is configured
@@ -125,6 +165,27 @@ public class FailoverLlmChain implements LlmProvider {
             }
         }
         return available;
+    }
+
+    /** Resolved routing for one request: the effective (pin-model-applied)
+     *  request and the candidate providers in failover order. Shared by the
+     *  blocking and streaming paths so the two can never drift. */
+    private record Routing(LlmRequest request, List<LlmProvider> candidates) {
+    }
+
+    private Routing routingOf(LlmRequest request) {
+        if (request.experimentId() != null && !request.experimentId().isBlank()) {
+            ExperimentPin pin = resolvePin(request.experimentId());
+            LlmProvider pinned = requirePinned(request.experimentId(), pin);
+            // §26.1 research pinning: experiment pin > caller model > provider default.
+            // A pin that names a model always wins over a caller-supplied model — otherwise
+            // any caller could silently drift a registered experiment off its model.
+            LlmRequest effective = (pin.model() != null && !pin.model().isBlank())
+                    ? request.withModel(pin.model())
+                    : request;
+            return new Routing(effective, List.of(pinned));
+        }
+        return new Routing(request, orderedAvailable());
     }
 
     private ExperimentPin resolvePin(String experimentId) {

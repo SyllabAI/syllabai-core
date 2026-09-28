@@ -10,12 +10,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import com.syllabai.shared.events.TutorAnsweredEvent;
+import reactor.core.publisher.Flux;
 
 /**
  * KA-RAG orchestration (T-024, Master Spec §13): intent → KG context →
@@ -149,12 +153,190 @@ public class KaRagService {
      */
     public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history,
                                UUID sessionId) {
+        long startedAt = System.nanoTime();
+        PreparedAsk prep = prepare(learnerId, question, history);
+        boolean refused = prep.evidence().isEmpty();
+
+        TutorGenerator.GeneratedAnswer generated;
+        ContextAssembler.TutorContext context = null;
+        if (refused) {
+            generated = prep.identityBoundUnserved()
+                    ? new TutorGenerator.GeneratedAnswer(PAPER_IDENTITY_REFUSAL.formatted(
+                            Objects.requireNonNullElse(prep.resolution().identityLabel(),
+                                    "that paper question")),
+                            null, "deterministic-paper-refusal")
+                    : new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
+        } else {
+            context = contextAssembler.assemble(prep.knowledge(), prep.evidence(), learnerId);
+            generated = generator.generate(prep.query(), prep.turns(), context);
+        }
+        // V23 signal provenance: the deterministic policy decision for this ask
+        String interventionType = context == null || context.interventionPlan() == null
+                ? null : context.interventionPlan().type() == null
+                ? null : context.interventionPlan().type().name();
+
+        List<CitationResolver.Citation> citations = citationResolver.resolve(prep.evidence());
+        double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+
+        events.publishEvent(new TutorAnsweredEvent(
+                learnerId, prep.query(), matchedTopicIds(prep.knowledge()), prep.evidence().size(),
+                prep.evidence().stream().map(item -> item.source().name()).toList(),
+                refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
+                latencyMs, Instant.now(), interventionType, prep.turns().size(), sessionId,
+                // D2: the provider persists the deterministic refusal identity
+                // ("deterministic-refusal" vs "deterministic-paper-refusal") so
+                // the research telemetry distinguishes the guard's firings from
+                // the generic grounding-gate refusal
+                generated.provider()));
+
+        log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} history turn(s), {} ms)",
+                prep.evidence().size(), prep.knowledge().topics().size(), refused, prep.turns().size(),
+                String.format(java.util.Locale.ROOT, "%.1f", latencyMs));
+        return TutorAnswerView.of(generated.answer(), citations,
+                prep.knowledge().topics().stream()
+                        .map(topic -> new TutorAnswerView.TopicMatch(
+                                topic.code(), topic.title(), topic.matchScore()))
+                        .toList(),
+                prep.evidence().size(), generated.model(), generated.provider(), refused, latencyMs);
+    }
+
+    /**
+     * STREAMED conversational ask (tutor SSE tranche): the SAME pipeline as
+     * {@link #ask} up to the generation gate — scope resolution, working
+     * memory, hybrid retrieval, the fail-open guard and the grounding gate
+     * are shared code ({@link #prepare}), so the two paths cannot drift —
+     * delivered as {@link TutorStreamEvent}s:
+     *
+     * <ol>
+     *   <li>{@code citations} immediately after retrieval (BEFORE generation —
+     *       the learner sees the evidence while the model thinks);</li>
+     *   <li>{@code meta} committed with the FIRST generation delta (provider
+     *       identity is only known once a provider commits);</li>
+     *   <li>{@code delta} per sanitized increment — the concatenation is the
+     *       same text the blocking path would serve (StreamSanitizer parity);</li>
+     *   <li>{@code completed} on success, with the §22 session-persistence
+     *       summary; the {@code TutorAnsweredEvent} publishes exactly once,
+     *       on completion, with full parity fields.</li>
+     * </ol>
+     *
+     * <p>Refusals are deterministic (no LLM): the whole answer is a single
+     * delta after citations + meta, byte-identical to the blocking path's
+     * refusal texts, and the event publishes eagerly (same as /ask).</p>
+     *
+     * <p>Generation failure (including mid-stream provider death after the
+     * stream is committed) surfaces as the Flux's error signal — the caller
+     * owns the client-visible error event, and NOTHING persists: no
+     * {@code TutorAnsweredEvent}, no session append (the same posture as a
+     * blocking ask that throws).</p>
+     */
+    public Flux<TutorStreamEvent> askStream(UUID learnerId, String question,
+                                            List<ConversationTurn> history, UUID sessionId) {
+        long startedAt = System.nanoTime();
+        PreparedAsk prep = prepare(learnerId, question, history);
+        List<CitationResolver.Citation> citations = citationResolver.resolve(prep.evidence());
+        List<TutorAnswerView.TopicMatch> topics = prep.knowledge().topics().stream()
+                .map(topic -> new TutorAnswerView.TopicMatch(
+                        topic.code(), topic.title(), topic.matchScore()))
+                .toList();
+        boolean refused = prep.evidence().isEmpty();
+        int evidenceCount = prep.evidence().size();
+
+        if (refused) {
+            String text = prep.identityBoundUnserved()
+                    ? PAPER_IDENTITY_REFUSAL.formatted(Objects.requireNonNullElse(
+                            prep.resolution().identityLabel(), "that paper question"))
+                    : REFUSAL;
+            String provider = prep.identityBoundUnserved()
+                    ? "deterministic-paper-refusal"
+                    : "deterministic-refusal";
+            double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+            events.publishEvent(new TutorAnsweredEvent(
+                    learnerId, prep.query(), matchedTopicIds(prep.knowledge()), 0,
+                    List.of(), true, null, GroundedTutorGenerator.promptIdentity(),
+                    latencyMs, Instant.now(), null, prep.turns().size(), sessionId, provider));
+            log.info("KA-RAG streamed refusal ({} topics, {} history turn(s), {} ms)",
+                    prep.knowledge().topics().size(), prep.turns().size(),
+                    String.format(java.util.Locale.ROOT, "%.1f", latencyMs));
+            return Flux.just(
+                    new TutorStreamEvent.Citations(citations, false),
+                    new TutorStreamEvent.Meta(provider, null, true, 0),
+                    new TutorStreamEvent.Delta(text),
+                    new TutorStreamEvent.Completed(text, provider, null, true, 0, latencyMs, topics));
+        }
+
+        ContextAssembler.TutorContext context = contextAssembler.assemble(
+                prep.knowledge(), prep.evidence(), learnerId);
+        String interventionType = context.interventionPlan() == null
+                ? null : context.interventionPlan().type() == null
+                ? null : context.interventionPlan().type().name();
+        StringBuilder full = new StringBuilder();
+        AtomicReference<String> providerRef = new AtomicReference<>();
+        AtomicReference<String> modelRef = new AtomicReference<>();
+        AtomicBoolean metaSent = new AtomicBoolean(false);
+
+        // generation: the first delta carries the Meta event (identity commits
+        // with the first token), every delta flows sanitized in order
+        Flux<TutorStreamEvent> deltas = generator.streamGenerate(prep.query(), prep.turns(), context)
+                .concatMap(delta -> {
+                    full.append(delta.answer());
+                    providerRef.compareAndSet(null, delta.provider());
+                    modelRef.compareAndSet(null, delta.model());
+                    if (metaSent.compareAndSet(false, true)) {
+                        return Flux.just(
+                                (TutorStreamEvent) new TutorStreamEvent.Meta(
+                                        delta.provider(), delta.model(), false, evidenceCount),
+                                new TutorStreamEvent.Delta(delta.answer()));
+                    }
+                    return Flux.just((TutorStreamEvent) new TutorStreamEvent.Delta(delta.answer()));
+                });
+
+        return Flux.concat(
+                Flux.just(new TutorStreamEvent.Citations(citations, evidenceCount > 0)),
+                deltas,
+                // completion: publish the research event once, with full parity
+                // fields, then hand the controller its §22 persistence summary
+                Flux.defer(() -> {
+                    double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+                    String provider = providerRef.get();
+                    String model = modelRef.get();
+                    events.publishEvent(new TutorAnsweredEvent(
+                            learnerId, prep.query(), matchedTopicIds(prep.knowledge()), evidenceCount,
+                            prep.evidence().stream().map(item -> item.source().name()).toList(),
+                            false, model, GroundedTutorGenerator.promptIdentity(),
+                            latencyMs, Instant.now(), interventionType, prep.turns().size(),
+                            sessionId, provider));
+                    log.info("KA-RAG streamed ({} evidence, {} topics, {} history turn(s), {} ms)",
+                            evidenceCount, prep.knowledge().topics().size(), prep.turns().size(),
+                            String.format(java.util.Locale.ROOT, "%.1f", latencyMs));
+                    return Flux.just((TutorStreamEvent) new TutorStreamEvent.Completed(
+                            full.toString(), provider, model, false, evidenceCount, latencyMs, topics));
+                }));
+    }
+
+    /** Everything the delivery modes share: the retrieval pipeline's output,
+     *  frozen between the grounding gate and generation. */
+    private record PreparedAsk(
+            KnowledgeRetriever.KnowledgeContext knowledge,
+            List<EvidenceItem> evidence,
+            List<ConversationTurn> turns,
+            String query,
+            boolean identityBoundUnserved,
+            PaperQuestionResolver.Resolution resolution) {
+    }
+
+    /**
+     * The retrieval half of the pipeline (steps 0 → 4.5): scope resolution,
+     * working-memory query enrichment, KG intent, hybrid retrieval, paper
+     * lead pinning, rank fusion, dedup/cap and the fail-open guard. SHARED by
+     * the blocking and streaming asks — extracted verbatim so the two
+     * delivery modes execute the same retrieval decisions.
+     */
+    private PreparedAsk prepare(UUID learnerId, String question, List<ConversationTurn> history) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException("question must not be blank");
         }
         List<ConversationTurn> turns = ConversationTurn.sanitize(history);
         String query = question.strip();
-        long startedAt = System.nanoTime();
 
         // 0. active curriculum scope (T-C07, fail-closed): unresolved scope ⇒
         // both retrieval surfaces stay empty ⇒ the deterministic refusal below.
@@ -246,50 +428,7 @@ public class KaRagService {
                     + "deterministic refusal", resolution.identityLabel());
             evidence = List.of();
         }
-
-        // 5. grounding gate: no evidence → refuse, deterministically, no LLM
-        TutorGenerator.GeneratedAnswer generated;
-        boolean refused = evidence.isEmpty();
-        ContextAssembler.TutorContext context = null;
-        if (refused) {
-            generated = identityBoundUnserved
-                    ? new TutorGenerator.GeneratedAnswer(PAPER_IDENTITY_REFUSAL.formatted(
-                            Objects.requireNonNullElse(resolution.identityLabel(),
-                                    "that paper question")),
-                            null, "deterministic-paper-refusal")
-                    : new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
-        } else {
-            context = contextAssembler.assemble(knowledge, evidence, learnerId);
-            generated = generator.generate(query, turns, context);
-        }
-        // V23 signal provenance: the deterministic policy decision for this ask
-        String interventionType = context == null || context.interventionPlan() == null
-                ? null : context.interventionPlan().type() == null
-                ? null : context.interventionPlan().type().name();
-
-        List<CitationResolver.Citation> citations = citationResolver.resolve(evidence);
-        double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
-
-        events.publishEvent(new TutorAnsweredEvent(
-                learnerId, query.strip(), matchedTopicIds(knowledge), evidence.size(),
-                evidence.stream().map(item -> item.source().name()).toList(),
-                refused, generated.model(), GroundedTutorGenerator.promptIdentity(),
-                latencyMs, Instant.now(), interventionType, turns.size(), sessionId,
-                // D2: the provider persists the deterministic refusal identity
-                // ("deterministic-refusal" vs "deterministic-paper-refusal") so
-                // the research telemetry distinguishes the guard's firings from
-                // the generic grounding-gate refusal
-                generated.provider()));
-
-        log.info("KA-RAG answered ({} evidence, {} topics, refused={}, {} history turn(s), {} ms)",
-                evidence.size(), knowledge.topics().size(), refused, turns.size(),
-                String.format(java.util.Locale.ROOT, "%.1f", latencyMs));
-        return TutorAnswerView.of(generated.answer(), citations,
-                knowledge.topics().stream()
-                        .map(topic -> new TutorAnswerView.TopicMatch(
-                                topic.code(), topic.title(), topic.matchScore()))
-                        .toList(),
-                evidence.size(), generated.model(), generated.provider(), refused, latencyMs);
+        return new PreparedAsk(knowledge, evidence, turns, query, identityBoundUnserved, resolution);
     }
 
     private static List<UUID> matchedTopicIds(KnowledgeRetriever.KnowledgeContext knowledge) {

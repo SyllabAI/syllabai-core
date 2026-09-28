@@ -15,8 +15,11 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Adapts a Spring AI {@link ChatModel} to the {@link LlmProvider} port (Master Spec
@@ -170,6 +173,92 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     @Override
     public LlmProviderHealth health() {
         return health;
+    }
+
+    /**
+     * Idle timeout between streamed chunks: a provider that emits its first
+     * tokens and then stalls (connection drop without FIN, provider-side
+     * hang) must degrade into a counted failure instead of an open stream.
+     * Generous — tokens trickle at sentence granularity on the free tier —
+     * but bounded (the blocking path's {@code timeout-seconds} semantics,
+     * applied per-gap).
+     */
+    private static final long STREAM_IDLE_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Token streaming through Spring AI's {@code StreamingChatModel} port
+     * (Spring AI 2.x: {@code ChatModel extends StreamingChatModel}, and all
+     * three wired models — OpenAI-compatible Groq/OpenRouter and Google
+     * GenAI — implement real HTTP streaming). Health semantics mirror
+     * {@link #generate}: success on completion, classified failure on error,
+     * so cooldowns and budgets see streams exactly as they see calls.
+     *
+     * <p>Failover is NOT this method's concern: once the first delta has been
+     * emitted upstream the stream is committed to this provider — the chain
+     * ({@link FailoverLlmChain#stream}) only fails over before that point.</p>
+     */
+    @Override
+    public Flux<LlmDelta> stream(LlmRequest request) {
+        if (!configured || chatModel == null) {
+            return Flux.error(new LlmProviderException(providerName, "provider not configured", null));
+        }
+        return Flux.defer(() -> {
+            ChatOptions runtimeOptions = options(request);
+            Prompt prompt = runtimeOptions == null
+                    ? new Prompt(messages(request))
+                    : new Prompt(messages(request), runtimeOptions);
+            String effectiveModel = (request.model() != null && !request.model().isBlank())
+                    ? request.model()
+                    : (chatModel.getDefaultOptions() == null ? null
+                            : chatModel.getDefaultOptions().getModel());
+            try {
+                return chatModel.stream(prompt)
+                        // chunk → delta; drop the empty bookkeeping chunks some
+                        // SDK paths emit (role-only first chunk, usage-only last)
+                        .map(response -> new LlmDelta(extractText(response), providerName, effectiveModel))
+                        .filter(delta -> delta.text() != null && !delta.text().isEmpty())
+                        // per-GAP timeout: errors when no chunk arrives within the
+                        // window since the previous one (or since subscription)
+                        .timeout(Duration.ofSeconds(STREAM_IDLE_TIMEOUT_SECONDS))
+                        // SSE servlet writes must never run on a provider event-loop
+                        // thread — hand emissions to reactor's blocking-friendly pool
+                        .publishOn(Schedulers.boundedElastic())
+                        .doOnComplete(this::recordStreamSuccess)
+                        .doOnError(this::recordStreamFailure)
+                        // ADR-023: classify ONCE at the adapter boundary; the chain
+                        // receives the same LlmProviderException contract as generate()
+                        .onErrorMap(e -> e instanceof LlmProviderException pe ? pe
+                                : new LlmProviderException(providerName, streamFailureSummary(e), e,
+                                        LlmProviderFailureClassifier.classify(e)));
+            } catch (RuntimeException e) {
+                // eager options/request construction failure (the 2026-09-14
+                // ClassCastException class) — same health + classification path
+                recordStreamFailure(e);
+                return Flux.error(new LlmProviderException(providerName, streamFailureSummary(e), e,
+                        LlmProviderFailureClassifier.classify(e)));
+            }
+        });
+    }
+
+    private void recordStreamSuccess() {
+        health.recordSuccess();
+        log.debug("LLM provider {} stream completed", providerName);
+    }
+
+    private void recordStreamFailure(Throwable e) {
+        // runs BEFORE onErrorMap (declaration order), so e is always the RAW
+        // error here — timeout exceptions, SDK runtime exceptions — never the
+        // wrapped LlmProviderException the chain sees. Recorded exactly once.
+        LlmFailureClass failureClass = LlmProviderFailureClassifier.classify(e);
+        String causeSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
+        log.warn("LLM provider {} stream failed ({}): {}", providerName, failureClass,
+                causeSummary.length() > 300 ? causeSummary.substring(0, 300) : causeSummary);
+        health.recordFailure(causeSummary, failureClass);
+    }
+
+    private static String streamFailureSummary(Throwable e) {
+        String summary = e.getClass().getSimpleName() + ": " + e.getMessage();
+        return "stream failed (" + (summary.length() > 200 ? summary.substring(0, 200) : summary) + ")";
     }
 
     /**
