@@ -124,10 +124,12 @@ class FlashcardRatingFlowIT {
 
         LearnerStateView state = stateController.state(learner);
         assertThat(state.flashcardRatings()).hasSize(3);
-        // newest first — the re-rate leads
-        assertThat(state.flashcardRatings().get(0).rating()).isEqualTo("still-learning");
+        // newest first: [card1 re-rate (still-learning), card2, card1 first (know)]
         assertThat(state.flashcardRatings().get(0).cardId()).isEqualTo("fl_testCard1");
-        assertThat(state.flashcardRatings().get(2).cardId()).isEqualTo("fl_testCard2");
+        assertThat(state.flashcardRatings().get(0).rating()).isEqualTo("still-learning");
+        assertThat(state.flashcardRatings().get(1).cardId()).isEqualTo("fl_testCard2");
+        assertThat(state.flashcardRatings().get(2).cardId()).isEqualTo("fl_testCard1");
+        assertThat(state.flashcardRatings().get(2).rating()).isEqualTo("know");
 
         // the current rating of card 1 = the LATEST event, not the first
         List<FlashcardRatingView> card1 = state.flashcardRatings().stream()
