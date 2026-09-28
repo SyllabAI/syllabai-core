@@ -49,7 +49,7 @@ class RateLimitFilterTest {
     // login 2, register 2, bootstrap 1, password 2, llm 3 — tiny budgets
     private final MutableClock clock = new MutableClock();
     private final RateLimitProperties props = new RateLimitProperties(
-            true, Duration.ofSeconds(60), 2, 2, 1, 2, 3);
+            true, Duration.ofSeconds(60), 2, 2, 1, 2, 3, 2);
     private final RateLimitFilter filter = new RateLimitFilter(props, clock);
 
     @AfterEach
@@ -247,7 +247,7 @@ class RateLimitFilterTest {
         assertThat(fire(options).getStatus()).isEqualTo(200);
         // master switch off -> nothing counts
         RateLimitFilter disabled = new RateLimitFilter(
-                new RateLimitProperties(false, Duration.ofSeconds(60), 1, 1, 1, 1, 1), clock);
+                new RateLimitProperties(false, Duration.ofSeconds(60), 1, 1, 1, 1, 1, 1), clock);
         for (int i = 0; i < 5; i++) {
             MockHttpServletResponse response = new MockHttpServletResponse();
             disabled.doFilter(post("/api/v1/auth/login", "1.2.3.4"), response, new MockFilterChain());
@@ -274,10 +274,11 @@ class RateLimitFilterTest {
     @Test
     @DisplayName("properties default to the audited budgets when unset")
     void propertyDefaults() {
-        RateLimitProperties defaults = new RateLimitProperties(null, null, null, null, null, null, null);
+        RateLimitProperties defaults = new RateLimitProperties(null, null, null, null, null, null, null, null);
         assertThat(defaults.enabled()).isTrue();
         assertThat(defaults.window()).isEqualTo(Duration.ofSeconds(60));
         assertThat(defaults.loginPerIp()).isEqualTo(10);
+        assertThat(defaults.loginPerAccount()).isEqualTo(10);
         assertThat(defaults.registerPerIp()).isEqualTo(5);
         assertThat(defaults.bootstrapPerIp()).isEqualTo(3);
         assertThat(defaults.passwordPerIp()).isEqualTo(10);

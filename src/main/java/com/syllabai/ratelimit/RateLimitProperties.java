@@ -30,7 +30,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param registerPerIp  POST /api/v1/auth/register per IP per window
  * @param bootstrapPerIp POST /api/v1/auth/bootstrap-admin per IP per window
  * @param passwordPerIp  POST /api/v1/auth/password per IP per window
- * @param llmPerLearner  tutor/CLA asks per learner per window
+ * @param llmPerLearner    tutor/CLA asks per learner per window
+ * @param loginPerAccount  failed logins per TARGET account per window (R5:
+ *                         the source-IP budget is bypassable on Render — the
+ *                         proxy forwards client-supplied XFF verbatim — so
+ *                         the bound that survives source spoofing is keyed
+ *                         on the account being attacked)
  */
 @ConfigurationProperties(prefix = "syllabai.ratelimit")
 public record RateLimitProperties(
@@ -40,7 +45,8 @@ public record RateLimitProperties(
         Integer registerPerIp,
         Integer bootstrapPerIp,
         Integer passwordPerIp,
-        Integer llmPerLearner) {
+        Integer llmPerLearner,
+        Integer loginPerAccount) {
 
     public RateLimitProperties {
         enabled = enabled == null ? Boolean.TRUE : enabled;
@@ -50,5 +56,6 @@ public record RateLimitProperties(
         bootstrapPerIp = bootstrapPerIp == null ? 3 : bootstrapPerIp;
         passwordPerIp = passwordPerIp == null ? 10 : passwordPerIp;
         llmPerLearner = llmPerLearner == null ? 20 : llmPerLearner;
+        loginPerAccount = loginPerAccount == null ? 10 : loginPerAccount;
     }
 }

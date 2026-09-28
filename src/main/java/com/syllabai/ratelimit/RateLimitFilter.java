@@ -195,8 +195,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return remote == null ? "unknown" : remote;
     }
 
-    /** Reserved-range check: these rightmost values are infrastructure, not clients. */
+    /**
+     * Reserved-range check: these hops are infrastructure, not clients.
+     * Includes 100.64.0.0/10 (CGNAT) — live probing showed the proxy's own
+     * appended hops live there and VARY per request, which is what defeats
+     * naive rightmost keying.
+     */
     private static boolean isPrivateAddress(String ip) {
+        if (ip.startsWith("100.")) {
+            String[] oct = ip.split("\\.");
+            if (oct.length == 4) {
+                try {
+                    int second = Integer.parseInt(oct[1]);
+                    return second >= 64 && second <= 127; // 100.64.0.0/10 CGNAT
+                } catch (NumberFormatException ignored) {
+                    return false;
+                }
+            }
+            return false;
+        }
         return ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")
                 || ip.startsWith("169.254.") || ip.startsWith("fe80:") || ip.startsWith("fc")
                 || ip.startsWith("fd") || ip.equals("::1") || ip.startsWith("172.16.")

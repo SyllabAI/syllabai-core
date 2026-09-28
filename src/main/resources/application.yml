@@ -119,6 +119,11 @@ syllabai:
     bootstrap-per-ip: 3
     password-per-ip: 10
     llm-per-learner: 20          # above the anchor sweep's ~11 asks/learner/run
+    login-per-account: 10        # failed logins per TARGET account (R5): the
+                                 # per-IP tier is bypassable on Render (the
+                                 # proxy forwards client-supplied XFF verbatim),
+                                 # so the bound that survives source spoofing
+                                 # is keyed on the account being attacked
 
   # deep-audit 09-28 M4: JSON request bodies have no servlet-level cap (the
   # multipart limits only cover multipart/form-data). The JsonBodyLimitFilter

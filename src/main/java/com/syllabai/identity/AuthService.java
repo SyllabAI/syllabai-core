@@ -5,6 +5,7 @@ import com.syllabai.identity.dto.LoginRequest;
 import com.syllabai.identity.dto.PasswordChangeRequest;
 import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.identity.dto.UserView;
+import com.syllabai.ratelimit.LoginAttemptBudget;
 import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
 import java.util.Set;
@@ -23,13 +24,16 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final LoginAttemptBudget loginBudget;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtService jwtService) {
+                       JwtService jwtService,
+                       LoginAttemptBudget loginBudget) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.loginBudget = loginBudget;
     }
 
     /**
@@ -52,11 +56,20 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
+        // per-TARGET-account budget (R5): the source-IP tier is bypassable on
+        // Render (the proxy forwards client-supplied XFF verbatim), so the
+        // bound that survives source spoofing is keyed on the account being
+        // attacked. Checked BEFORE any bcrypt work; success clears history.
+        loginBudget.checkAllowed(request.email());
         User user = userRepository.findByEmailIgnoreCase(request.email())
-                .orElseThrow(() -> new BadCredentialsException("invalid credentials"));
-        if (!user.enabled() || !passwordEncoder.matches(request.password(), user.passwordHash())) {
+                .orElse(null);
+        if (user == null
+                || !user.enabled()
+                || !passwordEncoder.matches(request.password(), user.passwordHash())) {
+            loginBudget.recordFailure(request.email());
             throw new BadCredentialsException("invalid credentials");
         }
+        loginBudget.recordSuccess(request.email());
         return new AuthResponse(jwtService.issueAccessToken(user), null, UserView.from(user));
     }
 

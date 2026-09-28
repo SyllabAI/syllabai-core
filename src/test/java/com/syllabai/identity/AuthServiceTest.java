@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.identity.dto.LoginRequest;
 import com.syllabai.identity.dto.PasswordChangeRequest;
 import com.syllabai.shared.NotFoundException;
 import java.util.Optional;
@@ -30,14 +31,61 @@ class AuthServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final JwtService jwtService = mock(JwtService.class);
+    private final com.syllabai.ratelimit.LoginAttemptBudget loginBudget =
+            org.mockito.Mockito.mock(com.syllabai.ratelimit.LoginAttemptBudget.class);
     private final AuthService service =
-            new AuthService(userRepository, passwordEncoder, jwtService);
+            new AuthService(userRepository, passwordEncoder, jwtService, loginBudget);
 
     private User user;
 
     @BeforeEach
     void setUp() {
         user = mock(User.class);
+    }
+
+    @Test
+    @DisplayName("login success clears the per-account failure history (R5)")
+    void loginSuccessClearsBudget() {
+        when(userRepository.findByEmailIgnoreCase("learner@syllabai.dev"))
+                .thenReturn(Optional.of(user));
+        when(user.enabled()).thenReturn(true);
+        when(user.tokenVersion()).thenReturn(1L);
+        when(user.roles()).thenReturn(java.util.Set.of(Role.STUDENT));
+        when(user.email()).thenReturn("learner@syllabai.dev");
+        when(user.displayName()).thenReturn("Learner");
+        when(user.passwordHash()).thenReturn("current-bcrypt-hash");
+        when(passwordEncoder.matches("plain", "current-bcrypt-hash")).thenReturn(true);
+        when(jwtService.issueAccessToken(any())).thenReturn("jwt");
+
+        service.login(new LoginRequest("learner@syllabai.dev", "plain"));
+
+        verify(loginBudget).checkAllowed("learner@syllabai.dev");
+        verify(loginBudget).recordSuccess("learner@syllabai.dev");
+        verify(loginBudget, never()).recordFailure(anyString());
+    }
+
+    @Test
+    @DisplayName("a failed login records the failure against the TARGET account (R5)")
+    void loginFailureRecordedPerAccount() {
+        when(userRepository.findByEmailIgnoreCase("victim@syllabai.dev"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("victim@syllabai.dev", "wrong")))
+                .isInstanceOf(BadCredentialsException.class);
+        verify(loginBudget).checkAllowed("victim@syllabai.dev");
+        verify(loginBudget).recordFailure("victim@syllabai.dev");
+    }
+
+    @Test
+    @DisplayName("an exhausted per-account budget fails closed BEFORE credential work (R5)")
+    void exhaustedBudgetFailsClosed() {
+        org.mockito.Mockito.doThrow(new com.syllabai.ratelimit.RateLimitException(42))
+                .when(loginBudget).checkAllowed("victim@syllabai.dev");
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("victim@syllabai.dev", "whatever")))
+                .isInstanceOf(com.syllabai.ratelimit.RateLimitException.class);
+        verify(userRepository, never()).findByEmailIgnoreCase(anyString());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
     }
 
     @Test

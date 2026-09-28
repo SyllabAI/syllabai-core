@@ -19,6 +19,17 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    // Per-target-account login budget (R5): same 429 shape the M1 filter
+    // writes, but raised inside the service where the trustworthy key
+    // (the account being attacked) lives — Retry-After bounds the wait.
+    @ExceptionHandler(com.syllabai.ratelimit.RateLimitException.class)
+    ResponseEntity<ApiError> rateLimited(com.syllabai.ratelimit.RateLimitException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.retryAfterSeconds()))
+                .body(ApiError.of(HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "Too Many Requests", ex.getMessage()));
+    }
+
     @ExceptionHandler(NotFoundException.class)
     ResponseEntity<ApiError> notFound(NotFoundException ex) {
         return build(HttpStatus.NOT_FOUND, "not_found", ex.getMessage());
