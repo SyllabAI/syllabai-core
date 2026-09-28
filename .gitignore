@@ -12,3 +12,10 @@ target/
 .env
 data/
 *.flattened-pom.xml
+
+# secret-bearing local variants + keys (R17): .env alone was covered
+.env.local
+.env.*.local
+.env.production
+*.pem
+*.key

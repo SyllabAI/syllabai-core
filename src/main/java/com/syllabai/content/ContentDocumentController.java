@@ -151,8 +151,12 @@ public class ContentDocumentController {
         try {
             return JSON.readValue(rawJson, CanonicalDocumentDto.class);
         } catch (Exception e) {
+            // fixed client message (R10, the M2 hygiene rule): Jackson parse
+            // errors echo request-derived excerpts into the 400 body — the
+            // detail belongs in the log, not the response
+            LOG.warn("canonical document parse rejected: {}", e.getMessage());
             throw new InvalidDocumentException(
-                    "request body is not a canonical document (schema 1.0): " + e.getMessage());
+                    "request body is not a canonical document (schema 1.0)");
         }
     }
 

@@ -21,6 +21,11 @@ DSN="${NEON_DSN:?NEON_DSN is required — the Neon connection string (postgres:/
 OUT="${1:-pilot-evidence}"
 STAMP="$(date -u +%Y-%m-%d)"
 DIR="$OUT/syllabai-evidence-$STAMP"
+# the dir is interpolated into a psql \copy meta-command below — a quote in
+# $OUT would break/inject into it. Refuse anything shell-meaningful (R18).
+case "$OUT" in *[\'\"\;\&\|\$\`]*)
+  echo "refusing suspicious output path: $OUT" >&2; exit 2;;
+esac
 mkdir -p "$DIR"
 
 TABLES=(attempts users user_roles skill_states misconception_states review_schedules)
@@ -34,7 +39,7 @@ done
   echo "SyllabAI pilot evidence export — $STAMP"
   echo "source: production Neon (read-only \\copy SELECT)"
   for t in "${TABLES[@]}"; do
-    rows=$(python3 -c "import csv,sys; print(sum(1 for _ in csv.reader(open('$DIR/$t.csv')))-1)")
+    rows=$(DIR="$DIR" TABLE="$t" python3 -c "import csv,os; print(sum(1 for _ in csv.reader(open(os.path.join(os.environ['DIR'], os.environ['TABLE'] + '.csv'))))-1)")
     echo "$t: $rows rows  sha256=$(sha256sum "$DIR/$t.csv" | cut -d' ' -f1)"
   done
 } > "$DIR/MANIFEST.txt"

@@ -61,7 +61,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, "/home/z/my-project/scripts")
 from campaign_db_preflight import preflight  # fail-closed identity gate
 
 PSQL = "/home/z/toolchain/pgdebs/root/usr/lib/postgresql/17/bin/psql"

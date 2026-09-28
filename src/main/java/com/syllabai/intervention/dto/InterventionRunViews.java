@@ -1,5 +1,6 @@
 package com.syllabai.intervention.dto;
 
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -65,20 +66,24 @@ public final class InterventionRunViews {
     public record ResumeRequest(String interventionVersion, String interventionHash) {
     }
 
-    /** One ordered step observation (server assigns the sequence number). */
+    /** One ordered step observation (server assigns the sequence number).
+     *  Fields are size-capped (R13): this is a learner-authenticated DB write
+     *  surface; refs are canonical-record references, not free prose. */
     public record StepRequest(
-            String status,
-            String observationType,
-            String inputEvidenceRef,
-            String outputEvidenceRef,
-            String blockedReason) {
+            @Size(max = 16) String status,
+            @Size(max = 60) String observationType,
+            @Size(max = 120) String inputEvidenceRef,
+            @Size(max = 120) String outputEvidenceRef,
+            @Size(max = 500) String blockedReason) {
     }
 
     /** An evidence REFERENCE attachment (the canonical record is not copied). */
-    public record EvidenceRequest(String evidenceRef, String role) {
+    public record EvidenceRequest(
+            @Size(max = 120) String evidenceRef,
+            @Size(max = 40) String role) {
     }
 
     /** Terminal outcome for completion (e.g. EVIDENCE_COLLECTED). */
-    public record CompleteRequest(String terminalOutcome) {
+    public record CompleteRequest(@Size(max = 60) String terminalOutcome) {
     }
 }

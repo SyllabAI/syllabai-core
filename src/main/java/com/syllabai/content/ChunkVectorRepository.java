@@ -140,7 +140,7 @@ public class ChunkVectorRepository {
                     "curriculumVersionId is mandatory — chunk search never runs unscoped (T-C07)");
         }
         String literal = toVectorLiteral(queryVector);
-        String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
+        String kindFilter = kindFilter(kind);
         String sql = """
                 select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
@@ -198,7 +198,7 @@ public class ChunkVectorRepository {
                     "curriculumVersionId is mandatory — chunk search never runs unscoped (T-C07)");
         }
         String literal = toVectorLiteral(queryVector);
-        String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
+        String kindFilter = kindFilter(kind);
         String sql = """
                 select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
@@ -250,7 +250,7 @@ public class ChunkVectorRepository {
             throw new IllegalArgumentException(
                     "curriculumVersionId is mandatory — diagnostics never run unscoped (T-C07)");
         }
-        String kindFilter = kind == null ? "" : "and d.kind = '" + kind.name() + "'\n";
+        String kindFilter = kindFilter(kind);
         String funnelSql = """
                 select count(*) as chunks_in_scope,
                        count(*) filter (where c.embedding is not null) as embedded_in_scope,
@@ -311,5 +311,28 @@ public class ChunkVectorRepository {
             sb.append(Float.toString(vector[i]));
         }
         return sb.append(']').toString();
+    }
+
+    /**
+     * Fixed SQL fragment per kind — an EXHAUSTIVE switch, not string
+     * interpolation (R11): kind was never injectable (an enum), but the old
+     * `"' + kind.name() + '"` concat sat one careless refactor away from an
+     * injection seam. A switch over the enum makes the drift a compile error:
+     * adding a Document.Kind constant breaks this method instead of silently
+     * changing SQL text.
+     */
+    private static String kindFilter(Document.Kind kind) {
+        if (kind == null) {
+            return "";
+        }
+        return "and d.kind = '" + switch (kind) {
+            case QUESTION_PAPER -> "QUESTION_PAPER";
+            case MARK_SCHEME -> "MARK_SCHEME";
+            case SYLLABUS -> "SYLLABUS";
+            case OTHER -> "OTHER";
+            case TEXTBOOK -> "TEXTBOOK";
+            case EXTERNAL_NOTES -> "EXTERNAL_NOTES";
+            case EXTERNAL_QUESTIONS -> "EXTERNAL_QUESTIONS";
+        } + "'\n";
     }
 }

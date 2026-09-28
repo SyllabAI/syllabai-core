@@ -105,9 +105,12 @@ public class EnumerateService {
             return enumerateByNode(spec.group(1), null, window(q), scope, "spec");
         }
 
-        // 3. topic axis — "… about <topic>" with optional year window
-        Matcher topic = TOPIC_TEXT.matcher(q);
-        if (topic.matches()) {
+        // 3. topic axis — "… about <topic>" with optional year window.
+        // Length-guarded (R12): TOPIC_TEXT's nested lazy quantifiers backtrack
+        // polynomially on long non-matching input; real queries never approach
+        // this bound, and header limits are the only other cap.
+        Matcher topic = q.length() <= 300 ? TOPIC_TEXT.matcher(q) : null;
+        if (topic != null && topic.matches()) {
             String text = topic.group(1).strip();
             if (!text.isBlank() && text.length() >= 3) {
                 return enumerateByNode(null, text, window(q), scope, "topic");

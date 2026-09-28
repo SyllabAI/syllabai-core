@@ -243,14 +243,18 @@ def stage2(batch_root, log_path):
     the log for the completion marker and kill the JVM instead of waiting for a
     timeout. Returns 0 when the marker was seen, 1 on early exit without it."""
     cmd = [str(JAVA), "-jar", str(CORE_JAR),
-           f"--syllabai.security.jwt-secret={JWT}",
+           # JWT rides the ENVIRONMENT, not argv (R15): a command-line arg is
+           # world-readable in /proc/<pid>/cmdline for the whole boot window.
+           # SYLLABAI_JWT_SECRET is the app's own env contract for
+           # syllabai.security.jwt-secret — no CLI arg needed.
            f"--syllabai.glmocr.batch-dir={batch_root}",
            # campaign DB identity: every stage-2 boot prints and records where
            # it is running (V15 row); the value is re-verified by preflight
            f"--syllabai.campaign.label={CAMPAIGN_LABEL}",
            f"--syllabai.campaign.commit={CORE_COMMIT}"] + STAGE2_BATCH_ARGS
     with open(log_path, "w") as lf:
-        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
+        child_env = {**_os.environ, "SYLLABAI_JWT_SECRET": JWT}
+        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, env=child_env)
         deadline = time.time() + STAGE2_DEADLINE
         marker = "batch audit report written"
         try:
@@ -436,7 +440,7 @@ def main():
     # T-C04 r2 hardening (directive 2026-09-13, item 2): verify the campaign DB
     # identity fail-closed BEFORE planning or running any batch — a wrong or
     # unclaimed database aborts here, never mid-batch.
-    sys.path.insert(0, "/home/z/my-project/scripts")
+    
     from campaign_db_preflight import preflight
     preflight(expected_db=CAMPAIGN_DB_NAME, expected_label=CAMPAIGN_LABEL)
 

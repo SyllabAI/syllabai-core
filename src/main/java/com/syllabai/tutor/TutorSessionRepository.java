@@ -13,5 +13,7 @@ public interface TutorSessionRepository extends JpaRepository<TutorSession, UUID
     /** ownership-resolved fetch: null for a session another learner owns */
     Optional<TutorSession> findByIdAndLearnerId(UUID id, UUID learnerId);
 
+    long countByLearnerId(UUID learnerId);
+
     List<TutorSession> findByLearnerIdOrderByLastActiveAtDesc(UUID learnerId);
 }

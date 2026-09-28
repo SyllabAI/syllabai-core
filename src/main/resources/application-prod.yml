@@ -29,3 +29,12 @@ syllabai:
 logging:
   level:
     com.syllabai: INFO
+
+# R19 (audit re-derivation): the API contract is recon material — OpenAPI
+# stays a dev/local surface. Endpoints remain auth-gated regardless; this
+# removes the anonymous route/DTO enumeration from the prod surface.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

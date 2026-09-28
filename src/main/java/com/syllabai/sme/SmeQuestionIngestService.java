@@ -349,12 +349,18 @@ public class SmeQuestionIngestService {
         }
     }
 
-    private String contentTypeOf(String filename) {
+    /** Extension → served media type (R14). SVG is deliberately DEMOTED to
+     *  application/octet-stream: it would otherwise be served inline from the
+     *  app origin (script-capable media type = stored-XSS shape on a
+     *  learner-facing path; ingestion is admin-gated, serving is defense in
+     *  depth). Raster images + PDF are the legitimate inline set. */
+    static String contentTypeOf(String filename) {
         String f = filename.toLowerCase();
         if (f.endsWith(".png")) return "image/png";
         if (f.endsWith(".jpg") || f.endsWith(".jpeg")) return "image/jpeg";
         if (f.endsWith(".gif")) return "image/gif";
-        if (f.endsWith(".svg")) return "image/svg+xml";
+        if (f.endsWith(".webp")) return "image/webp";
+        if (f.endsWith(".pdf")) return "application/pdf";
         return "application/octet-stream";
     }
 

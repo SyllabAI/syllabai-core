@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
 import java.util.List;
@@ -56,6 +57,18 @@ class TutorSessionServiceTest {
         assertThat(view.sessionId()).isEqualTo(saved.id());
         assertThat(view.turns()).isEmpty();
         assertThat(view.lastActiveAt()).isEqualTo(saved.createdAt());
+    }
+
+    @Test
+    @DisplayName("create is capped per learner (R13: POST /sessions was an "
+            + "unbounded row-spam vector) — conflict at the limit, no row written")
+    void createCappedPerLearner() {
+        when(sessions.countByLearnerId(learner))
+                .thenReturn((long) TutorSessionService.MAX_SESSIONS_PER_LEARNER);
+
+        assertThatThrownBy(() -> service.create(learner))
+                .isInstanceOf(ConflictException.class);
+        verify(sessions, never()).save(any());
     }
 
     @Test

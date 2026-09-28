@@ -221,4 +221,17 @@ class SmeQuestionIngestServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("per-entry budget");
     }
+
+    @Test
+    @DisplayName("asset content types: SVG demoted to download-only (R14 — script-capable "
+            + "media must never be served inline from the app origin)")
+    void assetContentTypesAreAllowlisted() {
+        assertThat(SmeQuestionIngestService.contentTypeOf("fig.png")).isEqualTo("image/png");
+        assertThat(SmeQuestionIngestService.contentTypeOf("fig.JPEG")).isEqualTo("image/jpeg");
+        assertThat(SmeQuestionIngestService.contentTypeOf("doc.pdf")).isEqualTo("application/pdf");
+        assertThat(SmeQuestionIngestService.contentTypeOf("graphic.svg"))
+                .isEqualTo("application/octet-stream");
+        assertThat(SmeQuestionIngestService.contentTypeOf("evil.html"))
+                .isEqualTo("application/octet-stream");
+    }
 }

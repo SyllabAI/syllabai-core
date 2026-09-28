@@ -29,6 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RevisionNoteIngestService {
 
+    /** The only media types an ingested revision-note asset may claim (R14). */
+    static final java.util.Set<String> ALLOWED_ASSET_CONTENT_TYPES = java.util.Set.of(
+            "image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf");
+
     private static final Logger log = LoggerFactory.getLogger(RevisionNoteIngestService.class);
 
     /** Package format this build understands; bump when the format changes. */
@@ -216,7 +220,12 @@ public class RevisionNoteIngestService {
                         "unsafe asset filename: " + a.filename());
                 require(providedAssets.contains(a.filename()),
                         "asset declared in package.json but missing from ZIP: " + a.filename());
-                require(a.contentType() != null && a.contentType().matches("[a-z]+/[a-z0-9.+\\-]+"),
+                // fixed allowlist (R14), not a generic media-type regex:
+                // text/html or image/svg+xml would pass the old check and be
+                // served inline from the app origin — script-capable media
+                // types are never accepted for learner-facing assets
+                require(a.contentType() != null
+                                && ALLOWED_ASSET_CONTENT_TYPES.contains(a.contentType()),
                         "asset content type for " + a.filename());
             }
         }

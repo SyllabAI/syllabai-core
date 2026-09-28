@@ -1,5 +1,6 @@
 package com.syllabai.tutor;
 
+import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
 import java.util.HashMap;
@@ -80,9 +81,20 @@ public class TutorSessionService {
                                 String provider, Double latencyMs) {
     }
 
+    /** Per-learner open-session cap (R13): POST /tutor/sessions inserts a row
+     *  per call with no bound — an authenticated spam vector against the
+     *  transcript store. 50 is far above any real usage (a learner chats in
+     *  a handful of threads), far below harmful. */
+    static final int MAX_SESSIONS_PER_LEARNER = 50;
+
     /** New empty session for the learner ("New chat" / first ask). */
     @Transactional
     public SessionView create(UUID learnerId) {
+        if (sessions.countByLearnerId(learnerId) >= MAX_SESSIONS_PER_LEARNER) {
+            throw new ConflictException(
+                    "session limit reached (" + MAX_SESSIONS_PER_LEARNER
+                            + ") — delete an old chat to start a new one");
+        }
         // use the save() RETURN — @PrePersist assigns the id at persist time
         TutorSession session = sessions.save(new TutorSession(learnerId, Instant.now()));
         log.debug("tutor session {} created", session.id());

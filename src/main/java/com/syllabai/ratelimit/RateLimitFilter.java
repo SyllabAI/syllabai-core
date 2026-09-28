@@ -136,7 +136,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return new Budget("auth:password", clientIp(request), properties.passwordPerIp());
         }
         if (post && ("/api/v1/tutor/ask".equals(path)
-                || "/api/v1/learners/me/cla/ask".equals(path))) {
+                || "/api/v1/learners/me/cla/ask".equals(path)
+                // Smart Mark surfaces drive the LLM chain too — smart-mark runs
+                // the marking pipeline ONCE PER PART, feedback-explanation and
+                // improvement-plan are one generation each (R8: the M1 cost
+                // tier must cover every learner-reachable LLM spend, not just
+                // the two ask routes)
+                || (path.startsWith("/api/v1/learners/me/attempts/")
+                    && (path.endsWith("/smart-mark")
+                        || path.endsWith("/feedback-explanation")
+                        || path.endsWith("/improvement-plan"))))) {
             return new Budget("llm:ask", learnerKey(request), properties.llmPerLearner());
         }
         return null;

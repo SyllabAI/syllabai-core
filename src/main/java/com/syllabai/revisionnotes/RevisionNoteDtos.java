@@ -50,7 +50,7 @@ public final class RevisionNoteDtos {
     public record RevisionNoteProgressView(List<RevisionNotesIndexView.ViewedView> viewed) {
     }
 
-    public record MarkNoteViewedRequest(String noteId) {
+    public record MarkNoteViewedRequest(@jakarta.validation.constraints.Size(max = 80) String noteId) {
     }
 
     public record RevisionNoteIngestSummary(

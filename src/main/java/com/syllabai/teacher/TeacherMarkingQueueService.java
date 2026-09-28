@@ -375,10 +375,13 @@ public class TeacherMarkingQueueService {
                         run.validationPassed() ? null
                                 : (run.failureReason() == null ? "FAILED" : run.failureReason())));
             } catch (Exception e) {
-                // per-item failure: honest reason, batch continues
+                // per-item failure: the batch surface serves a STABLE failure
+                // code, never raw exception text (R9 — the M2 hygiene rule:
+                // LlmProviderException embeds provider SDK/HTTP error text and
+                // DataAccessException text can carry bind values; both live in
+                // the LOG, not the client body)
                 log.warn("smart-mark batch item {} failed: {}", id, e.getMessage());
-                results.add(new SmartMarkBatchItem(id, "FAILED", null,
-                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+                results.add(new SmartMarkBatchItem(id, "FAILED", null, "UNEXPECTED_ERROR"));
             }
         }
         long marked = results.stream().filter(r -> "MARKED".equals(r.outcome())).count();

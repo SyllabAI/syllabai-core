@@ -193,6 +193,27 @@ class RateLimitFilterTest {
     }
 
     @Test
+    @DisplayName("Smart Mark LLM surfaces share the per-learner LLM budget (R8: "
+            + "smart-mark runs the marking pipeline once per PART)")
+    void smartMarkRoutesShareTheLlmBudget() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("learner@example.com", null, List.of()));
+        // this suite's tiny budget (llm=3) shared across ALL LLM surfaces:
+        // 2 tutor asks + 1 smart-mark = 3 admitted
+        assertThat(fire(post("/api/v1/tutor/ask", "7.7.7.7")).getStatus()).isEqualTo(200);
+        assertThat(fire(post("/api/v1/tutor/ask", "7.7.7.7")).getStatus()).isEqualTo(200);
+        assertThat(fire(post("/api/v1/learners/me/attempts/11111111-1111-1111-1111-111111111111"
+                + "/smart-mark", "7.7.7.7")).getStatus()).isEqualTo(200);
+        // 4th LLM call this window — over the shared per-learner budget
+        assertThat(fire(post("/api/v1/learners/me/attempts/11111111-1111-1111-1111-111111111111"
+                + "/parts/22222222-2222-2222-2222-222222222222/feedback-explanation",
+                "7.7.7.7")).getStatus()).isEqualTo(429);
+        assertThat(fire(post("/api/v1/learners/me/attempts/11111111-1111-1111-1111-111111111111"
+                + "/parts/22222222-2222-2222-2222-222222222222/improvement-plan",
+                "7.7.7.7")).getStatus()).isEqualTo(429);
+    }
+
+    @Test
     @DisplayName("non-matching requests are never throttled: GET ask, unlisted paths, OPTIONS, disabled filter")
     void nonMatchingRequestsPassThrough() throws Exception {
         // GET on an LLM route carries no token cost

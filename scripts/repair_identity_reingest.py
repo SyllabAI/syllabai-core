@@ -27,7 +27,6 @@ import sys
 
 # T-C04 r2 hardening: fail-closed DB identity gate — verify WHERE we are
 # before the first gate, long before the first DELETE.
-sys.path.insert(0, "/home/z/my-project/scripts")
 from campaign_db_preflight import preflight  # noqa: E402
 
 PG = "/home/z/toolchain/pgdebs/root/usr/lib/postgresql/17/bin/psql"

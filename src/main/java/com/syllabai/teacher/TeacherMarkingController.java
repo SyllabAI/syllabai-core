@@ -299,8 +299,8 @@ public class TeacherMarkingController {
      */
     public record HumanMarkRequest(
             @NotNull @Min(0) @Max(99) Integer marksAwarded,
-            Map<String, Integer> perPointDecisions,
-            String comments) {
+            @Size(max = 50) Map<String, Integer> perPointDecisions,
+            @Size(max = 4000) String comments) {
     }
 
     public record KappaScopeRequest(UUID paperId) {
