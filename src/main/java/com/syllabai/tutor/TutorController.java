@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,6 +71,10 @@ public class TutorController {
     private final TutorSessionService sessionStore;
     private final Executor streamExecutor;
 
+    /** @Autowired is REQUIRED here: with two declared constructors Spring
+     *  would fall back to a no-arg constructor (absent) and fail startup —
+     *  the first Render deploy of this tranche died exactly that way. */
+    @Autowired
     public TutorController(KaRagService kaRag, TutorSessionService sessionStore) {
         this(kaRag, sessionStore, defaultStreamExecutor());
     }
