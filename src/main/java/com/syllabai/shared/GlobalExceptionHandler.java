@@ -47,6 +47,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());
     }
 
+    // Privilege-gated self-service (teacher join-code signup): 403 whether
+    // the presented secret is wrong or the gate is not configured at all —
+    // one status, no configuration oracle.
+    @ExceptionHandler(ForbiddenException.class)
+    ResponseEntity<ApiError> forbidden(ForbiddenException ex) {
+        return build(HttpStatus.FORBIDDEN, "forbidden", ex.getMessage());
+    }
+
     // CLA answer-leakage gate (contract §7.3/§7.4): CHECK without attempt
     // evidence is a deterministic 409 BEFORE any retrieval or generation.
     @ExceptionHandler(com.syllabai.cla.AttemptRequiredException.class)

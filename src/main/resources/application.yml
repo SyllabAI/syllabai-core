@@ -109,6 +109,12 @@ syllabai:
     # window while a study session comfortably fits. Tune via SYLLABAI_JWT_TTL.
     jwt-ttl: ${SYLLABAI_JWT_TTL:PT2H}
     cors-allowed-origins: ${SYLLABAI_CORS_ORIGINS:http://localhost:3000,https://syllabai.vercel.app}
+    # Teacher join code (09-29): the shared secret a self-registration must
+    # present (role=TEACHER + joinCode) to land a TEACHER account. BLANK/UNSET
+    # fails closed — teacher signup is refused with the same 403 a wrong code
+    # earns, so the operator's configuration is never probe-able. Rotate by
+    # resetting the env var; audit lines note every teacher self-registration.
+    teacher-join-code: ${SYLLABAI_TEACHER_JOIN_CODE:}
 
   # rate limiting (deep-audit 09-28 M1): auth tier keyed by client IP,
   # LLM tier keyed by learner — in-memory fixed windows, single-instance.
