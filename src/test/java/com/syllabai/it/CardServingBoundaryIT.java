@@ -118,8 +118,8 @@ class CardServingBoundaryIT {
 
     private static final String CONTENT_QP_A = "Electrolysis of molten lead bromide: lead forms at the cathode.";
     private static final String CONTENT_MS_A = "Mark scheme: cathode product is lead in molten lead bromide electrolysis.";
-    private static final String CONTENT_QP_B = "Electrolysis of molten lead bromide explains why bromine forms at the anode.";
-    private static final String CONTENT_MS_B = "Mark scheme: anode product is bromine in molten lead bromide electrolysis.";
+    private static final String CONTENT_QP_B = "Electrolysis of molten lead bromide: state why bromine forms at the anode and lead at the cathode.";
+    private static final String CONTENT_MS_B = "Mark scheme: anode product bromine, cathode product lead in molten lead bromide electrolysis.";
     private static final String CONTENT_CARD_1 = "Card: in electrolysis of molten lead bromide the cathode attracts lead ions.";
     private static final String CONTENT_CARD_2 = "Card: molten lead bromide electrolysis cathode equation Pb2+ + 2e- -> Pb.";
 
@@ -213,7 +213,8 @@ class CardServingBoundaryIT {
         // so it can only ever see the four QP/MS chunks, never the two cards.
         // Self-diagnosing on failure: one CI cycle must pinpoint which premise broke.
         List<ChunkHit> vectorSeeded = vectorNeutral();
-        if (vectorSeeded.size() != 6 || lexicalNeutral().size() != 4) {
+        List<ChunkHit> lexicalSeeded = lexicalNeutral();
+        if (vectorSeeded.size() != 6 || lexicalSeeded.size() != 4) {
             Integer docs = jdbc.queryForObject(
                     "select count(*) from documents where source_uri = 'it://card-boundary'", Integer.class);
             Integer chunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
@@ -241,6 +242,7 @@ class CardServingBoundaryIT {
                                        or p.mark_scheme_document_id = d.document_id))""",
                     Integer.class, scopeId);
             throw new IllegalStateException("seed sanity failed: vectorNeutral=" + vectorSeeded.size()
+                    + " lexicalNeutral=" + lexicalSeeded.size()
                     + " docs=" + docs + " chunks=" + chunks + " embedded=" + embedded
                     + " maxRev=" + maxRev + " chunksWithSubject=" + chunksWithSubject
                     + " subjectsInScope=" + subjectsInScope + " papersInScope=" + papersInScope
