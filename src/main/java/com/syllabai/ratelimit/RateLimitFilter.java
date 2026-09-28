@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -84,6 +85,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
     }
 
+    @Autowired
     public RateLimitFilter(RateLimitProperties properties) {
         this(properties, Clock.systemUTC());
     }
