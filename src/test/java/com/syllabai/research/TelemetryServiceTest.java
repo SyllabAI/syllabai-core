@@ -65,6 +65,20 @@ class TelemetryServiceTest {
     }
 
     @Test
+    @DisplayName("attempt evidence with the OPTIONAL confidence null still appends (regression: Map.copyOf NPE 500'd POST /attempts)")
+    void attemptSubmittedWithoutConfidence() {
+        service.onAssessmentEvidence(new AssessmentEvidenceRecordedEvent(
+                ATTEMPT, LEARNER, QUESTION, List.of(NODE), false, 1, 0,
+                1000L, null, false, false,
+                List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", WHEN));
+
+        verify(events).save(saved.capture());
+        TelemetryEvent row = saved.getValue();
+        assertThat(row.type()).isEqualTo(TelemetryEvent.Type.ATTEMPT_SUBMITTED);
+        assertThat(row.payload()).containsEntry("confidence", null);
+    }
+
+    @Test
     @DisplayName("self-doubt flag additionally appends SELF_DOUBT_FLAGGED")
     void selfDoubtFlagged() {
         service.onAssessmentEvidence(evidence(true));
