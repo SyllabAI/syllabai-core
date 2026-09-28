@@ -3,12 +3,15 @@ package com.syllabai.infrastructure.llm;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.content.Media;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
+import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
@@ -16,6 +19,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.time.Duration;
+import org.springframework.core.io.ByteArrayResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -50,6 +54,7 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final String providerName;
     private final ChatModel chatModel;
     private final boolean configured;
+    private final boolean mediaCapable;
     private final LlmProviderHealth health;
     private final int timeoutSeconds;
     /**
@@ -62,13 +67,13 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final Function<LlmRequest, ChatOptions> runtimeOptionsFactory;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
-        this(providerName, chatModel, configured, 3, 60, 30, null);
+        this(providerName, chatModel, configured, 3, 60);
     }
 
     /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds) {
-        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30, null);
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30);
     }
 
     /** Legacy wiring without a runtime-options factory (generic ChatOptions fallback). */
@@ -81,7 +86,7 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds, int timeoutSeconds,
                                     Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
-        this(providerName, chatModel, configured, configured, failureThreshold, cooldownSeconds,
+        this(providerName, chatModel, configured, false, configured, failureThreshold, cooldownSeconds,
                 timeoutSeconds, 0, null, runtimeOptionsFactory);
     }
 
@@ -95,9 +100,24 @@ public class SpringAiChatModelAdapter implements LlmProvider {
                                     boolean configured, int failureThreshold, int cooldownSeconds,
                                     int timeoutSeconds, int dailyBudget, String effectiveModel,
                                     Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
+        this(providerName, chatModel, enabled, configured, false, failureThreshold, cooldownSeconds,
+                timeoutSeconds, dailyBudget, effectiveModel, runtimeOptionsFactory);
+    }
+
+    /**
+     * Full wiring incl. the media-capability flag (HUB-ANSWER-BOX wave 3): a
+     * provider built with {@code mediaCapable=true} may receive requests carrying
+     * {@link LlmMedia}; the chain never routes media to a provider built false.
+     */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean enabled,
+                                    boolean configured, boolean mediaCapable, int failureThreshold,
+                                    int cooldownSeconds, int timeoutSeconds, int dailyBudget,
+                                    String effectiveModel,
+                                    Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
+        this.mediaCapable = mediaCapable;
         this.health = new LlmProviderHealth(enabled, configured, failureThreshold, cooldownSeconds,
                 dailyBudget, effectiveModel);
         this.timeoutSeconds = Math.max(1, timeoutSeconds);
@@ -114,6 +134,11 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         // ADR-023: a provider that consumed its configured LOCAL daily budget is
         // ineligible until the UTC day rolls over — same treatment as cooldown.
         return configured && !health.inCooldown() && !health.budgetExhausted();
+    }
+
+    @Override
+    public boolean supportsMedia() {
+        return mediaCapable;
     }
 
     @Override
@@ -295,8 +320,35 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
             messages.add(new SystemMessage(request.systemPrompt()));
         }
-        messages.add(new UserMessage(request.userPrompt()));
+        if (request.hasMedia()) {
+            messages.add(UserMessage.builder()
+                    .text(request.userPrompt() == null ? "" : request.userPrompt())
+                    .media(java.util.List.of(toSpringMedia(request.media())))
+                    .build());
+        } else {
+            messages.add(new UserMessage(request.userPrompt()));
+        }
         return messages;
+    }
+
+    /**
+     * Maps the port-level {@link LlmMedia} onto Spring AI's {@link Media} part
+     * (inline image bytes). Provider-specific part building stays here (§26) —
+     * callers only ever handled base64 + mime. Shared by the blocking and
+     * streaming paths (messages() feeds both).
+     */
+    private Media toSpringMedia(LlmMedia media) {
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(media.base64Data());
+        } catch (IllegalArgumentException e) {
+            throw new LlmProviderException(providerName,
+                    "invalid media payload: base64 data could not be decoded", null);
+        }
+        return Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType(media.mimeType()))
+                .data(new ByteArrayResource(bytes))
+                .build();
     }
 
     private ChatOptions options(LlmRequest request) {

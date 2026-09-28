@@ -115,6 +115,46 @@ public class GlobalExceptionHandler {
                 "the marking feedback engine is temporarily unavailable — try again shortly");
     }
 
+    // ── answer-input transcription (HUB-ANSWER-BOX wave 3) ──────────────────
+    // 400/413 carry the input-validation reason (client-input specific, no
+    // internal detail); 422/503 follow the tutor/smart-mark posture — fixed
+    // served message, exception text only reaches the log.
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.BadRequestException.class)
+    ResponseEntity<ApiError> transcriptionBadRequest(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.BadRequestException ex) {
+        return build(HttpStatus.BAD_REQUEST, "transcription_bad_request", ex.getMessage());
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.ImageTooLargeException.class)
+    ResponseEntity<ApiError> transcriptionTooLarge(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.ImageTooLargeException ex) {
+        log.warn("transcription image too large 413 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "transcription_image_too_large",
+                "that image is too large — the drawing pad and photo upload downscale "
+                        + "automatically, so this usually means a stale tab");
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.NothingReadableException.class)
+    ResponseEntity<ApiError> transcriptionNothingReadable(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.NothingReadableException ex) {
+        log.warn("transcription nothing-readable 422 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "transcription_nothing_readable",
+                "we couldn't read any handwriting in that image — write clearly and "
+                        + "try again");
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.TranscriptionUnavailableException.class)
+    ResponseEntity<ApiError> transcriptionUnavailable(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.TranscriptionUnavailableException ex) {
+        log.warn("transcription unavailable 503 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "transcription_unavailable",
+                "transcription is temporarily unavailable — try again shortly");
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()

@@ -17,6 +17,17 @@ public interface LlmProvider {
     boolean available();
 
     /**
+     * Whether this provider can accept image content ({@link LlmRequest#media()}).
+     * The chain routes media-carrying requests only to providers that answer true
+     * here — a text-only member never receives one to fail on (HUB-ANSWER-BOX
+     * wave 3). Default false: existing and future text-only implementations are
+     * safe without touching this interface.
+     */
+    default boolean supportsMedia() {
+        return false;
+    }
+
+    /**
      * Generate a completion.
      *
      * @throws LlmProviderException when the provider fails — callers (the chain)

@@ -59,17 +59,19 @@ public class LlmChainConfig {
                 properties.groq().apiKey(), properties.groq().model(),
                 this::groqChatModel,
                 request -> openAiRuntimeOptions(request, properties.groq().model()),
-                threshold, cooldown, timeout, dailyBudget);
+                threshold, cooldown, timeout, dailyBudget, false);
+        // gemini is the chain's vision-capable member (media routing, HUB-ANSWER-BOX
+        // wave 3): transcription-style requests never reach groq/openrouter.
         registerProvider(providers, "gemini", testMode, properties.gemini().enabled(),
                 properties.gemini().apiKey(), properties.gemini().model(),
                 this::geminiChatModel,
                 request -> genAiRuntimeOptions(request, properties.gemini().model()),
-                threshold, cooldown, timeout, dailyBudget);
+                threshold, cooldown, timeout, dailyBudget, true);
         registerProvider(providers, "openrouter", testMode, properties.openRouter().enabled(),
                 properties.openRouter().apiKey(), properties.openRouter().model(),
                 this::openRouterChatModel,
                 request -> openAiRuntimeOptions(request, properties.openRouter().model()),
-                threshold, cooldown, timeout, dailyBudget);
+                threshold, cooldown, timeout, dailyBudget, false);
 
         // Pin resolution order (§26.1): deployment configuration first, then the
         // experiments research registry (JpaExperimentPinResolver bean, if present).
@@ -91,18 +93,21 @@ public class LlmChainConfig {
                                   boolean enabled, String apiKey, String defaultModel,
                                   java.util.function.Supplier<ChatModel> chatModelFactory,
                                   Function<LlmRequest, ChatOptions> runtimeOptionsFactory,
-                                  int threshold, int cooldown, int timeout, int dailyBudget) {
+                                  int threshold, int cooldown, int timeout, int dailyBudget,
+                                  boolean mediaCapable) {
         if (!testMode && enabled && hasKey(apiKey)) {
             providers.add(new SpringAiChatModelAdapter(name, chatModelFactory.get(), enabled, true,
-                    threshold, cooldown, timeout, dailyBudget, defaultModel, runtimeOptionsFactory));
-            log.info("LLM provider registered: {} (model {})", name, defaultModel);
+                    mediaCapable, threshold, cooldown, timeout, dailyBudget, defaultModel,
+                    runtimeOptionsFactory));
+            log.info("LLM provider registered: {} (model {}{})", name, defaultModel,
+                    mediaCapable ? ", vision-capable" : "");
         } else {
             if (testMode && enabled && hasKey(apiKey)) {
                 log.warn("LLM mode=test: provider '{}' has an API key in the environment but it is "
                         + "IGNORED — real providers are never constructed in test mode "
                         + "(fail-closed, ADR-023)", name);
             }
-            providers.add(new SpringAiChatModelAdapter(name, null, enabled, false,
+            providers.add(new SpringAiChatModelAdapter(name, null, enabled, false, mediaCapable,
                     threshold, cooldown, timeout, dailyBudget, defaultModel, runtimeOptionsFactory));
         }
     }

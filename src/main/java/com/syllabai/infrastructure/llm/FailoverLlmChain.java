@@ -16,6 +16,14 @@ import reactor.core.publisher.Flux;
  * <p>Behaviour: iterate the chain in order; skip providers that are unconfigured or
  * in cooldown; on failure record health and continue; if every provider fails, throw.</p>
  *
+ * <p>Media routing (HUB-ANSWER-BOX wave 3): a request carrying {@link LlmMedia}
+ * is offered ONLY to members that declare {@link LlmProvider#supportsMedia()} —
+ * a text-only provider never receives an image it would merely fail on. When no
+ * vision-capable member is available the request fails with an explicit message
+ * (503 at the web layer) instead of degrading into a text-only hallucination of
+ * an image the provider never saw. The filter lives in the shared routing step,
+ * so the blocking and streaming paths cannot drift apart on it.</p>
+ *
  * <p>Per-experiment pinning (§26.1 provenance, §19 reproducibility): when the request
  * carries an experiment id, the pin is resolved through the injected {@link ExperimentPinResolver}.
  * A pinned experiment is served <em>exclusively</em> by its pinned provider — there is
@@ -59,7 +67,7 @@ public class FailoverLlmChain implements LlmProvider {
     public LlmResponse generate(LlmRequest request) {
         Routing routing = routingOf(request);
         if (routing.candidates().isEmpty()) {
-            throw new LlmProviderException("chain", "no available LLM provider in chain", null);
+            throw new LlmProviderException("chain", emptyChainMessage(request), null);
         }
         LlmRequest effectiveRequest = routing.request();
         List<LlmProvider> candidates = routing.candidates();
@@ -109,7 +117,7 @@ public class FailoverLlmChain implements LlmProvider {
     public Flux<LlmDelta> stream(LlmRequest request) {
         Routing routing = routingOf(request);
         if (routing.candidates().isEmpty()) {
-            return Flux.error(new LlmProviderException("chain", "no available LLM provider in chain", null));
+            return Flux.error(new LlmProviderException("chain", emptyChainMessage(request), null));
         }
         return streamWithFailover(routing.candidates(), routing.request(), new ArrayList<>());
     }
@@ -177,6 +185,14 @@ public class FailoverLlmChain implements LlmProvider {
         if (request.experimentId() != null && !request.experimentId().isBlank()) {
             ExperimentPin pin = resolvePin(request.experimentId());
             LlmProvider pinned = requirePinned(request.experimentId(), pin);
+            if (request.hasMedia() && !pinned.supportsMedia()) {
+                // pinning cannot be used to smuggle an image to a text-only member
+                throw new LlmProviderException("chain",
+                        "experiment '" + request.experimentId() + "' carries media but is pinned to "
+                                + "provider '" + pinned.name() + "' which does not support media — "
+                                + "re-pin the experiment to a vision-capable provider",
+                        null);
+            }
             // §26.1 research pinning: experiment pin > caller model > provider default.
             // A pin that names a model always wins over a caller-supplied model — otherwise
             // any caller could silently drift a registered experiment off its model.
@@ -185,7 +201,20 @@ public class FailoverLlmChain implements LlmProvider {
                     : request;
             return new Routing(effective, List.of(pinned));
         }
-        return new Routing(request, orderedAvailable());
+        List<LlmProvider> candidates = orderedAvailable();
+        if (request.hasMedia()) {
+            candidates = candidates.stream().filter(LlmProvider::supportsMedia).toList();
+        }
+        return new Routing(request, candidates);
+    }
+
+    /** Distinct exhaustion message for media requests — an operator reading the
+     *  503 must see THAT the problem is missing vision capability, not just an
+     *  empty chain. */
+    private static String emptyChainMessage(LlmRequest request) {
+        return request.hasMedia()
+                ? "no vision-capable LLM provider available in chain"
+                : "no available LLM provider in chain";
     }
 
     private ExperimentPin resolvePin(String experimentId) {

@@ -41,6 +41,7 @@ public final class FakeLlmProvider implements LlmProvider {
 
     private final String name;
     private final boolean configured;
+    private final boolean mediaCapableByDefault;
     private final LlmProviderHealth health;
     private final List<Call> calls = new ArrayList<>();
     /** Failure queue: each entry is consumed by one generate() call. */
@@ -52,8 +53,14 @@ public final class FakeLlmProvider implements LlmProvider {
     private LlmRequest lastRequest;
 
     private FakeLlmProvider(String name, boolean configured, int dailyBudget) {
+        this(name, configured, dailyBudget, false);
+    }
+
+    private FakeLlmProvider(String name, boolean configured, int dailyBudget,
+                            boolean mediaCapableByDefault) {
         this.name = name;
         this.configured = configured;
+        this.mediaCapableByDefault = mediaCapableByDefault;
         this.health = new LlmProviderHealth(configured, configured, 3, 60, dailyBudget, null);
         this.response = new LlmResponse("answer from " + name, name, "fake-model", 5, 10, 10);
     }
@@ -71,6 +78,11 @@ public final class FakeLlmProvider implements LlmProvider {
     /** An unconfigured provider — the chain skips it silently. */
     public static FakeLlmProvider unconfigured(String name) {
         return new FakeLlmProvider(name, false, 0);
+    }
+
+    /** A configured provider that accepts media requests (vision-capable member). */
+    public static FakeLlmProvider visionCapable(String name) {
+        return new FakeLlmProvider(name, true, 0, true);
     }
 
     // ── scripting ───────────────────────────────────────────────────────────────
@@ -168,6 +180,10 @@ public final class FakeLlmProvider implements LlmProvider {
     @Override public boolean available() {
         // mirrors SpringAiChatModelAdapter: configured, not cooling down, budget left
         return configured && !health.inCooldown() && !health.budgetExhausted();
+    }
+
+    @Override public boolean supportsMedia() {
+        return mediaCapableByDefault;
     }
 
     @Override public LlmResponse generate(LlmRequest request) {
