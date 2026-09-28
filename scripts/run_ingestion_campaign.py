@@ -31,7 +31,8 @@ CORE_JAR = CORE / "target/syllabai-core-0.1.0-SNAPSHOT.jar"
 PAPERS = Path("/home/z/my-project/repos/Past-Papers")
 PARSER_CP = (TC / "parser-cp.txt").read_text().strip()
 PSQL = TC / "pgdebs/root/usr/lib/postgresql/17/bin/psql"
-JWT = "ops-batch-only-secret-key-0123456789abcdef0123456789abcdef"
+# JWT: resolved from the environment after the os import below
+# (deep-audit 2026-09-28 M7 — no secrets committed to the repo).
 
 # T-C04 r2 hardening: the campaign DB identity that stage-2 boots claim
 # (printed AND recorded into campaign_db_identity by the core app at startup).
@@ -43,6 +44,19 @@ CORE_COMMIT = subprocess.run(["git", "-C", str(CORE), "rev-parse", "--short", "H
 # session-66: evidence root parametrizable (default r2 = the historical campaign);
 # the fixed-parser re-ingestion ran against r3 to keep both vintages durable
 import os as _os
+
+# Deep-audit 09-28 M7: the stage-2 boot secret is no longer a repo literal —
+# any reader of the repository could previously mint valid JWTs for every
+# campaign boot. The secret now comes from the environment (CAMPAIGN_JWT, or
+# SYLLABAI_JWT_SECRET to match the core app's own contract) and the run
+# FAILS CLOSED before any boot if neither is set.
+JWT = _os.environ.get("CAMPAIGN_JWT") or _os.environ.get("SYLLABAI_JWT_SECRET")
+if not JWT:
+    raise SystemExit(
+        "run_ingestion_campaign: no JWT secret in environment — set CAMPAIGN_JWT "
+        "(or SYLLABAI_JWT_SECRET) to the ops secret used for stage-2 boots. "
+        "The hardcoded literal was removed from the repo (deep-audit M7).")
+
 CAMP = Path(_os.environ.get("CAMPAIGN_ROOT", "/home/z/my-project/download/ingestion-campaign-r2"))
 STATE_FILE = Path(_os.environ.get("CAMPAIGN_STATE", "/home/z/my-project/scripts/campaign-state-r2.json"))
 BATCH_SIZE = 5
