@@ -39,6 +39,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -262,6 +263,9 @@ class MultipartMarkingFlowIT {
 
     @Test
     @DisplayName("T-029: the real roster query + marking queue carry learner identity")
+    // M5 method security: direct controller calls (roster, marking queue) are
+    // @PreAuthorize-secured — the simulated teacher needs a SecurityContext
+    @WithMockUser(roles = {"TEACHER"})
     void teacherRosterAndQueueCarryLearnerIdentity() {
         // a learner and a teacher exist; the roster must list ONLY enabled students
         UUID learner = newLearner();

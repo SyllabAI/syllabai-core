@@ -27,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -82,6 +83,10 @@ class ConceptGraphSeedFlowIT {
     @Test
     @DisplayName("Teacher → 4CH1 → spec point → concept graph: real rows, real edges, "
             + "idempotent re-run, learner activation, student isolation")
+    // M5 method security: the controller bean is a @PreAuthorize-secured proxy —
+    // a DIRECT invocation needs an Authentication in the SecurityContext
+    // (this IT simulates the teacher driving the product path)
+    @WithMockUser(roles = {"TEACHER"})
     void fullTeacherConceptGraphPath() {
         // 1. ACTIVATION — the deterministic seed of the pinned snapshots
         ConceptGraphSeedService.SeedSummary first = seed.activate(UUID.randomUUID());
