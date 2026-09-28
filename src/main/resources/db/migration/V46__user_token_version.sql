@@ -1,0 +1,27 @@
+-- V46 — user token_version: the stateless-JWT revocation anchor
+-- (deep-audit 2026-09-28 re-derivation, R1/R2).
+--
+-- FINDING: access tokens live 12h and nothing could revoke them. A stolen
+-- bearer token survived password rotation AND account disablement — the
+-- only "kill switch" was rotating the global signing secret, which logs
+-- out every user at once. The enabled flag itself is dormant (no
+-- application path sets it false yet), but the documented investigate/
+-- disable flow would have silently not worked: the JWT filter trusted
+-- parsed claims and never looked at the row.
+--
+-- FIX SHAPE: users.token_version is the revocation epoch. Tokens embed
+-- the version they were issued with ("ver" claim); JwtAuthenticationFilter
+-- now resolves the user row per request and rejects tokens whose ver no
+-- longer matches, whose user is gone, or whose account is disabled —
+-- fail-closed on all three. rotatePasswordHash bumps the column, so
+-- password rotation ends EVERY live session for the account (including
+-- the rotating client: re-login is the documented contract).
+--
+-- DEPLOY NOTE: every token issued before this deploy lacks "ver" and is
+-- therefore rejected once — all pilot users re-login once. Accepted
+-- (fail-closed) rather than grandfathering unversioned tokens.
+--
+-- SCALE NOTE: the per-request check is one PK lookup on a 200-row table —
+-- the same per-request cost class the M1 rate limiter already pays.
+
+ALTER TABLE users ADD COLUMN token_version BIGINT NOT NULL DEFAULT 1;

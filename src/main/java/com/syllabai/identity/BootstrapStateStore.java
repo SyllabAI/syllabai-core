@@ -32,10 +32,35 @@ public class BootstrapStateStore {
                 (rs, i) -> State.valueOf(rs.getString(1))).stream().findFirst();
     }
 
+    /**
+     * Locked read returning the state AND the row's updated_at — the persisted
+     * moment the window was armed (V19 insert / last state flip). The claim
+     * path anchors its wall-clock check HERE, not on JVM boot: a deployment
+     * that spins down and back up must not re-arm a fresh anonymous window
+     * (R3 — the bootMillis anchor let the window survive restarts, contradicting
+     * the EXPIRED-is-terminal contract documented in V19).
+     */
+    public record StateAndArmedAt(State state, java.time.Instant updatedAt) { }
+
+    public Optional<StateAndArmedAt> lockStateWithArmedAt() {
+        return jdbc.query(
+                "SELECT state, updated_at FROM bootstrap_admin_state WHERE id = 1 FOR UPDATE",
+                (rs, i) -> new StateAndArmedAt(State.valueOf(rs.getString(1)),
+                        rs.getTimestamp(2).toInstant())).stream().findFirst();
+    }
+
     /** Unlocked read for status/expire checks. */
     public Optional<State> peekState() {
         return jdbc.query("SELECT state FROM bootstrap_admin_state WHERE id = 1",
                 (rs, i) -> State.valueOf(rs.getString(1))).stream().findFirst();
+    }
+
+    /** Unlocked read of state + armed-at for the scheduled expiry job. */
+    public Optional<StateAndArmedAt> peekStateWithArmedAt() {
+        return jdbc.query(
+                "SELECT state, updated_at FROM bootstrap_admin_state WHERE id = 1",
+                (rs, i) -> new StateAndArmedAt(State.valueOf(rs.getString(1)),
+                        rs.getTimestamp(2).toInstant())).stream().findFirst();
     }
 
     /** Number of accounts holding the ADMIN role. */

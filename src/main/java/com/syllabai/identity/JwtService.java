@@ -37,7 +37,8 @@ public class JwtService {
         this.ttl = ttl;
     }
 
-    public record TokenInfo(String subject, UUID userId, Set<Role> roles, Instant expiresAt) {
+    public record TokenInfo(String subject, UUID userId, Set<Role> roles,
+                            Long tokenVersion, Instant expiresAt) {
     }
 
     public String issueAccessToken(User user) {
@@ -48,6 +49,9 @@ public class JwtService {
                 .subject(user.email())
                 .id(user.id().toString())
                 .claim("uid", user.id().toString())
+                // revocation epoch (R1): the filter compares this against
+                // users.token_version per request — a bump kills the token
+                .claim("ver", user.tokenVersion())
                 .claim("roles", roles)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp))
@@ -60,10 +64,14 @@ public class JwtService {
         Claims claims = Jwts.parser().verifyWith(key).build()
                 .parseSignedClaims(token).getPayload();
         UUID userId = UUID.fromString(claims.get("uid", String.class));
+        // absent ver (pre-V46 token) parses as null — the filter treats a
+        // null version as mismatched (fail-closed; see V46 deploy note)
+        Long tokenVersion = claims.get("ver", Long.class);
         @SuppressWarnings("unchecked")
         List<String> roleNames = (List<String>) claims.getOrDefault("roles", List.of());
         Set<Role> roles = roleNames.stream().map(Role::valueOf).collect(java.util.stream.Collectors.toSet());
-        return new TokenInfo(claims.getSubject(), userId, roles, claims.getExpiration().toInstant());
+        return new TokenInfo(claims.getSubject(), userId, roles, tokenVersion,
+                claims.getExpiration().toInstant());
     }
 
     public Duration ttl() {

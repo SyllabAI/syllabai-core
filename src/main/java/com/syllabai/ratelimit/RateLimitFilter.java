@@ -156,14 +156,40 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return clientIp(request);
     }
 
+    /**
+     * Client-IP key for the auth tier. The leftmost XFF entry is
+     * ATTACKER-CONTROLLED: a live probe (2026-09-28) confirmed that rotating
+     * a fake leftmost value yields a fresh budget per request — Render's LB
+     * APPENDS the observed peer, it does not overwrite. The RIGHTMOST entry
+     * is the one the last trusted proxy added and cannot be injected right
+     * of, so that is the key. Private/reserved rightmost values (a client
+     * behind a corporate proxy chain, or health checks) fall back to the
+     * socket peer so internal callers share one bucket instead of spoofing
+     * fresh ones.
+     */
     static String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
-            // left-most hop is the originating client (Render's proxy overwrites)
-            return forwarded.split(",", 2)[0].strip();
+            String[] hops = forwarded.split(",");
+            for (int i = hops.length - 1; i >= 0; i--) {
+                String hop = hops[i].strip();
+                if (hop.isEmpty()) {
+                    continue;
+                }
+                return isPrivateAddress(hop) ? request.getRemoteAddr() : hop;
+            }
         }
         String remote = request.getRemoteAddr();
         return remote == null ? "unknown" : remote;
+    }
+
+    /** Reserved-range check: these rightmost values are infrastructure, not clients. */
+    private static boolean isPrivateAddress(String ip) {
+        return ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("127.")
+                || ip.startsWith("169.254.") || ip.startsWith("fe80:") || ip.startsWith("fc")
+                || ip.startsWith("fd") || ip.equals("::1") || ip.startsWith("172.16.")
+                || ip.startsWith("172.17.") || ip.startsWith("172.18.") || ip.startsWith("172.19.")
+                || ip.startsWith("172.2") || ip.startsWith("172.30.") || ip.startsWith("172.31.");
     }
 
     private void admit(HttpServletRequest request, HttpServletResponse response,

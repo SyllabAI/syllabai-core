@@ -1,6 +1,7 @@
 package com.syllabai.identity.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -13,5 +14,9 @@ import jakarta.validation.constraints.Size;
  */
 public record PasswordChangeRequest(
         @NotBlank String currentPassword,
-        @NotBlank @Size(min = 8, max = 100) String newPassword) {
+        // same floor as registration (R6): one platform bar, no weak rotation path
+        @NotBlank @Size(min = 12, max = 100)
+        @Pattern(regexp = ".*\\p{L}.*", message = "must contain a letter")
+        @Pattern(regexp = ".*\\d.*", message = "must contain a digit")
+        String newPassword) {
 }

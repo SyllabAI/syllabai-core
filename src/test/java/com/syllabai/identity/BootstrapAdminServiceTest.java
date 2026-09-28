@@ -10,10 +10,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.identity.BootstrapStateStore.State;
+import com.syllabai.identity.BootstrapStateStore.StateAndArmedAt;
 import com.syllabai.identity.dto.AuthResponse;
 import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.ConflictException;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -41,6 +43,17 @@ class BootstrapAdminServiceTest {
 
     private RegisterRequest strong() {
         return new RegisterRequest("ops@syllabai.dev", "bootstrap-passphrase-1", "Product Ops");
+    }
+
+    /** armed-at inside the claim window by default (fresh row just written). */
+    private StateAndArmedAt armed(State s) {
+        return new StateAndArmedAt(s, Instant.now());
+    }
+
+    /** armed-at older than the claim window (the row was never claimed). */
+    private StateAndArmedAt armedStale(State s) {
+        return new StateAndArmedAt(s,
+                Instant.now().minus(BootstrapAdminService.CLAIM_WINDOW).minusSeconds(60));
     }
 
     @Nested
@@ -88,7 +101,7 @@ class BootstrapAdminServiceTest {
         @Test
         @DisplayName("happy path: creates ADMIN+TEACHER, consumes window, issues token")
         void happyPath() {
-            when(state.lockState()).thenReturn(Optional.of(State.PENDING));
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armed(State.PENDING)));
             when(state.adminCount()).thenReturn(0);
             when(encoder.encode(anyString())).thenReturn("bcrypt-hash");
             UUID id = UUID.randomUUID();
@@ -115,7 +128,7 @@ class BootstrapAdminServiceTest {
         @Test
         @DisplayName("refused when the row is not PENDING — no user written")
         void refusedWhenConsumed() {
-            when(state.lockState()).thenReturn(Optional.of(State.CONSUMED));
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armed(State.CONSUMED)));
             assertThatThrownBy(() -> service(true).claim(strong()))
                     .isInstanceOf(ConflictException.class);
             verify(users, never()).saveAndFlush(any(User.class));
@@ -123,9 +136,23 @@ class BootstrapAdminServiceTest {
         }
 
         @Test
+        @DisplayName("refused after the window passed on the row's own clock — "
+                + "flipped EXPIRED terminally, no user written (R3: cold boots "
+                + "must not re-arm the window)")
+        void refusedAfterWallClockWindow() {
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armedStale(State.PENDING)));
+            when(state.adminCount()).thenReturn(0);
+            when(state.expire()).thenReturn(true);
+            assertThatThrownBy(() -> service(true).claim(strong()))
+                    .isInstanceOf(ConflictException.class);
+            verify(users, never()).saveAndFlush(any(User.class));
+            verify(state).expire();
+        }
+
+        @Test
         @DisplayName("refused when an ADMIN already exists")
         void refusedWhenAdminExists() {
-            when(state.lockState()).thenReturn(Optional.of(State.PENDING));
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armed(State.PENDING)));
             when(state.adminCount()).thenReturn(1);
             assertThatThrownBy(() -> service(true).claim(strong()))
                     .isInstanceOf(ConflictException.class);
@@ -137,14 +164,14 @@ class BootstrapAdminServiceTest {
         void refusedWhenDisabled() {
             assertThatThrownBy(() -> service(false).claim(strong()))
                     .isInstanceOf(ConflictException.class);
-            verify(state, never()).lockState();
+            verify(state, never()).lockStateWithArmedAt();
             verify(users, never()).saveAndFlush(any(User.class));
         }
 
         @Test
         @DisplayName("weak password rejected before any state change")
         void weakPassword() {
-            when(state.lockState()).thenReturn(Optional.of(State.PENDING));
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armed(State.PENDING)));
             when(state.adminCount()).thenReturn(0);
             RegisterRequest weak = new RegisterRequest("ops@syllabai.dev", "abcdefgh", "Ops");
             assertThatThrownBy(() -> service(true).claim(weak))
@@ -156,7 +183,7 @@ class BootstrapAdminServiceTest {
         @Test
         @DisplayName("lost consume race rolls the claim back as a conflict")
         void consumeRaceLost() {
-            when(state.lockState()).thenReturn(Optional.of(State.PENDING));
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.of(armed(State.PENDING)));
             when(state.adminCount()).thenReturn(0);
             when(encoder.encode(anyString())).thenReturn("bcrypt-hash");
             User saved = mock(User.class);
@@ -170,7 +197,7 @@ class BootstrapAdminServiceTest {
         @Test
         @DisplayName("missing state row fails closed")
         void missingRowFailsClosed() {
-            when(state.lockState()).thenReturn(Optional.empty());
+            when(state.lockStateWithArmedAt()).thenReturn(Optional.empty());
             assertThatThrownBy(() -> service(true).claim(strong()))
                     .isInstanceOf(ConflictException.class);
         }
@@ -180,45 +207,41 @@ class BootstrapAdminServiceTest {
     @DisplayName("expireUnusedWindow()")
     class Expiry {
 
-        private void rewindBoot(BootstrapAdminService svc) throws Exception {
-            java.lang.reflect.Field boot = BootstrapAdminService.class
-                    .getDeclaredField("bootMillis");
-            boot.setAccessible(true);
-            boot.setLong(svc, System.currentTimeMillis()
-                    - BootstrapAdminService.CLAIM_WINDOW.toMillis() - 1);
-        }
-
         @Test
-        @DisplayName("flips an unused PENDING window to terminal EXPIRED after the claim window")
-        void expiresUnused() throws Exception {
-            when(state.peekState()).thenReturn(Optional.of(State.PENDING));
+        @DisplayName("flips an unused PENDING window to terminal EXPIRED after the row's armed-at passed")
+        void expiresUnused() {
+            when(state.peekStateWithArmedAt()).thenReturn(Optional.of(armedStale(State.PENDING)));
             when(state.adminCount()).thenReturn(0);
             when(state.expire()).thenReturn(true);
-            BootstrapAdminService svc = service(true);
-            rewindBoot(svc);
-            svc.expireUnusedWindow();
+            service(true).expireUnusedWindow();
             verify(state).expire();
         }
 
         @Test
-        @DisplayName("never expires inside the claim window, when claimed, or with admins")
-        void guarded() throws Exception {
-            BootstrapAdminService fresh = service(true);
-            fresh.expireUnusedWindow(); // bootMillis = now → inside window
+        @DisplayName("never expires inside the claim window, when claimed, with admins, or disabled")
+        void guarded() {
+            when(state.peekStateWithArmedAt()).thenReturn(Optional.of(armed(State.PENDING)));
+            service(true).expireUnusedWindow(); // armed-at = now → inside window
             verify(state, never()).expire();
 
-            when(state.peekState()).thenReturn(Optional.of(State.CONSUMED));
-            BootstrapAdminService svc = service(true);
-            rewindBoot(svc);
-            svc.expireUnusedWindow();
+            when(state.peekStateWithArmedAt()).thenReturn(Optional.of(armedStale(State.CONSUMED)));
+            service(true).expireUnusedWindow();
             verify(state, never()).expire();
 
-            when(state.peekState()).thenReturn(Optional.of(State.PENDING));
+            when(state.peekStateWithArmedAt()).thenReturn(Optional.of(armedStale(State.PENDING)));
             when(state.adminCount()).thenReturn(2);
-            svc.expireUnusedWindow();
+            service(true).expireUnusedWindow();
             verify(state, never()).expire();
 
             service(false).expireUnusedWindow();
+            verify(state, never()).expire();
+        }
+
+        @Test
+        @DisplayName("missing state row is tolerated (next tick retries)")
+        void missingRowTolerated() {
+            when(state.peekStateWithArmedAt()).thenReturn(Optional.empty());
+            service(true).expireUnusedWindow();
             verify(state, never()).expire();
         }
     }

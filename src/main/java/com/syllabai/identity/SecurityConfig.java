@@ -46,6 +46,21 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // security headers (R4): behind Render's TLS-terminating proxy
+                // Tomcat sees plain HTTP, so the default isSecure()-gated HSTS
+                // writer never fires — the requestMatcher forces HSTS on every
+                // response; referrer policy on top of the nosniff/frame/cache
+                // defaults Spring Security already emits
+                .headers(headers -> headers
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .requestMatcher(request -> true)
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31_536_000)
+                                .preload(true))
+                        .referrerPolicy(referrer -> referrer
+                                .policy(org.springframework.security.web.header.writers
+                                        .ReferrerPolicyHeaderWriter.ReferrerPolicy
+                                        .STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

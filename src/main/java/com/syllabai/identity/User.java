@@ -42,6 +42,16 @@ public class User {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
+    /**
+     * Stateless-JWT revocation anchor (deep-audit R1): bumped on every
+     * credential-affecting event. Tokens embed the version they were issued
+     * with; the authentication filter compares claim vs row per request, so
+     * a bump invalidates every previously issued token for this account
+     * (password rotation, future admin-disable flows) without a token store.
+     */
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion = 1;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -92,6 +102,10 @@ public class User {
         return enabled;
     }
 
+    public long tokenVersion() {
+        return tokenVersion;
+    }
+
     public Instant createdAt() {
         return createdAt;
     }
@@ -108,5 +122,8 @@ public class User {
      */
     public void rotatePasswordHash(String newPasswordHash) {
         this.passwordHash = newPasswordHash;
+        // every previously issued token dies here: the filter rejects any
+        // token whose ver claim no longer matches the row (R1)
+        this.tokenVersion++;
     }
 }

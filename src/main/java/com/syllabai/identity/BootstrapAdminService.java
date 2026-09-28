@@ -54,7 +54,6 @@ public class BootstrapAdminService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final boolean enabled;
-    private final long bootMillis = System.currentTimeMillis();
 
     public BootstrapAdminService(BootstrapStateStore state,
                                  UserRepository users,
@@ -84,10 +83,24 @@ public class BootstrapAdminService {
         if (!enabled) {
             throw new ConflictException("bootstrap claim surface is disabled on this deployment");
         }
-        BootstrapStateStore.State s = state.lockState()
+        BootstrapStateStore.StateAndArmedAt armed = state.lockStateWithArmedAt()
                 .orElseThrow(() -> new ConflictException("bootstrap state row missing"));
-        if (s != BootstrapStateStore.State.PENDING) {
-            throw new ConflictException("bootstrap claim window is closed (state " + s + ")");
+        if (armed.state() != BootstrapStateStore.State.PENDING) {
+            throw new ConflictException("bootstrap claim window is closed (state " + armed.state() + ")");
+        }
+        // wall-clock enforcement ON the claim path (R3): the scheduled expiry
+        // job can miss a window on a deployment that spins down before its
+        // 15-minute tick — and anchoring to bootMillis let every cold boot
+        // re-arm a fresh anonymous window. The persisted armed-at timestamp
+        // makes the window genuinely one-shot: expired-at-claim flips the row
+        // to EXPIRED terminally, matching the V19 contract.
+        if (java.time.Instant.now().isAfter(armed.updatedAt().plus(CLAIM_WINDOW))) {
+            if (state.expire()) {
+                log.warn("AUDIT: bootstrap claim window EXPIRED unused — wall-clock "
+                        + "check at claim time (armed at {}). Reopening requires an "
+                        + "explicit migration", armed.updatedAt());
+            }
+            throw new ConflictException("bootstrap claim window is closed (state EXPIRED)");
         }
         if (state.adminCount() > 0) {
             throw new ConflictException("an ADMIN account already exists");
@@ -114,18 +127,21 @@ public class BootstrapAdminService {
         return new AuthResponse(jwtService.issueAccessToken(user), null, UserView.from(user));
     }
 
-    /** Terminal expiry of an unused window — bounded exposure even if never claimed. */
+    /** Terminal expiry of an unused window — bounded exposure even if never claimed.
+     *  Anchored to the row's persisted armed-at time (R3), not JVM boot: the
+     *  job keeps working across restarts instead of re-arming the window. */
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     public void expireUnusedWindow() {
         if (!enabled) {
             return;
         }
-        if (System.currentTimeMillis() - bootMillis < CLAIM_WINDOW.toMillis()) {
-            return;
-        }
         try {
-            if (state.peekState().orElse(BootstrapStateStore.State.EXPIRED)
-                    == BootstrapStateStore.State.PENDING && state.adminCount() == 0) {
+            BootstrapStateStore.StateAndArmedAt armed = state.peekStateWithArmedAt()
+                    .orElse(null);
+            if (armed != null
+                    && armed.state() == BootstrapStateStore.State.PENDING
+                    && state.adminCount() == 0
+                    && java.time.Instant.now().isAfter(armed.updatedAt().plus(CLAIM_WINDOW))) {
                 if (state.expire()) {
                     log.warn("AUDIT: bootstrap claim window EXPIRED unused after {} — reopening "
                             + "requires an explicit migration", CLAIM_WINDOW);

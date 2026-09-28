@@ -100,18 +100,51 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("X-Forwarded-For left-most hop is the client key (proxy topology)")
-    void xffLeftMostHopKeysTheBucket() throws Exception {
+    @DisplayName("X-Forwarded-For RIGHTMOST hop is the client key — the leftmost is "
+            + "attacker-controlled (live probe: Render APPENDS, rotating a fake "
+            + "leftmost must not mint fresh budgets)")
+    void xffRightMostHopKeysTheBucket() throws Exception {
+        // same topology the live probe exploited: fake leftmost, real client rightmost
         MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
-        a.addHeader("X-Forwarded-For", "9.9.9.9, 10.0.0.1");
+        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7");
         MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
-        b.addHeader("X-Forwarded-For", "8.8.8.8, 10.0.0.1");
+        b.addHeader("X-Forwarded-For", "8.8.8.8, 203.0.113.7");
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(200);
-        // same proxy remoteAddr, same XFF client -> exhausted
+        // same REAL client (rightmost) despite the rotated fake leftmost -> exhausted
         assertThat(fire(a).getStatus()).isEqualTo(429);
-        // different XFF client behind the same proxy remoteAddr -> own budget
+        // a different fake leftmost no longer mints a fresh budget: b's rightmost
+        // is the same 203.0.113.7 -> same bucket -> still 429
+        assertThat(fire(b).getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    @DisplayName("a genuinely different rightmost client gets its own budget")
+    void xffDistinctRightMostClientsBucketIndependently() throws Exception {
+        MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
+        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7");
+        MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
+        b.addHeader("X-Forwarded-For", "9.9.9.9, 198.51.100.9");
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(429);
         assertThat(fire(b).getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("a private rightmost hop falls back to the socket peer — internal "
+            + "callers cannot spoof fresh budgets with reserved addresses")
+    void xffPrivateRightMostFallsBackToRemoteAddr() throws Exception {
+        // both requests carry a private rightmost -> both key on 127.0.0.1
+        MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
+        a.addHeader("X-Forwarded-For", "203.0.113.7, 192.168.5.5");
+        MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
+        b.addHeader("X-Forwarded-For", "198.51.100.9, 10.255.255.5");
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(429);
+        // b's rightmost is private -> key = 127.0.0.1 = a's bucket -> still 429
+        assertThat(fire(b).getStatus()).isEqualTo(429);
     }
 
     @Test

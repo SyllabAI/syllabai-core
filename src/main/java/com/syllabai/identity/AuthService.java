@@ -71,8 +71,13 @@ public class AuthService {
      * Self-service credential rotation (§22): the caller must present the
      * CURRENT password — knowledge of the existing secret authorizes the
      * change, so a stolen bearer token alone cannot take over the account.
-     * Same strength rule as registration (8+ chars, bean-validated at the
-     * web boundary). AUDIT-logged: every rotation is an identity event.
+     * Same strength rule as registration (12+ chars, letters+digits,
+     * bean-validated at the web boundary). AUDIT-logged: every rotation is
+     * an identity event.
+     *
+     * <p>Rotation also bumps {@code users.token_version} (R1): every token
+     * issued before the rotation is dead on its next request — including the
+     * rotating client's own. Re-login is the documented contract.</p>
      */
     @Transactional
     public void changePassword(String email, PasswordChangeRequest request) {

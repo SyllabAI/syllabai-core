@@ -98,12 +98,15 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("rotatePasswordHash is the only mutation path and stores the HASH")
+    @DisplayName("rotatePasswordHash is the only mutation path, stores the HASH, "
+            + "and bumps the token version (R1: every pre-rotation token dies)")
     void rotatePasswordHashStoresHash() {
         User real = new User("ops@syllabai.dev", "old-hash", "Ops", java.util.Set.of(Role.ADMIN));
+        long before = real.tokenVersion();
         real.rotatePasswordHash("new-bcrypt-hash");
         org.assertj.core.api.Assertions.assertThat(real.passwordHash()).isEqualTo("new-bcrypt-hash");
         org.assertj.core.api.Assertions.assertThat(real.email()).isEqualTo("ops@syllabai.dev");
         org.assertj.core.api.Assertions.assertThat(real.roles()).containsExactly(Role.ADMIN);
+        org.assertj.core.api.Assertions.assertThat(real.tokenVersion()).isEqualTo(before + 1);
     }
 }
