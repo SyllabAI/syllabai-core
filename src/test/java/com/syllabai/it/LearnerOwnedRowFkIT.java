@@ -202,12 +202,13 @@ class LearnerOwnedRowFkIT {
                 UUID.randomUUID(), answer, learner);
 
         jdbc.update("INSERT INTO skill_states (id, learner_id, node_id, mastery, "
-                        + "attempts, correct_count, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, 0.5, 1, 1, now(), now())",
+                        + "attempts, correct_count, last_practiced_at, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, 0.5, 1, 1, now(), now(), now())",
                 UUID.randomUUID(), learner, TOPIC_T1_1);
         jdbc.update("INSERT INTO misconception_states (id, learner_id, "
                         + "misconception_node_id, probability, evidence_count, "
-                        + "created_at, updated_at) VALUES (?, ?, ?, 0.4, 1, now(), now())",
+                        + "last_evidence_at, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, 0.4, 1, now(), now(), now())",
                 UUID.randomUUID(), learner, MIS_T1_1_01);
         jdbc.update("INSERT INTO review_schedules (id, learner_id, node_id, "
                         + "due_at, created_at) VALUES (?, ?, ?, now() + interval '1 day', now())",
