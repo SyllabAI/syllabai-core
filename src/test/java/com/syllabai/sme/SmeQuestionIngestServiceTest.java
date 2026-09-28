@@ -75,6 +75,12 @@ class SmeQuestionIngestServiceTest {
                 "B is correct because…", List.of());
     }
 
+    private SmeQuestionPackageDtos.Package pkg(String source,
+            List<SmeQuestionPackageDtos.Question> qs) {
+        return new SmeQuestionPackageDtos.Package("1.0", "test-corpus", "now",
+                source, Map.of(), qs);
+    }
+
     private SmeQuestionPackageDtos.Question structured(String ref) {
         return new SmeQuestionPackageDtos.Question(ref, "STRUCTURED",
                 "", 4, 3, "SME", 300, "calculate",
@@ -83,8 +89,28 @@ class SmeQuestionIngestServiceTest {
                         "AI_VALIDATED")),
                 null, "structured-questions", "medium",
                 List.of(), null,
-                List.of(new SmeQuestionPackageDtos.Part("a", "Do this", 1, null, "sol a"),
-                        new SmeQuestionPackageDtos.Part("b", "Then this", 3, null, "sol b")));
+                List.of(new SmeQuestionPackageDtos.Part("a", "Do this", 1, null, "sol a", null),
+                        new SmeQuestionPackageDtos.Part("b", "Then this", 3, null, "sol b", null)));
+    }
+
+    /** MIXED: one option-bearing part + two plain parts — the -pN/-s shape */
+    private SmeQuestionPackageDtos.Question mixed(String ref) {
+        return new SmeQuestionPackageDtos.Question(ref, "STRUCTURED",
+                "", 5, 3, "SME", 375, null,
+                "4CH1-S1-e", List.of(),
+                null, null, "mixed-questions", "medium",
+                List.of(), null,
+                List.of(
+                        new SmeQuestionPackageDtos.Part("a", "Complete the table", 2,
+                                null, "sol a", null),
+                        new SmeQuestionPackageDtos.Part("b", "Draw the graph", 2,
+                                null, "sol b", null),
+                        new SmeQuestionPackageDtos.Part("c", "Write down the letter", 1,
+                                null, "sol c",
+                                List.of(new SmeQuestionPackageDtos.Option("A", "", false),
+                                        new SmeQuestionPackageDtos.Option("B", "", false),
+                                        new SmeQuestionPackageDtos.Option("C", "", false),
+                                        new SmeQuestionPackageDtos.Option("D", "", true)))));
     }
 
     // ── validation gates ──────────────────────────────────────────────────
@@ -127,8 +153,8 @@ class SmeQuestionIngestServiceTest {
         var bad = new SmeQuestionPackageDtos.Question("m", "STRUCTURED", "", 5, 3,
                 "SME", 300, null, "4CH1-S1-e", List.of(), List.of(), null, null, "medium",
                 List.of(), null,
-                List.of(new SmeQuestionPackageDtos.Part("a", "p", 1, null, "s"),
-                        new SmeQuestionPackageDtos.Part("b", "p", 2, null, "s")));
+                List.of(new SmeQuestionPackageDtos.Part("a", "p", 1, null, "s", null),
+                        new SmeQuestionPackageDtos.Part("b", "p", 2, null, "s", null)));
         assertThatThrownBy(() -> service.validate(pkg(List.of(bad)), Map.of()))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("part marks sum");
@@ -167,7 +193,7 @@ class SmeQuestionIngestServiceTest {
                 Optional.of(new KnowledgeNode(inv.getArgument(0),
                         com.syllabai.knowledge.NodeType.SUBTOPIC, "t", "d",
                         KnowledgeNode.ValidationStatus.VALIDATED, "test", null)));
-        when(questions.deactivateAllActive()).thenReturn(34);
+        when(questions.deactivateByRefs(any())).thenReturn(34);
         when(questions.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(questionVersions.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(markSchemes.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -192,6 +218,114 @@ class SmeQuestionIngestServiceTest {
         assertThat(summary.topicMappings()).isEqualTo(1);
         assertThat(summary.assets()).isEqualTo(1);
         assertThat(summary.deactivated()).isEqualTo(34);
+    }
+
+    @Test
+    @DisplayName("ADR-026 amendment: a mixed question emits the -pN/-s multi-row family")
+    void mixedQuestionEmitsMultiRowFamily() throws Exception {
+        when(knowledgeNodes.findByCode(any())).thenAnswer(inv ->
+                Optional.of(new KnowledgeNode(inv.getArgument(0),
+                        com.syllabai.knowledge.NodeType.SUBTOPIC, "t", "d",
+                        KnowledgeNode.ValidationStatus.VALIDATED, "test", null)));
+        when(questions.deactivateByRefs(any())).thenReturn(0);
+        when(questions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionVersions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markSchemes.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionParts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markPoints.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionOptions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionTopics.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(assets.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var summary = service.ingest(zip(pkg(List.of(mixed("sme-eq-t-q28"))), Map.of()));
+
+        assertThat(summary.questions()).isEqualTo(1);
+        assertThat(summary.structured()).isEqualTo(1);
+        assertThat(summary.parts()).isEqualTo(2);          // the -s row's two plain parts
+        assertThat(summary.options()).isEqualTo(4);         // the -p1 row's A–D
+        assertThat(summary.markPoints()).isEqualTo(3);      // 1 on -p1 + 2 on -s
+        assertThat(summary.deactivated()).isEqualTo(0);
+        // the family's three rows: -p1 (MCQ), -s (structured), and the base ref
+        // is never a row of its own — the assembler reassembles it
+        var refs = new java.util.ArrayList<String>();
+        org.mockito.ArgumentCaptor<com.syllabai.assessment.Question> captor =
+                org.mockito.ArgumentCaptor.forClass(com.syllabai.assessment.Question.class);
+        org.mockito.Mockito.verify(questions, org.mockito.Mockito.times(2)).save(captor.capture());
+        captor.getAllValues().forEach(q -> refs.add(q.externalRef()));
+        org.assertj.core.api.Assertions.assertThat(refs).containsExactlyInAnyOrder(
+                "sme-eq-t-q28-p1", "sme-eq-t-q28-s");
+    }
+
+    @Test
+    @DisplayName("ADR-026 amendment: deactivation is slice-scoped to the package's own refs")
+    void deactivationIsSliceScoped() throws Exception {
+        when(knowledgeNodes.findByCode(any())).thenAnswer(inv ->
+                Optional.of(new KnowledgeNode(inv.getArgument(0),
+                        com.syllabai.knowledge.NodeType.SUBTOPIC, "t", "d",
+                        KnowledgeNode.ValidationStatus.VALIDATED, "test", null)));
+        when(questions.deactivateByRefs(any())).thenReturn(2);
+        when(questions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionVersions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markSchemes.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionParts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markPoints.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionOptions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionTopics.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(specPoints.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.ingest(zip(pkg(List.of(mcq("sme-eq-t-q1"))), Map.of()));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+        org.mockito.Mockito.verify(questions).deactivateByRefs(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue())
+                .containsExactly("sme-eq-t-q1");
+    }
+
+    @Test
+    @DisplayName("ADR-026 amendment: an asset-free package leaves the asset store untouched")
+    void assetFreePackagePreservesAssetStore() throws Exception {
+        when(knowledgeNodes.findByCode(any())).thenAnswer(inv ->
+                Optional.of(new KnowledgeNode(inv.getArgument(0),
+                        com.syllabai.knowledge.NodeType.SUBTOPIC, "t", "d",
+                        KnowledgeNode.ValidationStatus.VALIDATED, "test", null)));
+        when(questions.deactivateByRefs(any())).thenReturn(0);
+        when(questions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionVersions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markSchemes.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionParts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markPoints.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionOptions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionTopics.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.ingest(zip(pkg(List.of(mcq("sme-eq-t-q1"))), Map.of()));
+
+        org.mockito.Mockito.verify(assets, org.mockito.Mockito.never()).deleteAllInBatch();
+        org.mockito.Mockito.verify(assets, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ADR-026 amendment: the package's source field becomes the version/scheme provenance")
+    void packageSourceBecomesProvenance() throws Exception {
+        when(knowledgeNodes.findByCode(any())).thenAnswer(inv ->
+                Optional.of(new KnowledgeNode(inv.getArgument(0),
+                        com.syllabai.knowledge.NodeType.SUBTOPIC, "t", "d",
+                        KnowledgeNode.ValidationStatus.VALIDATED, "test", null)));
+        when(questions.deactivateByRefs(any())).thenReturn(0);
+        when(questions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionVersions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markSchemes.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionParts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(markPoints.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionOptions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(questionTopics.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.ingest(zip(pkg("sme-eq-igcse-maths-a-18-higher", List.of(mcq("sme-eq-t-q1"))),
+                Map.of()));
+
+        var versionCaptor = org.mockito.ArgumentCaptor.forClass(com.syllabai.assessment.QuestionVersion.class);
+        org.mockito.Mockito.verify(questionVersions).save(versionCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(versionCaptor.getValue().sourceDocumentId())
+                .isEqualTo("sme-eq-igcse-maths-a-18-higher");
     }
 
     private byte[] zip(SmeQuestionPackageDtos.Package pkg, Map<String, byte[]> assets)

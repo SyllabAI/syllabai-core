@@ -68,7 +68,13 @@ public final class SmeQuestionPackageDtos {
             String prompt,
             int marks,
             String commandWord,
-            String solutionMd) {
+            String solutionMd,
+            // ADR-026 amendment (layer-3 multi-subject): a part may carry its
+            // own options — an option-bearing part inside a STRUCTURED question
+            // makes the question MIXED, and the ingest emits the -pN/-s multi-row
+            // family shape the QuestionFamilyAssembler reassembles (production
+            // 4CH1 convention). Null for ordinary structured parts.
+            List<Option> options) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
