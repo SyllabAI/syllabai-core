@@ -31,12 +31,16 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -118,10 +122,25 @@ class AssignmentFlowIT {
                 "ItLearner123!", "It Learner")).user().id();
     }
 
+    /** The teacher controller carries the class-level @PreAuthorize role
+     *  check; these tests invoke it DIRECTLY (no HTTP), so the role check
+     *  sees the SecurityContext, not the JWT — install a teacher
+     *  authentication before touching the teacher surface (cleared after
+     *  each test). HTTP-layer RBAC is pinned separately by
+     *  TeacherRouteSecurityIT. */
     private UUID newTeacher() {
-        return authService.provisionUser(
+        UUID id = authService.provisionUser(
                 "it-as-teacher-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
                 "ItTeacher123!", "It Teacher", Set.of(Role.TEACHER)).id();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(id, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_TEACHER"))));
+        return id;
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     private CreateRequest request(String title, List<String> refs, Instant dueAt) {
