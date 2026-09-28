@@ -91,6 +91,62 @@ class ChunkLexicalRepositoryTest {
     }
 
     @Test
+    @DisplayName("serving-eligible overload: null curriculum version id is rejected before any SQL (T-C07)")
+    void servingEligibleNullScopeRejected() {
+        assertThatThrownBy(() -> repository.searchServingEligible("moles", null, null, 5))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("never runs unscoped");
+    }
+
+    @Test
+    @DisplayName("serving-eligible overload: blank query fails closed without SQL (T-C05)")
+    void servingEligibleBlankQueryFailClosed() {
+        assertThat(repository.searchServingEligible("", null, CV_ID, 5)).isEmpty();
+        assertThat(repository.searchServingEligible(null, null, CV_ID, 5)).isEmpty();
+        verifyNoInteractions(jdbc);
+    }
+
+    @Test
+    @DisplayName("T-C05/T-C27: serving-eligible SQL carries the paper-anchored VALIDATED gate — the card axis (subject branch) is deliberately absent here")
+    void servingEligibleSqlCarriesValidatedGate() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        repository.searchServingEligible("electrolysis of molten lead bromide", null, CV_ID, 5);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(sql.capture(), any(RowMapper.class), any(Object[].class));
+        assertThat(sql.getValue())
+                // the boundary: only a VALIDATED owning paper serves
+                .contains("p.validation_state = 'VALIDATED'")
+                .contains("websearch_to_tsquery('english', ?)")
+                .contains("c.embed_rev = ?")
+                .contains("s.curriculum_version_id = ?")
+                .contains("p.question_paper_document_id = d.document_id")
+                .contains("p.mark_scheme_document_id = d.document_id")
+                // the V33 subject branch is a VECTOR-surface-only path; the lexical
+                // arm stays exam-paper-anchored, so paper-less card chunks can never
+                // surface here at ANY validation state
+                .doesNotContain("s2.id = c.subject_id");
+        assertThat(countOccurrences(sql.getValue(), "validation_state = 'VALIDATED'")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("serving-eligible bind order: query, embed_rev, curriculum id, limit — never SQL-folded")
+    void servingEligibleBindOrder() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        repository.searchServingEligible("moles", null, CV_ID, 9);
+
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(sql.capture(), any(RowMapper.class), args.capture());
+        assertThat(sql.getValue()).contains("p.validation_state = 'VALIDATED'");
+        assertThat(args.getValue()).containsExactly("moles", ChunkVectorRepository.CURRENT_EMBED_REV, CV_ID, 9);
+    }
+
+    @Test
     @DisplayName("document kinds fold into the SQL text as code-controlled enum names")
     void kindFilterFoldedIntoSqlText() {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -109,5 +165,16 @@ class ChunkLexicalRepositoryTest {
         verify(jdbc, org.mockito.Mockito.times(2))
                 .query(sql.capture(), any(RowMapper.class), any(Object[].class));
         assertThat(sql.getValue()).doesNotContain("d.kind in");
+    }
+
+    /** Occurrence count of a literal substring (the VALIDATED gate appears once — paper branch only). */
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.indexOf(needle, idx)) != -1) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
     }
 }
