@@ -100,31 +100,30 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("X-Forwarded-For RIGHTMOST hop is the client key — the leftmost is "
-            + "attacker-controlled (live probe: Render APPENDS, rotating a fake "
-            + "leftmost must not mint fresh budgets)")
-    void xffRightMostHopKeysTheBucket() throws Exception {
-        // same topology the live probe exploited: fake leftmost, real client rightmost
+    @DisplayName("trusted-chain walk: the FIRST PUBLIC hop from the right is the key — "
+            + "fake hops left of the proxy append never matter (live-probed Render "
+            + "topology: [client hops..., real peer, varying internal hop])")
+    void xffFirstPublicFromRightKeysTheBucket() throws Exception {
+        // exact live-probed shape: attacker fakes + real peer + internal hop
         MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
-        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7");
+        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7, 10.44.0.7");
         MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
-        b.addHeader("X-Forwarded-For", "8.8.8.8, 203.0.113.7");
+        b.addHeader("X-Forwarded-For", "8.8.8.8, 203.0.113.7, 10.44.9.9");
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(200);
-        // same REAL client (rightmost) despite the rotated fake leftmost -> exhausted
+        // same REAL peer (203.0.113.7) despite rotated fakes AND varying internal -> exhausted
         assertThat(fire(a).getStatus()).isEqualTo(429);
-        // a different fake leftmost no longer mints a fresh budget: b's rightmost
-        // is the same 203.0.113.7 -> same bucket -> still 429
+        // rotated fake leftmost no longer mints a fresh budget -> same bucket
         assertThat(fire(b).getStatus()).isEqualTo(429);
     }
 
     @Test
-    @DisplayName("a genuinely different rightmost client gets its own budget")
-    void xffDistinctRightMostClientsBucketIndependently() throws Exception {
+    @DisplayName("a genuinely different real peer gets its own budget")
+    void xffDistinctRealPeersBucketIndependently() throws Exception {
         MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
-        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7");
+        a.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.7, 10.44.0.7");
         MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
-        b.addHeader("X-Forwarded-For", "9.9.9.9, 198.51.100.9");
+        b.addHeader("X-Forwarded-For", "9.9.9.9, 198.51.100.9, 10.44.0.7");
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(429);
@@ -132,18 +131,35 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("a private rightmost hop falls back to the socket peer — internal "
-            + "callers cannot spoof fresh budgets with reserved addresses")
-    void xffPrivateRightMostFallsBackToRemoteAddr() throws Exception {
-        // both requests carry a private rightmost -> both key on 127.0.0.1
+    @DisplayName("private hops are SKIPPED, not keys — a client fake cannot hide behind "
+            + "an injected private hop either (all-private headers fall back to the peer)")
+    void xffPrivateHopsAreSkipped() throws Exception {
+        // attacker injects a public fake then a private hop trying to force the
+        // remoteAddr fallback: the walk skips the private hop and keys the fake's
+        // PUBLIC left-neighbour... which is STILL stable across the attack — the
+        // fallback only fires when the whole chain is private
         MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
-        a.addHeader("X-Forwarded-For", "203.0.113.7, 192.168.5.5");
+        a.addHeader("X-Forwarded-For", "203.0.113.7, 10.255.255.5");
         MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
-        b.addHeader("X-Forwarded-For", "198.51.100.9, 10.255.255.5");
+        b.addHeader("X-Forwarded-For", "203.0.113.7, 192.168.5.5, 10.44.0.7");
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(200);
         assertThat(fire(a).getStatus()).isEqualTo(429);
-        // b's rightmost is private -> key = 127.0.0.1 = a's bucket -> still 429
+        // b walks: 10.44.0.7 skip, 192.168.5.5 skip, 203.0.113.7 -> a's bucket
+        assertThat(fire(b).getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    @DisplayName("an all-private header falls back to the socket peer")
+    void xffAllPrivateFallsBackToRemoteAddr() throws Exception {
+        MockHttpServletRequest a = post("/api/v1/auth/login", "127.0.0.1");
+        a.addHeader("X-Forwarded-For", "10.0.0.1, 192.168.5.5");
+        MockHttpServletRequest b = post("/api/v1/auth/login", "127.0.0.1");
+        b.addHeader("X-Forwarded-For", "10.77.3.3");
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(200);
+        assertThat(fire(a).getStatus()).isEqualTo(429);
+        // both fall back to 127.0.0.1 -> same bucket
         assertThat(fire(b).getStatus()).isEqualTo(429);
     }
 

@@ -166,15 +166,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Client-IP key for the auth tier. The leftmost XFF entry is
-     * ATTACKER-CONTROLLED: a live probe (2026-09-28) confirmed that rotating
-     * a fake leftmost value yields a fresh budget per request — Render's LB
-     * APPENDS the observed peer, it does not overwrite. The RIGHTMOST entry
-     * is the one the last trusted proxy added and cannot be injected right
-     * of, so that is the key. Private/reserved rightmost values (a client
-     * behind a corporate proxy chain, or health checks) fall back to the
-     * socket peer so internal callers share one bucket instead of spoofing
-     * fresh ones.
+     * Client-IP key for the auth tier — trusted-chain walk. Live probing
+     * (2026-09-28) established Render's actual header behavior:
+     * X-Forwarded-For arrives as [client-supplied hops..., real peer,
+     * internal hop(s)] — the proxy APPENDS the observed peer and at least one
+     * further PRIVATE internal hop whose address varies per request. So the
+     * RIGHTMOST entry is infrastructure (the old leftmost key was
+     * attacker-controlled — rotating a fake leftmost minted fresh budgets —
+     * and a naive rightmost key degenerates to varying infrastructure
+     * addresses). The correct key is the FIRST PUBLIC address walking from
+     * the right: everything the client supplied sits left of the proxy's
+     * append, so it can never be reached by this walk. All-private headers
+     * (direct internal traffic) fall back to the socket peer.
      */
     static String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
@@ -182,10 +185,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             String[] hops = forwarded.split(",");
             for (int i = hops.length - 1; i >= 0; i--) {
                 String hop = hops[i].strip();
-                if (hop.isEmpty()) {
-                    continue;
+                if (hop.isEmpty() || isPrivateAddress(hop)) {
+                    continue; // trusted infrastructure hop — keep walking left
                 }
-                return isPrivateAddress(hop) ? request.getRemoteAddr() : hop;
+                return hop;
             }
         }
         String remote = request.getRemoteAddr();
