@@ -9,9 +9,24 @@ public record LearnerStateView(
         List<SkillStateView> skillStates,
         List<MisconceptionStateView> misconceptionStates,
         List<ReviewView> pendingReviews,
-        List<TutorEngagementView> tutorEngagements) {
+        List<TutorEngagementView> tutorEngagements,
+        List<FlashcardRatingView> flashcardRatings) {
 
     public record ReviewView(UUID nodeId, Instant dueAt, String reason, String nodeName) {
+    }
+
+    /**
+     * V47 pre-V48 rows compatibility constructor: the flashcard evidence class
+     * (ADR-029 tranche 4.4) was added after the first consumers; this keeps any
+     * caller still using the five-arg shape compiling with an honest empty list.
+     */
+    public LearnerStateView(UUID learnerId,
+                            List<SkillStateView> skillStates,
+                            List<MisconceptionStateView> misconceptionStates,
+                            List<ReviewView> pendingReviews,
+                            List<TutorEngagementView> tutorEngagements) {
+        this(learnerId, skillStates, misconceptionStates, pendingReviews, tutorEngagements,
+                List.of());
     }
 
     /**
