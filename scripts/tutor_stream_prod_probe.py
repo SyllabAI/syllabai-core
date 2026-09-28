@@ -55,15 +55,22 @@ def register():
 
 
 def parse_sse(raw):
-    """raw SSE text -> ordered [(event, payload_dict)]"""
+    """raw SSE text -> ordered [(event, payload_dict)] — spec-compliant field
+    parsing: a single leading space after the colon is optional (Spring's
+    SseEmitter writes 'event:name' with no space)"""
     events = []
     for frame in raw.split("\n\n"):
         event, data = None, None
         for line in frame.split("\n"):
-            if line.startswith("event: "):
-                event = line[7:]
-            elif line.startswith("data: "):
-                data = line[6:]
+            for prefix, store in (("event:", "e"), ("data:", "d")):
+                if line.startswith(prefix):
+                    value = line[len(prefix):]
+                    if value.startswith(" "):
+                        value = value[1:]
+                    if store == "e":
+                        event = value
+                    else:
+                        data = value
         if event and data:
             try:
                 events.append((event, json.loads(data)))
@@ -72,8 +79,9 @@ def parse_sse(raw):
     return events
 
 
-def stream_ask(token, question):
+def stream_ask(token, question, timing=False):
     t0 = time.monotonic()
+    first_event_s = None
     status, headers, body = http("POST", "/api/v1/tutor/ask/stream", token,
                                  {"question": question, "history": []})
     elapsed = time.monotonic() - t0
@@ -142,22 +150,30 @@ def main():
             f"out-of-range citation marker [{n}] streamed to the learner"
     print("[served] citation-marker hygiene OK (parity with /ask)")
 
-    # ── 2. REFUSAL path ───────────────────────────────────────────────────
+    # ── 2. DETERMINISTIC refusal path (the fail-open guard — the only refusal
+    # production can reach deterministically: a complete paper-question identity
+    # that bound no validated anchor zeroes the evidence pool). NOTE: generic
+    # gibberish does NOT hit the grounding gate on prod — the vector arm always
+    # returns top-k candidates and the MODEL refuses inline (refused=false);
+    # verified byte-equal against /ask (parity, not divergence).
     status, ctype, events, elapsed = stream_ask(
-        token, "Explain the quantum chromodynamics of tachyon saucepans xyzzy")
+        token, "explain question 10 from june 2019 paper 2")
     names = [e for e, _ in events]
     meta_evt = dict(events)["meta"]
+    citations_evt = dict(events)["citations"]
     answer = "".join(d.get("text", "") for e, d in events if e == "delta")
-    print(f"\n[refusal] status={status} wall={elapsed:.1f}s events={names}")
-    print(f"[refusal] provider={meta_evt.get('provider')} refused={meta_evt.get('refused')}")
-    print(f"[refusal] text starts: {answer[:90]}...")
+    print(f"\n[guard] status={status} wall={elapsed:.1f}s events={names}")
+    print(f"[guard] provider={meta_evt.get('provider')} refused={meta_evt.get('refused')} "
+          f"citations={len(citations_evt.get('citations', []))}")
+    print(f"[guard] text starts: {answer[:90]}...")
     assert status == 200 and names == ["citations", "meta", "delta", "done"], \
-        f"refusal event sequence wrong: {names}"
+        f"guard event sequence wrong: {names}"
     assert meta_evt.get("refused") is True
-    assert meta_evt.get("provider") in ("deterministic-refusal", "deterministic-paper-refusal")
+    assert meta_evt.get("provider") == "deterministic-paper-refusal"
+    assert citations_evt.get("citations") == [], "the guard must zero citations"
     assert answer.startswith(REFUSAL_PREFIX), \
         f"refusal text diverged from the deterministic contract: {answer[:80]!r}"
-    print("[refusal] byte-identical deterministic refusal OK")
+    print("[guard] byte-identical deterministic refusal (fail-open guard) OK")
 
     # ── 3. budget sanity: two stream asks + zero 429s ─────────────────────
     print("\n[budget] two stream asks admitted (LLM tier), zero 429s — OK")
