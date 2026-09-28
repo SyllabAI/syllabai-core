@@ -21,4 +21,11 @@ public interface RevisionNoteViewedRepository extends JpaRepository<RevisionNote
     @Query("delete from RevisionNoteViewed v where not exists "
             + "(select 1 from RevisionNote n where n.noteId = v.noteId)")
     int deleteOrphans();
+
+    /**
+     * Course-stats aggregate (ADR-029 tranche 4.10): distinct notes this
+     * learner has opened. The (user, note) marker is idempotent — one row
+     * per note — so the row count IS the distinct-note coverage.
+     */
+    long countByUserId(UUID userId);
 }

@@ -65,6 +65,15 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     long countByLearnerId(UUID learnerId);
 
     /**
+     * Course-stats aggregate (ADR-029 tranche 4.10): distinct questions this
+     * learner has attempted — coverage, not volume (retries count once). The
+     * attempt history view is windowed, so this count cannot be derived
+     * client-side honestly.
+     */
+    @Query("select count(distinct a.question.id) from Attempt a where a.learnerId = :learnerId")
+    long countDistinctQuestionsByLearnerId(@Param("learnerId") UUID learnerId);
+
+    /**
      * Graded-attempt correctness aggregates per condition for one learner+node
      * (Paper B §16 fluency gap). Rows: [timed(boolean), total(bigint), correct(bigint)].
      * Counts primary-topic and question_topics mappings; only attempts whose
