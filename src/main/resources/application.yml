@@ -104,7 +104,10 @@ syllabai:
 
   security:
     jwt-secret: ${SYLLABAI_JWT_SECRET:}          # required; blank fails fast with a clear message
-    jwt-ttl: PT12H
+    # PT2H (audit residual promoted 09-28): token_version revocation (R1) kills a
+    # stolen token at its next API call; 2h bounds the never-reused copied-token
+    # window while a study session comfortably fits. Tune via SYLLABAI_JWT_TTL.
+    jwt-ttl: ${SYLLABAI_JWT_TTL:PT2H}
     cors-allowed-origins: ${SYLLABAI_CORS_ORIGINS:http://localhost:3000,https://syllabai.vercel.app}
 
   # rate limiting (deep-audit 09-28 M1): auth tier keyed by client IP,
