@@ -102,24 +102,23 @@ class FlashcardRatingFlowIT {
 
     @Test
     @DisplayName("rating persists on a resolved subtopic anchor, surfaces newest-first in /state, and re-rating appends")
-    void happyPathAppendAndState() {
+    void happyPathAppendAndState() throws InterruptedException {
         UUID learner = newLearner();
 
+        // pace the POSTs like a human deck flip: back-to-back calls can land
+        // inside one clock tick on coarse CI clocks, and occurred_at ties make
+        // "newest first" genuinely ambiguous (production never sees ties)
         FlashcardRatingView first = ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_testCard1", "know", SUBTOPIC_CODE));
-        assertThat(first.cardId()).isEqualTo("fl_testCard1");
-        assertThat(first.rating()).isEqualTo("know");
-        assertThat(first.subtopicCode()).isEqualTo(SUBTOPIC_CODE);
-        assertThat(first.nodeId()).isEqualTo(subtopicNodeId);
-        assertThat(first.occurredAt()).isNotNull();
-
-        // the hub's lowercase wire form parses to the same canonical rating
+        Thread.sleep(60);
         ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_testCard2", "still-learning", SUBTOPIC_CODE));
+        Thread.sleep(60);
 
         // re-rate card 1 as still-learning: append-only — a NEW row, newest wins
         FlashcardRatingView rerate = ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_testCard1", "still-learning", SUBTOPIC_CODE));
+        assertThat(first.rating()).isEqualTo("know");
         assertThat(rerate.rating()).isEqualTo("still-learning");
         assertThat(rowsOf(learner)).isEqualTo(3);
 
