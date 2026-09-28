@@ -1,6 +1,8 @@
 package com.syllabai.identity;
 
 import java.util.List;
+import com.syllabai.ratelimit.RateLimitFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,11 +30,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final SecurityProperties properties;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          RateLimitFilter rateLimitFilter,
                           SecurityProperties properties) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitFilter = rateLimitFilter;
         this.properties = properties;
     }
 
@@ -69,8 +74,23 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
                         (request, response, authException) ->
                                 response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED)))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // rate limiting (deep-audit 09-28 M1) runs inside the security
+                // chain AFTER the JWT filter: the LLM tier keys on the learner
+                // identity the JWT filter resolved
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
         return http.build();
+    }
+
+    /** the limiter must run ONLY inside the security chain (the LLM tier
+     *  needs the JWT context); this registration-off bean stops Spring Boot
+     *  from ALSO auto-registering the @Component filter on the servlet
+     *  chain, where it would double-count and run pre-authentication */
+    @Bean
+    FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

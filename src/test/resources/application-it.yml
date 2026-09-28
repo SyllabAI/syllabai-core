@@ -9,6 +9,10 @@ syllabai:
   seed:
     demo-users:
       enabled: false
+  # ITs fire many same-learner LLM asks in one minute (flow suites, e2e
+  # payload assertions); the limiter itself is unit-tested directly
+  ratelimit:
+    enabled: false
 
 logging:
   level:

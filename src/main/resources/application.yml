@@ -107,6 +107,19 @@ syllabai:
     jwt-ttl: PT12H
     cors-allowed-origins: ${SYLLABAI_CORS_ORIGINS:http://localhost:3000,https://syllabai.vercel.app}
 
+  # rate limiting (deep-audit 09-28 M1): auth tier keyed by client IP,
+  # LLM tier keyed by learner — in-memory fixed windows, single-instance.
+  # Defaults live in RateLimitProperties; repeated here so ops can see and
+  # tune the budgets without reading code.
+  ratelimit:
+    enabled: true
+    window: 60s
+    login-per-ip: 10
+    register-per-ip: 5
+    bootstrap-per-ip: 3
+    password-per-ip: 10
+    llm-per-learner: 20          # above the anchor sweep's ~11 asks/learner/run
+
   llm:
     groq:
       enabled: ${SYLLABAI_GROQ_ENABLED:true}
