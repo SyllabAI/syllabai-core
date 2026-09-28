@@ -53,8 +53,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *       as a permanent fixture test.</li>
  *   <li><b>Dual-view design pinned</b>: the NEUTRAL search surfaces (the
  *       benchmark/audit surfaces the T-C13 harness replays against for the
- *       ALL-denominator views) DO return SUGGESTED rows by design — this IT
- *       guards them against a future over-tightening "fix".</li>
+ *       ALL-denominator views) DO return SUGGESTED rows by design — on the
+ *       VECTOR surface including the cards (subject branch), on the LEXICAL
+ *       surface still paper-anchored only. This IT guards both against a
+ *       future over-tightening "fix" — and the lexical asymmetry against a
+ *       silent widening.</li>
  *   <li><b>The flip contract</b>: flipping the card document's own
  *       validation_state to VALIDATED (inside this throwaway container ONLY —
  *       never production, never agent-asserted) makes the card servable via
@@ -204,11 +207,13 @@ class CardServingBoundaryIT {
         insertDocument(DOC_CARD_1, "it-card-bnd-card-1", Document.Kind.EXTERNAL_QUESTIONS, "SUGGESTED", CONTENT_CARD_1);
         insertDocument(DOC_CARD_2, "it-card-bnd-card-2", Document.Kind.EXTERNAL_QUESTIONS, "SUGGESTED", CONTENT_CARD_2);
 
-        // seed sanity: the neutral surfaces see ALL six chunks — the data matches;
-        // only the serving gate decides what serves. Self-diagnosing on failure:
-        // one CI cycle must pinpoint which premise of the boundary proof broke.
+        // seed sanity: the data matches; only the serving gate decides what serves.
+        // VECTOR neutral sees all six (paper branch + V33 subject branch for the cards);
+        // LEXICAL neutral is paper-anchored BY DESIGN (no subject branch there — V33),
+        // so it can only ever see the four QP/MS chunks, never the two cards.
+        // Self-diagnosing on failure: one CI cycle must pinpoint which premise broke.
         List<ChunkHit> vectorSeeded = vectorNeutral();
-        if (vectorSeeded.size() != 6 || lexicalNeutral().size() != 6) {
+        if (vectorSeeded.size() != 6 || lexicalNeutral().size() != 4) {
             Integer docs = jdbc.queryForObject(
                     "select count(*) from documents where source_uri = 'it://card-boundary'", Integer.class);
             Integer chunks = jdbc.queryForObject("select count(*) from document_chunks", Integer.class);
@@ -302,11 +307,20 @@ class CardServingBoundaryIT {
     @Order(6)
     @DisplayName("the neutral benchmark surfaces still return SUGGESTED rows — the ALL-denominator view is by design")
     void neutralBenchmarkSearchStillSurfacesSuggestedRows() {
-        Set<UUID> suggested = Set.of(
-                rowId("chunk|it-card-bnd-qp-b"), rowId("chunk|it-card-bnd-ms-b"),
+        Set<UUID> suggestedPaperChunks = Set.of(
+                rowId("chunk|it-card-bnd-qp-b"), rowId("chunk|it-card-bnd-ms-b"));
+        Set<UUID> suggestedCardChunks = Set.of(
                 rowId("chunk|it-card-bnd-card-1"), rowId("chunk|it-card-bnd-card-2"));
-        assertThat(chunkIds(vectorNeutral())).containsAll(suggested);
-        assertThat(chunkIds(lexicalNeutral())).containsAll(suggested);
+        // VECTOR all-view: SUGGESTED paper chunks AND SUGGESTED cards are visible
+        // (the ALL-denominator benchmark view the T-C13 harness replays against)
+        assertThat(chunkIds(vectorNeutral())).containsAll(suggestedPaperChunks);
+        assertThat(chunkIds(vectorNeutral())).containsAll(suggestedCardChunks);
+        // LEXICAL all-view: paper-anchored only — the SUGGESTED paper's chunks are
+        // visible, the cards structurally unreachable even here (no paper row, no
+        // subject branch on the lexical arm). Pinned so a future "widening" is a
+        // deliberate, reviewed act — never an accident.
+        assertThat(chunkIds(lexicalNeutral())).containsAll(suggestedPaperChunks);
+        assertThat(chunkIds(lexicalNeutral())).doesNotContainAnyElementsOf(suggestedCardChunks);
     }
 
     @Test
