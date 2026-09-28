@@ -260,8 +260,8 @@ class AssignmentFlowIT {
         assertThat(reopened.status()).isEqualTo("open");
         learnerController.submit(learner, id, new SubmissionRequest(3, 5));
 
-        // three hand-ins total, latest (3q/5 marks) is the current state
-        assertThat(submissionRowsOf(learner)).isEqualTo(3);
+        // TWO hand-ins total (the 409'd attempt persisted nothing), latest (3q/5) current
+        assertThat(submissionRowsOf(learner)).isEqualTo(2);
         assertThat(learnerController.list(learner).stream()
                 .filter(v -> v.assignment().id().equals(id)).findFirst().orElseThrow()
                 .mySubmission().questionsCompleted()).isEqualTo(3);
