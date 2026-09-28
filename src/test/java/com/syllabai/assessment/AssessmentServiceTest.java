@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.syllabai.TestIds;
 import com.syllabai.assessment.dto.SubmitAnswerRequest;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -43,7 +44,7 @@ class AssessmentServiceTest {
     private final List<Object> published = new ArrayList<>();
     private final AssessmentService service = new AssessmentService(
             questions, questionTopics, questionVersions, examPapers, answers, attempts,
-            new EvidencePublisher(published::add));
+            new EvidencePublisher(published::add, mock(SmeQuestionSpecPointRepository.class)));
 
     private Question question() {
         // build child mocks first — Mockito forbids stubbing inside another when(...)

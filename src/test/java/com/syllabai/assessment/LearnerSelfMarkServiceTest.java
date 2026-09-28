@@ -12,6 +12,7 @@ import com.syllabai.TestIds;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.ConflictException;
 import com.syllabai.shared.NotFoundException;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,7 +40,7 @@ class LearnerSelfMarkServiceTest {
     private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
     private final LearnerSelfMarkRepository selfMarks = mock(LearnerSelfMarkRepository.class);
     private final List<Object> published = new ArrayList<>();
-    private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add);
+    private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add, mock(SmeQuestionSpecPointRepository.class));
 
     private final LearnerSelfMarkService service = new LearnerSelfMarkService(
             attempts, answers, questionTopics, selfMarks, evidencePublisher);

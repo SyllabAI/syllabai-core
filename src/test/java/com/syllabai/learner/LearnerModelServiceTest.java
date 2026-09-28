@@ -36,6 +36,8 @@ class LearnerModelServiceTest {
     private static final UUID ATTEMPT = UUID.randomUUID();
     private static final UUID QUESTION = UUID.randomUUID();
     private static final UUID NODE = UUID.randomUUID();
+    private static final UUID SPEC_POINT_1 = UUID.randomUUID();
+    private static final UUID SPEC_POINT_2 = UUID.randomUUID();
     private static final UUID MISCONCEPTION = UUID.randomUUID();
     private static final Instant WHEN = Instant.parse("2026-09-03T12:00:00Z");
 
@@ -52,7 +54,7 @@ class LearnerModelServiceTest {
                                                      List<UUID> expressed,
                                                      List<UUID> observed) {
         return new AssessmentEvidenceRecordedEvent(
-                ATTEMPT, LEARNER, QUESTION, List.of(NODE), correct, 1, correct ? 1 : 0,
+                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(SPEC_POINT_1, SPEC_POINT_2), correct, 1, correct ? 1 : 0,
                 1000L, 3, false, false, expressed, observed, "test", WHEN);
     }
 
@@ -130,6 +132,50 @@ class LearnerModelServiceTest {
         assertThat(event.priorMastery()).isCloseTo(0.1131, within(1e-9));
         assertThat(event.posteriorMastery()).isCloseTo(0.3832, within(1e-4));
         assertThat(event.correctness()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the question's mapped spec points ride the same evidence class — skills fire on points, not just topics")
+    void specPointsReceiveTheSameEvidence() {
+        when(skillStates.findByLearnerIdAndNodeId(any(), any())).thenReturn(Optional.empty());
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, List.of(), List.of()));
+
+        ArgumentCaptor<List<SkillState>> saved = ArgumentCaptor.captor();
+        verify(skillStates).saveAll(saved.capture());
+        // the topic node first (event order), then the mapped spec points —
+        // every node gets the SAME marked-attempt update (T-C18 mapping finally
+        // feeds the learner model: the hub's KG paints points, not just topics)
+        assertThat(saved.getValue())
+                .extracting(SkillState::nodeId)
+                .containsExactly(NODE, SPEC_POINT_1, SPEC_POINT_2);
+        for (SkillState s : saved.getValue()) {
+            assertThat(s.attempts()).isEqualTo(1);
+            assertThat(s.correctCount()).isEqualTo(1);
+        }
+        long masteryEvents = published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent).count();
+        assertThat(masteryEvents).isEqualTo(3);   // one per evidence node
+    }
+
+    @Test
+    @DisplayName("a spec point that IS the topic node is deduped — one update per node per attempt")
+    void specPointDedupedAgainstTopicNodes() {
+        when(skillStates.findByLearnerIdAndNodeId(any(), any())).thenReturn(Optional.empty());
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        AssessmentEvidenceRecordedEvent event = new AssessmentEvidenceRecordedEvent(
+                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(NODE), true, 1, 1,
+                1000L, 3, false, false, List.of(), List.of(), "test", WHEN);
+        service.onAssessmentEvidence(event);
+
+        ArgumentCaptor<List<SkillState>> saved = ArgumentCaptor.captor();
+        verify(skillStates).saveAll(saved.capture());
+        assertThat(saved.getValue()).hasSize(1);
+        assertThat(saved.getValue().get(0).nodeId()).isEqualTo(NODE);
     }
 
     @Test

@@ -17,6 +17,14 @@ import java.util.UUID;
  * @param learnerId        user id of the learner
  * @param questionId       question that was attempted
  * @param topicNodeIds     knowledge-graph nodes the question tests (primary first)
+ * @param specPointNodeIds the question's mapped spec-point nodes (T-C18 mapping,
+ *                         ADR-026/V30 {@code question_spec_points}) — the SAME
+ *                         marked-attempt evidence, fired at spec-point granularity
+ *                         so the learner model can honestly paint points, not just
+ *                         topics. Empty on unmapped questions (topic-only firing).
+ *                         Processed identically to {@code topicNodeIds} by the
+ *                         learner model (same BKT update, same decay, same review
+ *                         scheduling); research telemetry stays topic-scoped.
  * @param correctness      whether the answer was correct
  * @param marksTotal       marks available for the question
  * @param marksAwarded     marks awarded (raw score; equals marksTotal/0 for MCQ v0)
@@ -38,6 +46,7 @@ public record AssessmentEvidenceRecordedEvent(
         UUID learnerId,
         UUID questionId,
         List<UUID> topicNodeIds,
+        List<UUID> specPointNodeIds,
         boolean correctness,
         int marksTotal,
         int marksAwarded,

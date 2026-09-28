@@ -58,7 +58,7 @@ class StruggleInferenceServiceTest {
 
     private AssessmentEvidenceRecordedEvent event(boolean correctness, boolean selfDoubt, boolean timed) {
         return new AssessmentEvidenceRecordedEvent(
-                UUID.randomUUID(), learnerId, UUID.randomUUID(), List.of(topicId),
+                UUID.randomUUID(), learnerId, UUID.randomUUID(), List.of(topicId), List.of(),
                 correctness, 1, correctness ? 1 : 0, 30_000L, 3, selfDoubt, timed,
                 List.of(), List.of(), "unit-test", now);
     }
