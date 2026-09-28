@@ -62,6 +62,7 @@ class FlashcardRatingFlowIT {
 
     private static final String SUBTOPIC_CODE = "4CH1-S1-a";
     private static final String SUBJECT_CODE = "4CH1";
+    private static final String CONCEPT_CODE = "4CH1-CON-IT-FIXTURE";
     private static UUID subtopicNodeId;
 
     @Autowired
@@ -79,11 +80,16 @@ class FlashcardRatingFlowIT {
 
     @BeforeAll
     static void seedNodes(@Autowired KnowledgeNodeRepository knowledgeNodes) {
+        // mirrors the production 4CH1 graph's level naming: the deck-anchor
+        // level ("4CH1-S1-a") ingests as TOPIC, the spec statements as SUBTOPIC
         KnowledgeNode subtopic = knowledgeNodes.save(new KnowledgeNode(
-                SUBTOPIC_CODE, NodeType.SUBTOPIC, "States of matter", null,
+                SUBTOPIC_CODE, NodeType.TOPIC, "States of matter", null,
                 KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
         knowledgeNodes.save(new KnowledgeNode(
                 SUBJECT_CODE, NodeType.SUBJECT, "Chemistry (IGCSE)", null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
+        knowledgeNodes.save(new KnowledgeNode(
+                CONCEPT_CODE, NodeType.CONCEPT, "IT concept fixture", null,
                 KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
         subtopicNodeId = subtopic.id();
     }
@@ -140,7 +146,7 @@ class FlashcardRatingFlowIT {
     }
 
     @Test
-    @DisplayName("fail-closed attribution: unknown anchor and non-subtopic anchor are 404 and persist nothing")
+    @DisplayName("fail-closed attribution: unknown anchor, subject root and semantic-layer nodes are 404 and persist nothing")
     void failClosedAttribution() {
         UUID learner = newLearner();
         long before = rowsOf(learner);
@@ -148,9 +154,13 @@ class FlashcardRatingFlowIT {
         assertThatThrownBy(() -> ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_x1", "know", "4CH1-S99-z")))
                 .isInstanceOf(NotFoundException.class);
-        // a real node that is NOT a subtopic (the subject root) is equally refused
+        // a real node that is NOT below the subject root (the subject itself)
         assertThatThrownBy(() -> ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_x2", "know", SUBJECT_CODE)))
+                .isInstanceOf(NotFoundException.class);
+        // the semantic layer never takes rating attribution
+        assertThatThrownBy(() -> ratingsController.record(learner,
+                new FlashcardRatingRequest("fl_x3", "know", CONCEPT_CODE)))
                 .isInstanceOf(NotFoundException.class);
 
         assertThat(rowsOf(learner)).isEqualTo(before);

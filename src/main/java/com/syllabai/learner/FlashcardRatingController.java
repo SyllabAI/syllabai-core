@@ -29,11 +29,16 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Contract shape: the hub sends the deck's subtopic anchor — the same
  * RULE_DERIVED anchor that drives deck placement ("4CH1-S1-a") — and this
  * controller resolves it against the ingested curriculum knowledge graph.
- * FAIL-CLOSED ATTRIBUTION: an unknown code, or a code that resolves to a
- * non-SUBTOPIC node, is a 404 and nothing is written — a rating can never
- * claim a node the curriculum does not have. {@code cardId} is the hub
- * content id ("fl_*") kept as an opaque external reference: the hub owns
- * card identity, core owns the learner model.</p>
+ * FAIL-CLOSED ATTRIBUTION: the anchor must resolve to a CURRICULUM-STRUCTURE
+ * node below the subject root (UNIT/TOPIC/SUBTOPIC) — the subject root, the
+ * semantic layer (CONCEPT/MISCONCEPTION) and unknown codes are all 404 and
+ * nothing is written. Note the graph's level naming is ingestion-dependent:
+ * on the production 4CH1 graph the deck-anchor level is TOPIC (its children,
+ * the spec statements, are SUBTOPIC), so the gate accepts the whole structure
+ * range rather than hard-coding one level. A rating can never claim a node
+ * the curriculum does not have. {@code cardId} is the hub content id
+ * ("fl_*") kept as an opaque external reference: the hub owns card identity,
+ * core owns the learner model.</p>
  *
  * <p>Evidence class semantics: APPEND-ONLY (every action is a row, the
  * latest row per card is its current rating, the trail preserves re-rating
@@ -70,9 +75,13 @@ public class FlashcardRatingController {
         KnowledgeNode node = knowledgeNodes.findByCode(request.subtopicCode())
                 .orElseThrow(() -> new NotFoundException(
                         "unknown subtopic anchor: " + request.subtopicCode()));
-        if (node.nodeType() != NodeType.SUBTOPIC) {
+        boolean structureNode = node.nodeType() == NodeType.UNIT
+                || node.nodeType() == NodeType.TOPIC
+                || node.nodeType() == NodeType.SUBTOPIC;
+        if (!structureNode) {
             throw new NotFoundException(
-                    "not a subtopic anchor: " + request.subtopicCode());
+                    "not a deck anchor (needs a curriculum-structure node below the subject root): "
+                            + request.subtopicCode());
         }
         FlashcardRating saved = ratings.save(new FlashcardRating(
                 learnerId, node.id(), request.cardId(), rating, Instant.now()));

@@ -27,10 +27,12 @@ import java.util.UUID;
  *       trails in a later tranche; nothing here pre-empts its design.</li>
  * </ul>
  *
- * <p>Attribution: {@code nodeId} is the SUBTOPIC knowledge node the deck is
- * anchored on (e.g. 4CH1-S1-a), resolved server-side against the ingested
- * curriculum — the controller refuses unknown codes, so a row can never
- * claim a node the curriculum does not have. {@code cardId} is the hub
+ * <p>Attribution: {@code nodeId} is the curriculum-structure knowledge node
+ * the deck is anchored on (e.g. 4CH1-S1-a — on the production 4CH1 graph
+ * that level ingests as TOPIC), resolved server-side against the ingested
+ * curriculum — the controller refuses unknown codes, semantic-layer nodes
+ * (CONCEPT/MISCONCEPTION) and the subject root, so a row can never claim a
+ * node the curriculum does not have. {@code cardId} is the hub
  * content id ("fl_*") kept as an opaque external reference: the hub owns
  * card identity, core owns the learner model.</p>
  */
@@ -59,7 +61,7 @@ public class FlashcardRating {
     @Column(name = "learner_id", nullable = false)
     private UUID learnerId;
 
-    /** the SUBTOPIC knowledge node the deck is anchored on (resolved, fail-closed) */
+    /** the curriculum-structure node the deck is anchored on (resolved, fail-closed) */
     @Column(name = "node_id", nullable = false)
     private UUID nodeId;
 
