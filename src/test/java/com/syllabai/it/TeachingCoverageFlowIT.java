@@ -202,8 +202,12 @@ class TeachingCoverageFlowIT {
         assertThat(eventRows.findByClassIdAndSpecPointNodeIdOrderByCreatedAtDesc(classId, sp1))
                 .hasSize(1);
 
-        // blank note normalizes to null — same assertion, still a no-op
-        coverageController.mark(teacher, classId, sp1, new MarkRequest("taught", "   "));
+        // whitespace-padded same note trims to the same assertion — still a no-op
+        // (a blank note on a NOTED row would be a note CLEARANCE, an information
+        // change that is honestly audited — the null-note no-op is pinned in the
+        // unit suite)
+        coverageController.mark(teacher, classId, sp1,
+                new MarkRequest("taught", "  finished before half term  "));
         assertThat(eventRows.findByClassIdAndSpecPointNodeIdOrderByCreatedAtDesc(classId, sp1))
                 .hasSize(1);
 
