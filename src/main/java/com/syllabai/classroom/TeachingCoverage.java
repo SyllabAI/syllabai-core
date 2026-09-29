@@ -132,7 +132,10 @@ public class TeachingCoverage implements Serializable {
         this.status = status;
         this.markedBy = markedBy;
         this.note = note;
+        // ONE clock read: the first assertion timestamp IS the row's creation —
+        // both provably the same moment (asserted by the flow IT)
         this.markedAt = Instant.now();
+        this.createdAt = this.markedAt;
     }
 
     @PrePersist

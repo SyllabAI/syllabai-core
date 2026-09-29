@@ -159,14 +159,15 @@ class TeachingCoverageFlowIT {
     }
 
     private String curriculumFingerprint() {
-        List<String> rows = knowledgeNodes.findByCode(SPEC_POINT_CODE).stream()
+        List<String> rows = new java.util.ArrayList<>();
+        knowledgeNodes.findByCode(SPEC_POINT_CODE).stream()
                 .map(n -> n.code() + "|" + n.title() + "|" + n.description() + "|"
                         + n.validationStatus() + "|" + n.applicability())
-                .toList();
-        rows.addAll(knowledgeNodes.findByCode(TOPIC_CODE).stream()
+                .forEach(rows::add);
+        knowledgeNodes.findByCode(TOPIC_CODE).stream()
                 .map(n -> n.code() + "|" + n.title() + "|" + n.description() + "|"
                         + n.validationStatus() + "|" + n.applicability())
-                .toList());
+                .forEach(rows::add);
         return String.join(";;", rows);
     }
 
