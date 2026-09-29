@@ -114,7 +114,8 @@ public class ClassKnowledgeGraphService {
         Map<UUID, NodeView> structureById = new LinkedHashMap<>();
         Map<UUID, List<NodeView>> childrenOf = new HashMap<>();
         Map<UUID, List<NodeView>> misconceptionsOf = new HashMap<>();
-        collect(tree, childrenOf, structureById, misconceptionsOf);
+        java.util.Set<UUID> miscoNodeIds = new java.util.HashSet<>();
+        collect(tree, childrenOf, structureById, misconceptionsOf, miscoNodeIds);
 
         // one batched query per evidence table for the whole roster × scope
         Map<UUID, List<SkillState>> statesByNode = new HashMap<>();
@@ -125,10 +126,10 @@ public class ClassKnowledgeGraphService {
             }
         }
         Map<UUID, List<MisconceptionState>> miscoByNode = new HashMap<>();
-        if (!roster.isEmpty()) {
+        if (!roster.isEmpty() && !miscoNodeIds.isEmpty()) {
+            // keyed by the MISCONCEPTION node ids — never the parent topic ids
             for (MisconceptionState m : misconceptionStates
-                    .findByLearnerIdInAndMisconceptionNodeIdIn(
-                            roster, misconceptionsOf.keySet())) {
+                    .findByLearnerIdInAndMisconceptionNodeIdIn(roster, miscoNodeIds)) {
                 miscoByNode.computeIfAbsent(m.misconceptionNodeId(), k -> new ArrayList<>())
                         .add(m);
             }
@@ -181,7 +182,8 @@ public class ClassKnowledgeGraphService {
     private void collect(NodeView node,
                          Map<UUID, List<NodeView>> childrenOf,
                          Map<UUID, NodeView> structureById,
-                         Map<UUID, List<NodeView>> misconceptionsOf) {
+                         Map<UUID, List<NodeView>> misconceptionsOf,
+                         java.util.Set<UUID> miscoNodeIds) {
         if ("MISCONCEPTION".equals(node.type())) {
             return; // misconception nodes are registered under their parent, below
         }
@@ -190,9 +192,10 @@ public class ClassKnowledgeGraphService {
         for (NodeView child : node.children()) {
             if ("MISCONCEPTION".equals(child.type())) {
                 misconceptionsOf.computeIfAbsent(node.id(), k -> new ArrayList<>()).add(child);
+                miscoNodeIds.add(child.id());
             } else {
                 structureChildren.add(child);
-                collect(child, childrenOf, structureById, misconceptionsOf);
+                collect(child, childrenOf, structureById, misconceptionsOf, miscoNodeIds);
             }
         }
         childrenOf.put(node.id(), List.copyOf(structureChildren));

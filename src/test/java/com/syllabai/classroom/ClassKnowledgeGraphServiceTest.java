@@ -232,6 +232,16 @@ class ClassKnowledgeGraphServiceTest {
 
         Map<UUID, ClassGraphNodeView> nodes = byId(build());
 
+        // THE QUERY BOUNDARY: the misconception-state query is keyed by the
+        // MISCONCEPTION node ids — never the parent topic ids (a real bug the
+        // flow IT caught when the unit mock hid the argument)
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<UUID>> miscoNodeCaptor =
+                (ArgumentCaptor<Collection<UUID>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(Collection.class);
+        verify(misconceptionStates).findByLearnerIdInAndMisconceptionNodeIdIn(
+                anyCollection(), miscoNodeCaptor.capture());
+        assertThat(miscoNodeCaptor.getValue()).containsExactly(miscoA);
+
         ClassGraphNodeView a1 = nodes.get(specA1);
         assertThat(a1.learnersMeasured()).isEqualTo(2);
         assertThat(a1.meanMastery()).isEqualTo(0.7);            // (0.9 + 0.5) / 2
