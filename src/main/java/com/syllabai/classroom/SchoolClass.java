@@ -2,6 +2,8 @@ package com.syllabai.classroom;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -69,8 +71,14 @@ public class SchoolClass {
     @Column(name = "name", nullable = false, length = 120)
     private String name;
 
+    /**
+     * Lifecycle status — enum-mapped per the CurriculumVersion house pattern
+     * (EnumType.STRING over VARCHAR(16)); the derived queries bind this enum
+     * directly, so a Status argument can never drift from the column form.
+     */
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
-    private String status;
+    private Status status;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -84,7 +92,7 @@ public class SchoolClass {
         this.courseSlug = courseSlug;
         this.courseLabel = courseLabel;
         this.name = name;
-        this.status = Status.ACTIVE.name();
+        this.status = Status.ACTIVE;
     }
 
     @PrePersist
@@ -98,7 +106,7 @@ public class SchoolClass {
     public String courseSlug() { return courseSlug; }
     public String courseLabel() { return courseLabel; }
     public String name() { return name; }
-    public Status status() { return Status.valueOf(status); }
-    public void status(Status status) { this.status = status.name(); }
+    public Status status() { return status; }
+    public void status(Status status) { this.status = status; }
     public Instant createdAt() { return createdAt; }
 }
