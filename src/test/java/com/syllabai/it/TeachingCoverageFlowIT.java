@@ -16,8 +16,6 @@ import com.syllabai.classroom.dto.TeachingCoverageViews.CoverageRowView;
 import com.syllabai.classroom.dto.ClassroomViews.TeacherClassView;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.Role;
-import com.syllabai.identity.dto.AuthResponse;
-import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.NodeType;
@@ -28,13 +26,18 @@ import com.syllabai.shared.ForbiddenException;
 import com.syllabai.shared.NotFoundException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -129,15 +132,20 @@ class TeachingCoverageFlowIT {
     }
 
     private UUID newTeacher() {
-        return authService.provisionUser(
+        UUID id = authService.provisionUser(
                 "it-tc-teacher-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
-                "ItTeacher123!", "It Teacher", java.util.Set.of(Role.TEACHER)).id();
+                "ItTeacher123!", "It Teacher", Set.of(Role.TEACHER)).id();
+        // method security (@PreAuthorize) resolves the ROLE_* authority from the
+        // SecurityContext on direct controller calls — the ClassroomFlowIT pattern
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(id, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_TEACHER"))));
+        return id;
     }
 
-    private UUID newLearner() {
-        return authService.register(new RegisterRequest(
-                "it-tc-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
-                "ItLearner123!", "It Learner")).user().id();
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     private UUID newClass(UUID teacherId) {
@@ -285,10 +293,8 @@ class TeachingCoverageFlowIT {
     @DisplayName("THE HONESTY PIN — coverage traffic writes no learner-model state, and the curriculum is untouched")
     void honestyAndImmutabilityPins() {
         UUID teacher = newTeacher();
-        UUID learner = newLearner();
         UUID classId = newClass(teacher);
         String curriculumBefore = curriculumFingerprint();
-        assertThat(learner).isNotNull();
 
         coverageController.mark(teacher, classId, specPointId(SPEC_POINT_CODE),
                 new MarkRequest("taught", "pinned"));
