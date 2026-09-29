@@ -145,7 +145,7 @@ class AssignmentFlowIT {
 
     private CreateRequest request(String title, List<String> refs, Instant dueAt) {
         return new CreateRequest(title, "igcse-chemistry-19", "IGCSE Chemistry",
-                refs, 12, 4, dueAt.toString());
+                refs, 12, 4, dueAt.toString(), null);
     }
 
     private long submissionRowsOf(UUID learner) {

@@ -3,9 +3,11 @@ package com.syllabai.assignment;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentSubmissionView;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentView;
 import com.syllabai.assignment.dto.AssignmentViews.LearnerAssignmentView;
+import com.syllabai.classroom.ClassMemberRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.ConflictException;
+import com.syllabai.shared.ForbiddenException;
 import com.syllabai.shared.NotFoundException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -54,11 +56,14 @@ public class LearnerAssignmentController {
 
     private final AssignmentRepository assignments;
     private final AssignmentSubmissionRepository submissions;
+    private final ClassMemberRepository classMembers;
 
     public LearnerAssignmentController(AssignmentRepository assignments,
-                                       AssignmentSubmissionRepository submissions) {
+                                       AssignmentSubmissionRepository submissions,
+                                       ClassMemberRepository classMembers) {
         this.assignments = assignments;
         this.submissions = submissions;
+        this.classMembers = classMembers;
     }
 
     @GetMapping
@@ -69,7 +74,12 @@ public class LearnerAssignmentController {
                 .findByLearnerIdOrderByOccurredAtDesc(learnerId, PageRequest.of(0, 2000))) {
             mine.putIfAbsent(s.assignmentId(), s);
         }
+        // V51 visibility: NULL class target = every enabled student (the V49
+        // default — independent students included); class target = members only
+        // (the independent-student rule — no membership row, no classroom work).
         return assignments.findByOrderByCreatedAtDesc(PageRequest.of(0, LIST_LIMIT)).stream()
+                .filter(a -> a.classId() == null
+                        || classMembers.existsByClassIdAndStudentId(a.classId(), learnerId))
                 .map(a -> new LearnerAssignmentView(
                         AssignmentView.from(a),
                         mine.containsKey(a.id())
@@ -85,6 +95,13 @@ public class LearnerAssignmentController {
                                            @Valid @RequestBody SubmissionRequest request) {
         Assignment assignment = assignments.findById(id)
                 .orElseThrow(() -> new NotFoundException("unknown assignment: " + id));
+        // V51 hand-in gate: a class-targeted assignment accepts hand-ins from
+        // its members only — the membership rows are the authorization, not
+        // the hub's UI chrome (TEACHER_ARCHITECTURE §17)
+        if (assignment.classId() != null
+                && !classMembers.existsByClassIdAndStudentId(assignment.classId(), learnerId)) {
+            throw new ForbiddenException("this assignment targets a class you are not in");
+        }
         if (assignment.status() == Assignment.Status.CLOSED) {
             throw new ConflictException("assignment is closed: " + assignment.title());
         }

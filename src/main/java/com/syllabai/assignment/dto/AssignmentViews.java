@@ -24,12 +24,14 @@ public interface AssignmentViews {
             int questionCount,
             Instant dueAt,
             String status,
+            /** V51 class target — null = the whole enabled cohort (V49 default) */
+            UUID classId,
             Instant createdAt) {
 
         public static AssignmentView from(Assignment a) {
             return new AssignmentView(a.id(), a.title(), a.courseSlug(), a.courseLabel(),
                     a.specRefs(), a.marksTotal(), a.questionCount(), a.dueAt(),
-                    a.status().wire(), a.createdAt());
+                    a.status().wire(), a.classId(), a.createdAt());
         }
     }
 

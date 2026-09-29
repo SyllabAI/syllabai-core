@@ -95,6 +95,16 @@ public class Assignment {
     @Column(name = "due_at", nullable = false)
     private Instant dueAt;
 
+    /**
+     * Optional class target (V51, TFA-02). NULL = every enabled student (the
+     * V49 cohort — byte-for-byte the behavior independent students see); set =
+     * visible and hand-in-able by that class's members ONLY. The reference is
+     * validated fail-closed at creation (class exists, teacher-owned, same
+     * course) — see TeacherAssignmentController.
+     */
+    @Column(name = "class_id")
+    private UUID classId;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
@@ -108,6 +118,13 @@ public class Assignment {
     public Assignment(UUID teacherId, String courseSlug, String courseLabel,
                       String title, List<String> specRefs, int marksTotal,
                       int questionCount, Instant dueAt, Status status) {
+        this(teacherId, courseSlug, courseLabel, title, specRefs, marksTotal,
+                questionCount, dueAt, status, null);
+    }
+
+    public Assignment(UUID teacherId, String courseSlug, String courseLabel,
+                      String title, List<String> specRefs, int marksTotal,
+                      int questionCount, Instant dueAt, Status status, UUID classId) {
         this.teacherId = teacherId;
         this.courseSlug = courseSlug;
         this.courseLabel = courseLabel;
@@ -117,6 +134,7 @@ public class Assignment {
         this.questionCount = questionCount;
         this.dueAt = dueAt;
         this.status = status.name();
+        this.classId = classId;
     }
 
     @PrePersist
@@ -134,6 +152,8 @@ public class Assignment {
     public int marksTotal() { return marksTotal; }
     public int questionCount() { return questionCount; }
     public Instant dueAt() { return dueAt; }
+    /** the V51 class target — null means the whole enabled cohort (V49 default) */
+    public UUID classId() { return classId; }
     public Status status() { return Status.valueOf(status); }
     public void status(Status status) { this.status = status.name(); }
     public Instant createdAt() { return createdAt; }
