@@ -15,4 +15,9 @@ public interface MisconceptionStateRepository extends JpaRepository<Misconceptio
     /** class-analytics batch (teacher class intelligence §2): every
      * misconception state attached under a subject scope in ONE query */
     List<MisconceptionState> findByMisconceptionNodeIdIn(Collection<UUID> nodeIds);
+
+    /** class-KG heatmap batch (F-072): every misconception state for a class
+     * roster attached under a subject scope in ONE query */
+    List<MisconceptionState> findByLearnerIdInAndMisconceptionNodeIdIn(
+            Collection<UUID> learnerIds, Collection<UUID> misconceptionNodeIds);
 }
