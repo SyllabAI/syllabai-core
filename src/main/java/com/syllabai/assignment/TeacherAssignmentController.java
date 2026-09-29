@@ -4,13 +4,20 @@ import com.syllabai.assignment.dto.AssignmentViews.AssignmentRosterRow;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentRosterView;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentSummaryView;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentView;
+import com.syllabai.classroom.ClassMember;
+import com.syllabai.classroom.ClassMemberRepository;
+import com.syllabai.classroom.SchoolClass;
+import com.syllabai.classroom.SchoolClassRepository;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.identity.Role;
+import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.NodeType;
 import com.syllabai.shared.BadRequestException;
+import com.syllabai.shared.ConflictException;
+import com.syllabai.shared.ForbiddenException;
 import com.syllabai.shared.NotFoundException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -75,15 +82,21 @@ public class TeacherAssignmentController {
     private final AssignmentSubmissionRepository submissions;
     private final KnowledgeNodeRepository knowledgeNodes;
     private final UserRepository users;
+    private final SchoolClassRepository classes;
+    private final ClassMemberRepository classMembers;
 
     public TeacherAssignmentController(AssignmentRepository assignments,
                                        AssignmentSubmissionRepository submissions,
                                        KnowledgeNodeRepository knowledgeNodes,
-                                       UserRepository users) {
+                                       UserRepository users,
+                                       SchoolClassRepository classes,
+                                       ClassMemberRepository classMembers) {
         this.assignments = assignments;
         this.submissions = submissions;
         this.knowledgeNodes = knowledgeNodes;
         this.users = users;
+        this.classes = classes;
+        this.classMembers = classMembers;
     }
 
     @PostMapping
@@ -94,6 +107,12 @@ public class TeacherAssignmentController {
         for (String code : refs) {
             resolveTarget(code);
         }
+        // V51 class targeting — fail-closed: the class must exist, be owned by
+        // THIS teacher, be live, and sit on the SAME hub course as the
+        // assignment's content refs. Anything else refuses and nothing is
+        // written (the same discipline as the spec-ref resolution above).
+        UUID classId = request.classId() == null ? null : resolveClassTarget(
+                teacherId, request.classId(), request.courseSlug());
         Assignment saved = assignments.save(new Assignment(
                 teacherId,
                 request.courseSlug(),
@@ -103,26 +122,45 @@ public class TeacherAssignmentController {
                 request.marksTotal(),
                 request.questionCount(),
                 parseDueAt(request.dueAt()),
-                Assignment.Status.OPEN));
+                Assignment.Status.OPEN,
+                classId));
         return AssignmentView.from(saved);
     }
 
-    /** newest-first list with real completion stats (computed, never stored) */
+    /** newest-first list with real completion stats (computed, never stored).
+     *  The cohort denominator follows the V51 target: class-targeted
+     *  assignments count only that class's members; NULL targets keep the
+     *  V49 enabled-student cohort. */
     @GetMapping
     public List<AssignmentSummaryView> list() {
         int cohort = users.findEnabledByRole(Role.STUDENT).size();
         return assignments.findByOrderByCreatedAtDesc(PageRequest.of(0, LIST_LIMIT)).stream()
-                .map(a -> toSummary(a, latestByLearner(a.id()), cohort))
+                .map(a -> {
+                    int target = a.classId() == null
+                            ? cohort
+                            : classMembers.findByClassIdOrderByEnrolledAtAsc(a.classId()).size();
+                    return toSummary(a, latestByLearner(a.id()), target);
+                })
                 .toList();
     }
 
-    /** the full roster for one assignment: every enabled student, real state */
+    /** the full roster for one assignment — real state. NULL target: every
+     *  enabled student (V49). Class target: exactly that class's members —
+     *  an independent student is NOT missing from a class they were never
+     *  part of, so they simply do not appear. */
     @GetMapping("/{id}")
     public AssignmentRosterView roster(@PathVariable UUID id) {
         Assignment assignment = assignments.findById(id)
                 .orElseThrow(() -> new NotFoundException("unknown assignment: " + id));
         Map<UUID, AssignmentSubmission> latest = latestByLearner(id);
-        List<AssignmentRosterRow> rows = users.findEnabledByRole(Role.STUDENT).stream()
+        List<User> cohortUsers = assignment.classId() == null
+                ? users.findEnabledByRole(Role.STUDENT)
+                : classMembers.findByClassIdOrderByEnrolledAtAsc(assignment.classId()).stream()
+                        .map(ClassMember::studentId)
+                        .map(sid -> users.findById(sid).orElse(null))
+                        .filter(u -> u != null && u.enabled())
+                        .toList();
+        List<AssignmentRosterRow> rows = cohortUsers.stream()
                 .map(u -> {
                     AssignmentSubmission s = latest.get(u.id());
                     if (s == null) {
@@ -142,6 +180,25 @@ public class TeacherAssignmentController {
                         .thenComparing(AssignmentRosterRow::displayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
         return new AssignmentRosterView(AssignmentView.from(assignment), rows);
+    }
+
+    /** V51: the fail-closed class-target gate — exists, THIS teacher's, live,
+     *  same course. Returns the class id the assignment may store. */
+    private UUID resolveClassTarget(UUID teacherId, UUID classId, String courseSlug) {
+        SchoolClass c = classes.findById(classId)
+                .orElseThrow(() -> new NotFoundException("unknown class target: " + classId));
+        if (!c.teacherId().equals(teacherId)) {
+            throw new ForbiddenException("this class belongs to another teacher");
+        }
+        if (c.status() != SchoolClass.Status.ACTIVE) {
+            throw new ConflictException("this class is archived");
+        }
+        if (!c.courseSlug().equals(courseSlug)) {
+            throw new BadRequestException(
+                    "the class targets course " + c.courseSlug()
+                            + " but the assignment content is " + courseSlug);
+        }
+        return c.id();
     }
 
     /** lifecycle: close (no new hand-ins) or reopen */
@@ -222,7 +279,9 @@ public class TeacherAssignmentController {
                     message = "spec refs are curriculum codes") String> specRefs,
             @NotNull @Min(1) @Max(1000) Integer marksTotal,
             @NotNull @Min(1) @Max(200) Integer questionCount,
-            @NotBlank String dueAt) {
+            @NotBlank String dueAt,
+            /** V51 optional class target — null keeps the V49 whole-cohort default */
+            UUID classId) {
     }
 
     public record StatusRequest(@NotBlank String status) {
