@@ -224,10 +224,13 @@ class TeachingCoverageFlowIT {
         assertThat(trail.get(1).previousStatus()).isNull();
         assertThat(trail.get(1).note()).isEqualTo("finished before half term");
 
-        // the state row carries the first-assertion provenance even after the flip
+        // the state row carries the first-assertion provenance even after the
+        // flip — compared against the DB-loaded view (Postgres TIMESTAMPTZ
+        // truncates to microseconds; the in-memory first view is pre-flush
+        // nanoseconds, the same moment at a different precision)
         TeachingCoverage row = coverageRows
                 .findByClassIdAndSpecPointNodeId(classId, sp1).orElseThrow();
-        assertThat(row.createdAt()).isEqualTo(first.firstMarkedAt());
+        assertThat(row.createdAt()).isEqualTo(again.firstMarkedAt());
     }
 
     @Test
