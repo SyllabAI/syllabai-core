@@ -173,7 +173,11 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
                     .append("decision below, e.g. accept ecf / ignore penalties):\n")
                     .append(guidance.strip()).append('\n');
         }
-        sb.append("\nLEARNER ANSWER:\n").append(context.answer().answerText());
+        sb.append("\nLEARNER ANSWER (answer format v2 — Markdown text that may embed\n")
+                .append("inline LaTeX math in $…$ / $$…$$ and <sub>/<sup>/<br/> inline HTML;\n")
+                .append("read the math and markup literally as the learner's working, never as\n")
+                .append("decorative prose; older answers are plain text):\n")
+                .append(context.answer().answerText());
         return sb.toString();
     }
 

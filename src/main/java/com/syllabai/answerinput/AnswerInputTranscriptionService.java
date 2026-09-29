@@ -17,13 +17,18 @@ import org.springframework.stereotype.Service;
  * constraint — no new vendor, the existing chain's vision-capable member reads
  * the image).
  *
- * <p><strong>The contract-preserving core of this feature</strong> is the
- * transcription policy below: the model is instructed to output PLAIN TEXT with
- * Unicode math symbols and linear notation — never LaTeX/markdown — so what lands
- * in the answer textarea stays a plain-text answer under the unchanged answer
- * format contract (per-keystroke autosave, both mark lanes, storage). The image
- * is transcription INPUT only; it is never stored, never sent to a mark lane,
- * and leaves no artifact beyond the returned text.</p>
+ * <p><strong>The contract-carrying core of this feature</strong> is the
+ * transcription policy below. Under answer format v1 the policy forbade
+ * LaTeX outright so the answer stayed plain text; answer format v2 (HUB-ANSWER-BOX
+ * wave 4, operator trace 1a0ea6d4ca777a75 "Go on with updating the answer format")
+ * upgrades the declared answer dialect to "Markdown with embedded LaTeX math and
+ * limited inline HTML" — the same dialect the hub's corpus renderer already
+ * interprets — so the model now outputs handwritten MATH as inline LaTeX in
+ * $…$ and words as plain text. What lands in the answer editor is therefore a
+ * valid v2 answer end-to-end (rich editor renders the math; storage, the 4000
+ * cap, and both mark lanes are unchanged). The image is transcription INPUT
+ * only; it is never stored, never sent to a mark lane, and leaves no artifact
+ * beyond the returned text.</p>
  *
  * <p>Validation posture: mime whitelist + decoded-size cap BEFORE any model call
  * (cost guard); blank model output is a structured "nothing readable" result the
@@ -42,19 +47,23 @@ public class AnswerInputTranscriptionService {
     static final int MAX_DECODED_BYTES = 4 * 1024 * 1024;
 
     /**
-     * Plain-text transcription policy. Unicode math symbols where they exist;
-     * linear notation for structures Unicode cannot express (fractions, matrices);
-     * LaTeX/markdown/code fences explicitly forbidden — the output feeds a plain
-     * text answer surface, not a renderer.
+     * Answer format v2 transcription policy: handwritten math becomes inline
+     * LaTeX in $…$ (the hub's rich editor renders it as an equation; the mark
+     * lanes read it literally), words stay plain text. No markdown structure
+     * (no headings/lists/code fences — the answer editor consumes text and
+     * math atoms, not documents). Unicode symbols stay available for inline
+     * units and degree signs inside prose.
      */
     static final String TRANSCRIPTION_SYSTEM_PROMPT = """
-            You transcribe a photograph or drawing of a student's handwritten work into plain text.
+            You transcribe a photograph or drawing of a student's handwritten work.
 
             Output rules (absolute):
-            - Output PLAIN TEXT only. Never output LaTeX commands, markdown, or code fences.
-            - Use Unicode math symbols where they exist: ² ³ √ π ≤ ≥ ≠ ≈ × ÷ ± ∫ Σ ∞ ° → ⇌ ⁻ ⁺.
-            - For structures Unicode cannot express, use linear plain-text notation:
-              fractions like (x+1)/(x-2), powers like x^(n+1), matrices row-wise like [1 2; 3 4].
+            - Written MATH goes inside inline LaTeX delimiters: $x^2 + 1$, $\\frac{d}{dx}$,
+              $\\ce{H2SO4}$ for chemistry. Every formula, expression, equation, or numeric
+              working is math — delimit it.
+            - Written WORDS stay plain text outside the delimiters. Do not output markdown
+              structure: no headings, lists, bold/italic markers, tables, or code fences.
+            - Simple inline symbols in prose may stay Unicode: ² ³ ° ≤ ≥ × ± → ⇌.
             - Transcribe only what the student actually wrote. Preserve their wording and
               their working order; do not correct, complete, solve, or add anything.
             - If parts are unreadable, transcribe the readable parts and mark each unreadable
@@ -63,7 +72,7 @@ public class AnswerInputTranscriptionService {
             """;
 
     private static final String USER_PROMPT =
-            "Transcribe the handwritten work in this image to plain text following the rules.";
+            "Transcribe the handwritten work in this image following the rules.";
 
     /** Chain temperature 0 — transcription is a read-back, not a generation. */
     private static final Double TEMPERATURE = 0.0;

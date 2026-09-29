@@ -10,11 +10,14 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Learner answer-input transcription surface (HUB-ANSWER-BOX wave 3). One entry
- * point: hand the hub an image (drawing-pad PNG or a photo), get back the plain
- * text the learner's handwriting contains, ready to insert at the caret of the
- * shared AnswerTextarea. Authenticated learners only (SecurityConfig default);
- * the LLM-tier rate limit covers this path (RateLimitFilter).
+ * Learner answer-input transcription surface (HUB-ANSWER-BOX wave 3; output
+ * dialect upgraded to answer format v2 in wave 4). One entry point: hand the hub
+ * an image (drawing-pad PNG or a photo), get back the v2-dialect text the
+ * learner's handwriting contains — words as plain text, handwritten math as
+ * inline LaTeX in $…$ — ready to insert at the caret of the shared answer
+ * editor, which parses the $…$ spans into rendered equation atoms. Authenticated
+ * learners only (SecurityConfig default); the LLM-tier rate limit covers this
+ * path (RateLimitFilter).
  *
  * <p>NOT a persistence surface: nothing here writes rows or evidence — the image
  * is never stored, and the returned text becomes part of the answer only when the
@@ -31,7 +34,8 @@ public class TranscriptionController {
     }
 
     /**
-     * Transcribes one image to plain text. Request body is JSON (base64 payload,
+     * Transcribes one image to answer-format-v2 text (words + $…$ LaTeX math).
+     * Request body is JSON (base64 payload,
      * not multipart) — the image is already client-side downscaled by the hub, so
      * the whole exchange stays a single small request.
      *
@@ -68,7 +72,7 @@ public class TranscriptionController {
     public record TranscriptionRequestView(String imageBase64, String mimeType) {
     }
 
-    /** Response: the plain text to insert at the caret + which provider read it. */
+    /** Response: the v2 text (words + $…$ LaTeX) to insert at the caret + which provider read it. */
     public record TranscriptionView(String text, String provider, String model, long latencyMs) {
         static TranscriptionView from(AnswerInputTranscriptionService.Transcription t) {
             return new TranscriptionView(t.text(), t.providerName(), t.model(), t.latencyMs());
