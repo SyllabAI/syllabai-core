@@ -350,7 +350,9 @@ class ClassroomFlowIT {
         learnerAssignments.submit(student, classAssignment.id(), new SubmissionRequest(1, null));
 
         assertThat(skillStates.count()).isZero();
-        assertThat(memberRows.count()).isEqualTo(1);
+        // scoped to THIS class: the IT methods share one container/DB, so a
+        // global member count would see other tests' enrollments too
+        assertThat(memberRows.findByClassIdOrderByEnrolledAtAsc(created.id())).hasSize(1);
         assertThat(announcementRows.findByClassIdOrderByCreatedAtDesc(
                 created.id(), org.springframework.data.domain.Pageable.unpaged())).hasSize(1);
     }
