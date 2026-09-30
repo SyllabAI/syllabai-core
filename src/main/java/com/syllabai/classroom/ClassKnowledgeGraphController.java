@@ -1,6 +1,8 @@
 package com.syllabai.classroom;
 
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassKnowledgeGraphView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentsView;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.shared.ForbiddenException;
 import com.syllabai.shared.NotFoundException;
@@ -60,6 +62,43 @@ public class ClassKnowledgeGraphController {
                                          @RequestParam UUID rootId) {
         SchoolClass clazz = ownedClass(teacherId, classId);
         return heatmaps.graph(clazz, rootId);
+    }
+
+    /**
+     * TFA-07 drill-down, leg "weak node → affected students" (§13.5): one
+     * node's per-student detail for this class — the heatmap's roster at
+     * student grain (raw + effective mastery, the shared band vocabulary),
+     * misconception estimates and bounded recent attempts per student, with
+     * the §13.3 distribution restated so the panel can never disagree with
+     * the graph it opened from. Same gates as the heatmap (404 unknown
+     * class/root, 403 another teacher's class, node-outside-subject 404,
+     * archived classes readable) and the same independent-student rule —
+     * only this class's enabled members can appear.
+     */
+    @GetMapping("/nodes/{nodeId}/students")
+    public ClassNodeStudentsView nodeStudents(@CurrentUserId UUID teacherId,
+                                              @PathVariable UUID classId,
+                                              @PathVariable UUID nodeId,
+                                              @RequestParam UUID rootId) {
+        SchoolClass clazz = ownedClass(teacherId, classId);
+        return heatmaps.nodeStudents(clazz, rootId, nodeId);
+    }
+
+    /**
+     * TFA-07 drill-down, leg "affected students → individual student graph"
+     * (§14): ONE student's subject graph through the SAME F-034 read model
+     * the student themselves sees — the teacher lens adds only gates, never
+     * a second graph implementation. §17 privacy boundary: the learner must
+     * be an ENABLED member of THIS class (404 otherwise); backend-enforced,
+     * the UI hiding data is not authorization.
+     */
+    @GetMapping("/learners/{learnerId}/knowledge-graph")
+    public LearnerKnowledgeGraphView learnerKnowledgeGraph(@CurrentUserId UUID teacherId,
+                                                           @PathVariable UUID classId,
+                                                           @PathVariable UUID learnerId,
+                                                           @RequestParam UUID rootId) {
+        SchoolClass clazz = ownedClass(teacherId, classId);
+        return heatmaps.learnerKnowledgeGraph(clazz, learnerId, rootId);
     }
 
     /** the §17 gate: the class must exist AND be owned by this teacher */
