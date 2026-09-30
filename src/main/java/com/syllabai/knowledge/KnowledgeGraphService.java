@@ -89,6 +89,29 @@ public class KnowledgeGraphService {
     }
 
     /**
+     * The settled T-C11 concept layer's anchor edges within a root's subtree:
+     * PART_OF edges sourced at CONCEPT nodes (concept → anchored
+     * SpecificationPoint), bulk-loaded in one query and code-ordered.
+     *
+     * <p>The projection basis for structure-keyed read models: the settled
+     * store carries prerequisite relations at concept level (98 concepts + 12
+     * required practicals), while class-level surfaces aggregate mastery at
+     * curriculum-structure level — a concept is never directly measured. Its
+     * VALIDATED anchor edges carry the official placement, so a read model may
+     * project a concept-level prerequisite onto the SpecificationPoint(s) that
+     * teach it. Read-model widening only: the underlying edges are exactly the
+     * seeded store edges (V15 anchors), nothing is derived beyond placement.</p>
+     */
+    public List<KnowledgeEdge> conceptAnchorsWithin(UUID rootId) {
+        node(rootId);   // same 404 contract as the other read methods
+        return edges.findConceptAnchorEdgesWithin(nodes.findSubtreeIds(rootId)).stream()
+                .sorted(java.util.Comparator
+                        .comparing((KnowledgeEdge e) -> e.source().code())
+                        .thenComparing(e -> e.target().code()))
+                .toList();
+    }
+
+    /**
      * Every UNIT/TOPIC/SUBTOPIC node, code-ordered — the deterministic intent
      * surface for KA-RAG (T-024): query tokens are matched against these
      * titles; nothing outside the KG may be inferred.

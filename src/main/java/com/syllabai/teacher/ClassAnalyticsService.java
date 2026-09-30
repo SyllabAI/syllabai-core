@@ -9,6 +9,7 @@ import com.syllabai.assessment.dto.StudentQuestionView;
 import com.syllabai.identity.Role;
 import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
+import com.syllabai.knowledge.KnowledgeEdge;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.learner.LearnerProperties;
@@ -246,11 +247,25 @@ public class ClassAnalyticsService {
             RecentActivityView recentActivity) {
     }
 
-    /** a prerequisite the CLASS measures weak, with the dependents that need it */
+    /**
+     * A prerequisite the CLASS measures weak, with the dependents that need it.
+     *
+     * <p>{@code derived} + {@code derivedViaConceptCodes} carry the T-C11
+     * projection honesty: the settled store expresses prerequisites at concept
+     * level, so a concept prerequisite is projected onto the SpecificationPoint
+     * anchor(s) that teach it ({@code derived=true} — an <em>inferred-only</em>
+     * structure-level pair with no settled structure-level edge; the concept
+     * codes behind it are listed for the operator's T-C11 review). Direct
+     * structure-level prerequisites — including the required practicals, whose
+     * nodes are curriculum structure — report {@code derived=false} with an
+     * empty list. Nothing here mutates the settled store: promotion of any
+     * projected pair stays the T-C11 operator gate's decision.</p>
+     */
     public record WeakPrerequisiteView(
             UUID prerequisiteNodeId, String prerequisiteCode, String prerequisiteTitle,
             int learnersMeasured, Double meanMastery, String masteryBand,
-            List<DependentView> dependents) {
+            List<DependentView> dependents,
+            boolean derived, List<String> derivedViaConceptCodes) {
     }
 
     public record DependentView(UUID nodeId, String code, String title, Double meanMastery) {
@@ -469,13 +484,65 @@ public class ClassAnalyticsService {
                 agg.servableByPrimaryTopic().getOrDefault(node.id(), 0));
     }
 
+    /**
+     * Weak prerequisites for the class, INCLUDING the settled T-C11 concept
+     * layer projected to structure level.
+     *
+     * <p><b>The projection (the "12 skipped required-practical edges" fix).</b>
+     * {@link KnowledgeGraphService#prerequisiteRelations} returns the validated
+     * REQUIRES_PREREQUISITE relations inside the subtree — all of them sourced
+     * or targeted at CONCEPT nodes in the settled T-C11 store (100
+     * concept→concept, 12 practical→concept where the practical node is
+     * curriculum structure but its prerequisites are concepts). The class
+     * surface aggregates mastery per STRUCTURE node, and a concept is never
+     * directly measured, so every one of those relations silently dropped out
+     * of this read model before (byTopic lookup misses → skip) — the class
+     * surfaces drew ZERO prerequisite relations despite the seeded store
+     * carrying 112 validated ones. The fix projects each concept-level
+     * prerequisite onto the SpecificationPoint(s) that teach it, via the
+     * concept's VALIDATED PART_OF anchor edges ({@code
+     * graph.conceptAnchorsWithin}) — the same store edges the V15 seed lays
+     * down. Self-projections collapse (a node is not its own prerequisite);
+     * every projected pair is flagged {@code derived} with the concept codes
+     * that carry it; unmeasured prerequisites are still never claimed weak.</p>
+     */
     private List<WeakPrerequisiteView> weakPrerequisites(UUID rootId, Scope scope,
                                                           Aggregates agg) {
         double weakCeiling = properties.weakMasteryCeiling();
-        Map<UUID, List<KnowledgeGraphService.PrerequisiteRelation>> dependentsOf = new HashMap<>();
-        for (KnowledgeGraphService.PrerequisiteRelation r : graph.prerequisiteRelations(rootId)) {
-            dependentsOf.computeIfAbsent(r.prerequisiteId(), k -> new ArrayList<>()).add(r);
+
+        // concept → anchor SpecificationPoints (validated V15 anchor edges)
+        Map<UUID, List<KnowledgeEdge>> anchorsByConcept = new HashMap<>();
+        for (KnowledgeEdge anchor : graph.conceptAnchorsWithin(rootId)) {
+            anchorsByConcept.computeIfAbsent(anchor.sourceId(), k -> new ArrayList<>())
+                    .add(anchor);
         }
+
+        // group dependent relations under their structure-level prerequisite:
+        // a concept prerequisite projects onto each of its anchor SPs; a direct
+        // structure-level prerequisite (none in the settled 4CH1 store today,
+        // but the contract keeps the door open) passes through as-is
+        Map<UUID, List<KnowledgeGraphService.PrerequisiteRelation>> dependentsOf =
+                new HashMap<>();
+        Map<UUID, Set<String>> derivedVia = new HashMap<>();
+        for (KnowledgeGraphService.PrerequisiteRelation r : graph.prerequisiteRelations(rootId)) {
+            List<KnowledgeEdge> conceptAnchors = anchorsByConcept.get(r.prerequisiteId());
+            if (conceptAnchors == null || conceptAnchors.isEmpty()) {
+                dependentsOf.computeIfAbsent(r.prerequisiteId(), k -> new ArrayList<>())
+                        .add(r);
+                continue;
+            }
+            String conceptCode = conceptAnchors.get(0).source().code();
+            for (KnowledgeEdge anchor : conceptAnchors) {
+                UUID anchorSpId = anchor.targetId();
+                if (anchorSpId.equals(r.dependentNodeId())) {
+                    continue;   // self-projection collapse — not a drawable pair
+                }
+                dependentsOf.computeIfAbsent(anchorSpId, k -> new ArrayList<>()).add(r);
+                derivedVia.computeIfAbsent(anchorSpId, k -> new HashSet<>())
+                        .add(conceptCode);
+            }
+        }
+
         List<WeakPrerequisiteView> weak = new ArrayList<>();
         for (Map.Entry<UUID, List<KnowledgeGraphService.PrerequisiteRelation>> e
                 : dependentsOf.entrySet()) {
@@ -498,9 +565,12 @@ public class ClassAnalyticsService {
                     })
                     .filter(d -> d != null)
                     .sorted(Comparator.comparing(DependentView::code)).toList();
+            boolean derived = derivedVia.containsKey(e.getKey());
+            List<String> via = derived
+                    ? derivedVia.get(e.getKey()).stream().sorted().toList() : List.of();
             weak.add(new WeakPrerequisiteView(node.id(), node.code(), node.title(),
                     t.learnersMeasured(), t.meanMastery(), bandOf(t.meanMastery()),
-                    dependents));
+                    dependents, derived, via));
         }
         weak.sort(Comparator.comparing(WeakPrerequisiteView::meanMastery)
                 .thenComparing(w -> w.dependents().size(), Comparator.reverseOrder())

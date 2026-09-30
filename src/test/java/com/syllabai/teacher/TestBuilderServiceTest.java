@@ -280,7 +280,8 @@ class TestBuilderServiceTest {
                 List.of(new ClassAnalyticsService.WeakPrerequisiteView(
                         weakMastery, "4CH1-S1-a", "title 4CH1-S1-a", 4, 0.30, "LOW",
                         List.of(new ClassAnalyticsService.DependentView(
-                                blocked, "4CH1-S3-a", "title 4CH1-S3-a", 0.55))))));
+                                blocked, "4CH1-S3-a", "title 4CH1-S3-a", 0.55)),
+                        true, List.of("4CH1-CON-MOLE")))));
         // targeting counts (builder rule): one question primary-mapped to the
         // weak-mastery topic, one to the gap topic, and the SAME question
         // secondary-mapped to the misconception-only topic. The mapping row is
