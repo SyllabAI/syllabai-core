@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * next-best-action loop against a real Postgres (v1.1, ADR-017). The full
  * chain under test: KG rows whose <em>codes</em> carry the settled store's
  * concept identities + real learner-state rows (BKT/BDT) + the packaged
- * SHA-256-pinned snapshot bean (113 nodes / 153 HUMAN_VALIDATED semantic
+ * SHA-256-pinned snapshot bean (193 nodes / 272 HUMAN_VALIDATED semantic
  * edges, loaded by the production graph configuration) — ranked
  * evidence-backed actions out.
  *
@@ -85,7 +85,7 @@ class ConceptGraphRemediationFlowIT {
     @DisplayName("settled graph + real KG rows + real learner state → prerequisite-chain and misconception-remediation actions; deterministic; controller parity")
     void graphInformedActionsFromRealEvidence() {
         // 0. the production bean loaded the settled snapshot — the whole premise
-        assertThat(conceptGraph.validatedEdgeCount()).isEqualTo(153);
+        assertThat(conceptGraph.validatedEdgeCount()).isEqualTo(272);
 
         // 1. a 4CH1-coded KG subtree: the join keys are the settled store's codes
         UUID root = UUID.randomUUID();

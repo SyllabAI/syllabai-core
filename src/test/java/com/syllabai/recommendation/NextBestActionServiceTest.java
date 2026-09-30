@@ -847,10 +847,10 @@ class NextBestActionServiceTest {
     @Test
     @DisplayName("the REAL settled store (packaged snapshot) drives both graph-aware stages from real learner evidence")
     void realSettledStoreDrivesRecommendations() {
-        // 153 HUMAN_VALIDATED semantic edges of the closed Batch-4 store, loaded
+        // 272 HUMAN_VALIDATED semantic edges of the closed Batch-11 store, loaded
         // through the same SHA-256-pinned loader the Spring context uses
         ConceptDependencyGraph settled = new ConceptDependencyGraphLoader().load();
-        assertThat(settled.validatedEdgeCount()).isEqualTo(153);
+        assertThat(settled.validatedEdgeCount()).isEqualTo(272);
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null),

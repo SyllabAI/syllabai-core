@@ -6,9 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.syllabai.teacher.ConceptGraphSnapshotLoader.ConceptGraphSnapshot;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * V15 concept-graph snapshot loader: the six pinned classpath files parse into
@@ -87,14 +91,14 @@ class ConceptGraphSnapshotLoaderTest {
             assertThat(frozen).doesNotContain(
                     edge.relation() + "|" + edge.source() + "|" + edge.target());
         }
-        // relation families of the 153 validated edges (store facts)
-        assertThat(snapshotRelations("REQUIRES_PREREQUISITE")).isEqualTo(112);
-        assertThat(snapshotRelations("REMEDIATED_BY")).isEqualTo(14);
-        assertThat(snapshotRelations("WRONG_ANSWER_PATTERN")).isEqualTo(13);
-        assertThat(snapshotRelations("EXPLAINED_BY")).isEqualTo(9);
+        // relation families of the 272 validated edges (store facts, batch-11 close)
+        assertThat(snapshotRelations("REQUIRES_PREREQUISITE")).isEqualTo(206);
+        assertThat(snapshotRelations("REMEDIATED_BY")).isEqualTo(25);
+        assertThat(snapshotRelations("WRONG_ANSWER_PATTERN")).isEqualTo(24);
+        assertThat(snapshotRelations("EXPLAINED_BY")).isEqualTo(11);
         assertThat(snapshotRelations("COMMONLY_CONFUSED_WITH")).isEqualTo(2);
         assertThat(snapshotRelations("MISCONCEPTION_OF")).isEqualTo(2);
-        assertThat(snapshotRelations("RELATED_TO")).isEqualTo(1);
+        assertThat(snapshotRelations("RELATED_TO")).isEqualTo(2);
     }
 
     @Test
@@ -133,19 +137,23 @@ class ConceptGraphSnapshotLoaderTest {
     }
 
     @Test
-    @DisplayName("Case B substrate: S2/S4 spec points exist but carry no settled concepts")
+    @DisplayName("Case B substrate: anchors span all four settled sections and land only on official SP codes")
     void unsettledSectionsCarryNoConcepts() {
         ConceptGraphSnapshot snapshot = loader.load();
 
-        // sections 2 and 4 are part of the official curriculum (real rows)…
         assertThat(snapshot.specPoints())
                 .anySatisfy(sp -> assertThat(sp.code()).isEqualTo("4CH1-2.1"));
         assertThat(snapshot.sections()).anySatisfy(s -> {
             assertThat(s.code()).isEqualTo("4CH1-S4");
         });
-        // …but no concept anchors anywhere outside S1/S3 (the settled slices)
+        // S2 settled with batches 5-7, S4 with batches 8-11: every section carries
+        // authored anchors, and every anchor lands on an official SP code
         assertThat(snapshot.anchorEdges())
-                .allSatisfy(a -> assertThat(a.specPointCode()).matches("4CH1-[13]\\..*"));
+                .allSatisfy(a -> assertThat(a.specPointCode()).matches("4CH1-[1234]\\..*"));
+        for (String digit : new String[] {"1", "2", "3", "4"}) {
+            assertThat(snapshot.anchorEdges())
+                    .anySatisfy(a -> assertThat(a.specPointCode()).startsWith("4CH1-" + digit + "."));
+        }
     }
 
     @Test
@@ -166,10 +174,27 @@ class ConceptGraphSnapshotLoaderTest {
     @Test
     @DisplayName("fail-closed: tampered snapshot bytes refuse to load")
     void tamperedSnapshotFails() {
-        // structural tamper through the parse seam: one demoted status ⇒ 152
-        byte[] edges = readResourceBytes(ConceptGraphSnapshotLoader.CONCEPT_EDGES_RESOURCE);
-        String mutated = new String(edges, java.nio.charset.StandardCharsets.UTF_8)
-                .replaceFirst("validation_status: HUMAN_VALIDATED", "validation_status: SUGGESTED");
+        // structural tamper through the parse seam: demote one KNOWN VALIDATED
+        // SEMANTIC edge (the batch-11 file's first HV rows are PART_OF anchors,
+        // whose status the semantic counts deliberately ignore)
+        Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+        Map<String, Object> edgesDoc = yaml.load(new String(
+                readResourceBytes(ConceptGraphSnapshotLoader.CONCEPT_EDGES_RESOURCE),
+                java.nio.charset.StandardCharsets.UTF_8));
+        boolean mutated = false;
+        for (Object o : (List<?>) edgesDoc.get("edges")) {
+            Map<?, ?> m = (Map<?, ?>) o;
+            if ("4CH1-CON-BOND-ENERGY-CALC".equals(m.get("source"))
+                    && "4CH1-CON-COVALENT-BOND".equals(m.get("target"))
+                    && "HUMAN_VALIDATED".equals(m.get("validation_status"))) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> row = (Map<String, Object>) o;
+                row.put("validation_status", "SUGGESTED");
+                mutated = true;
+                break;
+            }
+        }
+        assertThat(mutated).isTrue();
         byte[] specPoints = readResourceBytes(ConceptGraphSnapshotLoader.SPEC_POINTS_RESOURCE);
         byte[] topics = readResourceBytes(ConceptGraphSnapshotLoader.TOPICS_RESOURCE);
         byte[] relationships = readResourceBytes(ConceptGraphSnapshotLoader.RELATIONSHIPS_RESOURCE);
@@ -177,7 +202,7 @@ class ConceptGraphSnapshotLoaderTest {
         byte[] practicals = readResourceBytes(ConceptGraphSnapshotLoader.PRACTICALS_RESOURCE);
 
         assertThatThrownBy(() -> loader.parse(specPoints, topics, relationships, concepts,
-                mutated.getBytes(java.nio.charset.StandardCharsets.UTF_8), practicals))
+                yaml.dump(edgesDoc).getBytes(java.nio.charset.StandardCharsets.UTF_8), practicals))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("validated semantic edge count");
     }

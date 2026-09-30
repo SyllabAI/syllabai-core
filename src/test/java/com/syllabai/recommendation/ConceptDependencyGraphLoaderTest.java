@@ -15,8 +15,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * The packaged settled T-C11 snapshot is loadable and exactly what the
- * recommendation path consumes: SHA-256-pinned verbatim bytes of the Batch-4
- * close (2026-09-13) — 113 nodes, 275 edges, 158 semantic edges of which 153
+ * recommendation path consumes: SHA-256-pinned verbatim bytes of the Batch-11
+ * close (2026-09-25) — 193 nodes, 488 edges, 277 semantic edges of which 272
  * HUMAN_VALIDATED; the only non-validated semantic edges are the three frozen
  * pilot HOLDs (SUGGESTED) and the two REVIEW_REQUIRED edges. This pins the
  * whole downstream guarantee: if the snapshot drifts, startup fails; if the
@@ -27,18 +27,18 @@ class ConceptDependencyGraphLoaderTest {
     private final ConceptDependencyGraphLoader loader = new ConceptDependencyGraphLoader();
 
     @Test
-    @DisplayName("the settled snapshot loads: 153 validated semantic edges with the exact per-relation counts of the closed store")
+    @DisplayName("the settled snapshot loads: 272 validated semantic edges with the exact per-relation counts of the closed store")
     void settledSnapshotLoads() {
         ConceptDependencyGraph graph = loader.load();
 
-        assertThat(graph.validatedEdgeCount()).isEqualTo(153);
-        assertThat(graph.edges(SemanticRelation.REQUIRES_PREREQUISITE)).hasSize(112);
-        assertThat(graph.edges(SemanticRelation.REMEDIATED_BY)).hasSize(14);
-        assertThat(graph.edges(SemanticRelation.WRONG_ANSWER_PATTERN)).hasSize(13);
-        assertThat(graph.edges(SemanticRelation.EXPLAINED_BY)).hasSize(9);
+        assertThat(graph.validatedEdgeCount()).isEqualTo(272);
+        assertThat(graph.edges(SemanticRelation.REQUIRES_PREREQUISITE)).hasSize(206);
+        assertThat(graph.edges(SemanticRelation.REMEDIATED_BY)).hasSize(25);
+        assertThat(graph.edges(SemanticRelation.WRONG_ANSWER_PATTERN)).hasSize(24);
+        assertThat(graph.edges(SemanticRelation.EXPLAINED_BY)).hasSize(11);
         assertThat(graph.edges(SemanticRelation.COMMONLY_CONFUSED_WITH)).hasSize(2);
         assertThat(graph.edges(SemanticRelation.MISCONCEPTION_OF)).hasSize(2);
-        assertThat(graph.edges(SemanticRelation.RELATED_TO)).hasSize(1);
+        assertThat(graph.edges(SemanticRelation.RELATED_TO)).hasSize(2);
     }
 
     @Test
@@ -96,9 +96,9 @@ class ConceptDependencyGraphLoaderTest {
         // the pin values are exercised by every load() above; assert the constants
         // are the settled ones so accidental edits surface here rather than at boot
         assertThat(ConceptDependencyGraphLoader.EDGES_SHA256)
-                .isEqualTo("e583ae50916fcb54a924bb13f42625a840e3d9baaec8fa5f69e62122716e5f07");
+                .isEqualTo("cbef02513ddbb0121a7ba139512c128185311ae3ebf0ef5121e1ed792522aa10");
         assertThat(ConceptDependencyGraphLoader.NODES_SHA256)
-                .isEqualTo("69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613");
+                .isEqualTo("24fa91ac7149682b1083ff47112362a11180bcfb7899c1343c6f536682447e3f");
         assertThat(ConceptDependencyGraphLoader.PRACTICALS_SHA256)
                 .isEqualTo("e53e5f87606a2b5a5b7e534f0375d970498ea85a5655ca32e5bd4526dc9fa528");
     }
@@ -114,7 +114,7 @@ class ConceptDependencyGraphLoaderTest {
     }
 
     @Test
-    @DisplayName("byte-sensitivity: demoting exactly one validated edge status flows through to a graph of 152, not 153")
+    @DisplayName("byte-sensitivity: demoting exactly one validated edge status flows through to a graph of 271, not 272")
     void tamperedStatusYieldsFewerValidatedEdges() {
         Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
         Map<String, Object> edgesDoc = yaml.load(new String(
@@ -130,7 +130,7 @@ class ConceptDependencyGraphLoaderTest {
                         readPackaged(ConceptDependencyGraphLoader.NODES_RESOURCE),
                         readPackaged(ConceptDependencyGraphLoader.PRACTICALS_RESOURCE));
 
-        assertThat(graph.validatedEdgeCount()).isEqualTo(152);   // one fewer than the settled 153
+        assertThat(graph.validatedEdgeCount()).isEqualTo(271);   // one fewer than the settled 272
     }
 
     @Test

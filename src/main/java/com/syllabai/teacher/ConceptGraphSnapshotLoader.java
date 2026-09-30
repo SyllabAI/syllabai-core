@@ -27,15 +27,16 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * points, verbatim wording), {@code topics.yaml} (4 sections + 28 subsections),
  * {@code relationships.yaml} (210 PART_OF structure edges, RULE_DERIVED,
  * operator-PR-reviewed) — the official curriculum anchor — plus the three
- * session-55 files ({@code concepts.yaml} 113 concept/misconception nodes,
- * {@code concept_edges.yaml} 275 edges of which 153 HUMAN_VALIDATED,
+ * T-C11 files ({@code concepts.yaml} 193 concept/misconception nodes,
+ * {@code concept_edges.yaml} 488 edges of which 272 HUMAN_VALIDATED semantic,
  * {@code practicals.yaml} 12 required practicals) — the settled T-C11 graph
- * layer.</p>
+ * layer (batch-11 close 2026-09-25; operator core-sync GO 2026-10-01).</p>
  *
  * <p>This loader deliberately keeps the store's own epistemic statuses intact
  * (§8A.4: human validation does not erase provenance): the snapshot exposes
- * the 117 SUGGESTED anchor PART_OF edges (concept→SpecificationPoint) and the
- * 153 HUMAN_VALIDATED semantic edges separately, and drops nothing silently —
+ * the 211 anchor PART_OF edges (concept→SpecificationPoint; 117 operator-validated
+ * at the session-106 directive, 94 SUGGESTED from batches 5-11) and the 272
+ * HUMAN_VALIDATED semantic edges separately, and drops nothing silently —
  * the 5 frozen non-validated semantic edges (3 pilot HOLDs + 2
  * REVIEW_REQUIRED) are excluded <em>by count check</em> so the seed provably
  * never materializes them.</p>
@@ -50,11 +51,11 @@ public class ConceptGraphSnapshotLoader {
     static final String CONCEPT_EDGES_RESOURCE = "concept-graph/concept_edges.yaml";
     static final String PRACTICALS_RESOURCE = "concept-graph/practicals.yaml";
 
-    // session-55 pins (the settled T-C11 store, Batch-4 close 2026-09-13)
+    // batch-11 close pins (the settled T-C11 store, 2026-09-25; core-sync GO 2026-10-01)
     static final String CONCEPTS_SHA256 =
-            "69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613";
+            "24fa91ac7149682b1083ff47112362a11180bcfb7899c1343c6f536682447e3f";
     static final String CONCEPT_EDGES_SHA256 =
-            "e583ae50916fcb54a924bb13f42625a840e3d9baaec8fa5f69e62122716e5f07";
+            "cbef02513ddbb0121a7ba139512c128185311ae3ebf0ef5121e1ed792522aa10";
     static final String PRACTICALS_SHA256 =
             "e53e5f87606a2b5a5b7e534f0375d970498ea85a5655ca32e5bd4526dc9fa528";
 
@@ -71,9 +72,9 @@ public class ConceptGraphSnapshotLoader {
     static final int SUBSECTION_COUNT = 28;
     static final int SPEC_POINT_COUNT = 182;
     static final int PRACTICAL_COUNT = 12;
-    static final int CONCEPT_NODE_COUNT = 113;
-    static final int ANCHOR_EDGE_COUNT = 117;
-    static final int VALIDATED_SEMANTIC_EDGE_COUNT = 153;
+    static final int CONCEPT_NODE_COUNT = 193;
+    static final int ANCHOR_EDGE_COUNT = 211;
+    static final int VALIDATED_SEMANTIC_EDGE_COUNT = 272;
     /** 3 frozen pilot HOLDs + 2 REVIEW_REQUIRED — must never reach the KG. */
     static final int EXCLUDED_SEMANTIC_EDGE_COUNT = 5;
 

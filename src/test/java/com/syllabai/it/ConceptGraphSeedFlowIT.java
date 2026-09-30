@@ -39,7 +39,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Postgres with the production beans (V15, session 56). The full product path
  * under test: teacher activates the pinned snapshot → the real curriculum
  * rows (4 sections / 28 subsections / 182 spec points / 12 practicals) + the
- * settled T-C11 graph (113 nodes / 117 anchors / 153 validated edges) land in
+ * settled T-C11 graph (193 nodes / 211 anchors / 272 validated edges) land in
  * the existing KG → the teacher read surfaces express them (tree +
  * graph-derived edges) → the learner NBA loop activates against the seeded
  * codes automatically (session 55's join contract) — and re-activation is a
@@ -94,10 +94,10 @@ class ConceptGraphSeedFlowIT {
         assertThat(first.subsections()).isEqualTo(28);
         assertThat(first.specPoints()).isEqualTo(182);
         assertThat(first.practicals()).isEqualTo(12);
-        assertThat(first.conceptNodes()).isEqualTo(113);
-        assertThat(first.validatedSemanticEdges()).isEqualTo(153);
-        assertThat(first.nodesCreated()).isEqualTo(1 + 4 + 28 + 182 + 12 + 113);
-        assertThat(first.edgesCreated()).isEqualTo(4 + 28 + 182 + 12 + 117 + 153);
+        assertThat(first.conceptNodes()).isEqualTo(193);
+        assertThat(first.validatedSemanticEdges()).isEqualTo(272);
+        assertThat(first.nodesCreated()).isEqualTo(1 + 4 + 28 + 182 + 12 + 193);
+        assertThat(first.edgesCreated()).isEqualTo(4 + 28 + 182 + 12 + 211 + 272);
 
         // 2. THE PRODUCT PATH — teacher selects 4CH1 → section → spec point:
         // the real SP 4CH1-3.7C (bond-energy calculations) carries its concepts
@@ -120,7 +120,7 @@ class ConceptGraphSeedFlowIT {
 
         // 3. THE VALIDATED RELATIONSHIPS — the teacher edge read model
         ConceptGraphEdgesView edgeView = teacherGraph.edges(first.rootNodeId());
-        assertThat(edgeView.edges()).hasSize(153);
+        assertThat(edgeView.edges()).hasSize(272);
         ConceptGraphEdgeView prerequisite = edgeView.edges().stream()
                 .filter(e -> "REQUIRES_PREREQUISITE".equals(e.relation())
                         && "4CH1-CON-BOND-ENERGY-CALC".equals(e.source().code())
