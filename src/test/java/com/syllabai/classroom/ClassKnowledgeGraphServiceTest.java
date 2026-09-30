@@ -411,7 +411,8 @@ class ClassKnowledgeGraphServiceTest {
     void learnerGraphDisabledMemberIs404() {
         SchoolClass clazz = liveClass();
         when(members.existsByClassIdAndStudentId(clazz.id(), learnerC)).thenReturn(true);
-        when(users.findById(learnerC)).thenReturn(Optional.of(user(learnerC, "C", false)));
+        User disabled = user(learnerC, "C", false); // built OUTSIDE any when() — UnfinishedStubbing
+        when(users.findById(learnerC)).thenReturn(Optional.of(disabled));
 
         assertThatThrownBy(() -> service.learnerKnowledgeGraph(clazz, learnerC, root))
                 .isInstanceOf(NotFoundException.class);
@@ -422,7 +423,8 @@ class ClassKnowledgeGraphServiceTest {
     void learnerGraphDelegatesToF034() {
         SchoolClass clazz = liveClass();
         when(members.existsByClassIdAndStudentId(clazz.id(), learnerA)).thenReturn(true);
-        when(users.findById(learnerA)).thenReturn(Optional.of(user(learnerA, "A", true)));
+        User enabled = user(learnerA, "A", true); // built OUTSIDE any when()
+        when(users.findById(learnerA)).thenReturn(Optional.of(enabled));
         LearnerKnowledgeGraphView view = new LearnerKnowledgeGraphView(
                 learnerA, root, "4CH1", "Edexcel IGCSE Chemistry 4CH1",
                 Instant.now(), List.of(), List.of());
