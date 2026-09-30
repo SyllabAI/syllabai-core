@@ -41,12 +41,28 @@ implementation 1fc95c3 was discarded in favor of the upstream contract):
       overview with bank-card lead cite d1bc1384 p.1. Pin asserts honest
       grounded serve (not refused, >=1 citation); does NOT pin doc-ids or
       answer text — secondary cites vary with groq retrieval)
-  B2 june-2019-P1-Q3                -> GUARD-REFUSAL  (hard anchor since
-      trace 1a0e323dbeb8a161: second adjudicated fail-open shape, same
-      structural rule — stated identity binds zero validated June-2019-1C
-      anchors; observed live refusing 09-27 pre-promotion. DATA-COUPLED:
-      flips to SERVED when June-2019-1C QP/MS is ingested/linked — retire
-      or flip this anchor deliberately at that ingest wave, never silently)
+  B2 june-2019-P1-Q3                -> SERVED(cites)  (DATA-COUPLED hard
+      anchor, DELIBERATELY FLIPPED 2026-09-30 per its own RULES contract
+      pinned at trace 1a0e323dbeb8a161: "flips to SERVED when June-2019-1C
+      QP/MS is ingested/linked — retire or flip deliberately, never
+      silently". The predicted wave arrived between the 09-28 11:16Z GREEN
+      run (2a1676a) and the 09-29 00:27Z scheduled run (aee2af1): nightly
+      went B2-only RED twice (aee2af1, 5b946ba) while A1-A5 stayed green;
+      live probe showed SERVED(cites) with real 4CH1/1C June-2019 QP
+      "Question paper — p7/p11" (98622045…) + MS cites 02e4c38c / f3a234b6
+      / f8efe458 / aa079c51 — genuine Q3 chemistry content, not
+      bleed-shaped (the A-family control on the sibling 2C paper still
+      refuses). Operator go recorded 2026-09-30 (Discord trace
+      b4fc2bee098c230126cc126e5ca72457). PROVENANCE GAP: no master-pack
+      ledger record identifies the ingest/validation wave that moved those
+      1C docs to VALIDATED — recorded as an open hygiene item (T-C38
+      lane), not silently accepted.
+  B3 june-2019-P1-Q99               -> GUARD-REFUSAL  (hard anchor added
+      2026-09-30 in the same wave as the B2 flip: B2's replacement refusal
+      pin on the SAME paper — an out-of-range QNUM on a real June-2019-1C
+      identity must refuse with the echoed-identity deterministic guard;
+      live-verified clean pre-flip. Keeps the refusal side of the 1C paper
+      tested now that Q3 legitimately serves.)
   C1 jan-2022-2CR-Q1                -> SERVED(cites)  (hard anchor since
       trace 1a0e3e6722ee9855: covered identity — data-fix 09-27 flipped
       the 2CR .md family VALIDATED, so the guard must NOT fire; observed
@@ -62,9 +78,10 @@ implementation 1fc95c3 was discarded in favor of the upstream contract):
   E1/E2 CONTROL jan-2022-1C-Q4      -> FULL-PIN(1C)   (hard anchor; trio
       2d265267 card / 125b1f13 QP / 9c965f1e MS must stay byte-stable)
 
-FULL MATRIX (trace 1a0e3e6722ee9855): all nine asks pinned — every sweep
-run is a complete regression gate: 4 refusal pins (A1/A2/A3/B2) + 3
-grounded-serve pins (B1/C1/D1) + 2 byte-stable controls (E1/E2).
+FULL MATRIX (trace 1a0e3e6722ee9855, amended 2026-09-30): every sweep run
+is a complete regression gate: 4 refusal pins (A1/A2/A3/B3) + 2
+paraphrase refusal pins (A4/A5) + 4 grounded-serve pins (B1/B2/C1/D1) +
+2 byte-stable controls (E1/E2) = 12 asks.
 
 PARAPHRASE EXPANSION (trace 1a0e45b9b32ede41, operator: "authorize the
 H1 fix"): the deep-audit 2026-09-28 found the guard bypassable by
@@ -78,7 +95,9 @@ paraphrase now GUARD-REFUSES. Anchors A4/A5 pin the widened grammar as
 PARAPHRASE-DETECTION supports: they prove the widened parse reaches the
 same guard, they do NOT define the coverage class (a green run is proof
 about these strings, not about every possible phrasing). Matrix now
-4+2 refusal / 3 grounded-serve / 2 controls = 11 asks.
+4+2 refusal / 3 grounded-serve / 2 controls = 11 asks; the 2026-09-30
+wave flipped B2 to the serve side and added the B3 refusal pin, moving
+the matrix to 4+2 refusal / 4 grounded-serve / 2 controls = 12 asks.
 
 GUARD-REFUSAL detection (upstream KaRagService contract): refused==true AND
 provider=="deterministic-paper-refusal" (the echoed-identity deterministic
@@ -97,14 +116,15 @@ TRIO = ("2d265267", "125b1f13", "9c965f1e")  # card / QP / MS doc-id prefixes
 GUARD_PROVIDER = "deterministic-paper-refusal"  # upstream KaRagService marker
 GUARD_PHRASE = "I could not find"               # echoed-identity secondary check
 
-EXPECTED = {   # FULL MATRIX (trace 1a0e3e6722ee9855): all 9 asks pinned
+EXPECTED = {   # FULL MATRIX (trace 1a0e3e6722ee9855, amended 2026-09-30): all 12 asks pinned
     "A1 bank-Q10 drop-from":  "GUARD-REFUSAL",
     "A2 bank-Q10 bare":       "GUARD-REFUSAL",
     "A3 bank-Q10 alt-verb":   "GUARD-REFUSAL",
     "A4 bank-Q10 word-ordinal": "GUARD-REFUSAL",
     "A5 bank-Q10 number-interp": "GUARD-REFUSAL",
     "B1 bank-coverage P2-Q5": "SERVED(cites)",
-    "B2 bank-coverage P1-Q3": "GUARD-REFUSAL",
+    "B2 bank-coverage P1-Q3": "SERVED(cites)",
+    "B3 paper-1-Q99 refusal": "GUARD-REFUSAL",
     "C1 jan2022-2CR":         "SERVED(cites)",
     "D1 jan2016-2C legacy":   "SERVED(cites)",
     "E1 CONTROL known-good":  "FULL-PIN(1C)",
@@ -135,10 +155,20 @@ RULES = {   # surfaced on drift: what a red means + the deliberate action requir
         "wave removed coverage: flip to GUARD-REFUSAL deliberately in the same "
         "change; otherwise treat as a production defect.",
     "B2 bank-coverage P1-Q3":
-        "DATA-COUPLED. Expected flip: June-2019-1C QP/MS ingested/linked -> the "
-        "guard legitimately stops refusing. If an ingest wave explains it: flip "
-        "to SERVED(cites) deliberately in the same change. If NO ingest wave: "
-        "pool bleed is back — production defect, investigate.",
+        "DATA-COUPLED (serve side since the 2026-09-30 deliberate flip — the "
+        "predicted wave landed: 4CH1/1C June-2019 QP/MS reached VALIDATED "
+        "between the 09-28 GREEN and 09-29 RED runs; A1-A5 control stayed "
+        "green; live cites were real 1C QP/MS docs). Red = refused again "
+        "(1C coverage removed/re-adjudicated -> data-side review first, then "
+        "flip back deliberately in the same change) or SERVED(no-cites) "
+        "(cite loss -> retrieval defect). Never silently.",
+    "B3 paper-1-Q99 refusal":
+        "STRUCTURAL (refusal side; B2's replacement pin on the SAME paper, "
+        "added 2026-09-30). Out-of-range QNUM on a real June-2019-1C identity "
+        "must refuse with the echoed-identity deterministic guard. Red = the "
+        "guard stopped refusing (identity/range semantics regressed) or Q99 "
+        "began resolving (parser regression). Adjudication changes need an "
+        "operator decision record. Never retire silently.",
     "C1 jan2022-2CR":
         "DATA-COUPLED. Expected flips: 2CR .md family re-adjudicated (-> "
         "refusal class) or cite loss (-> SERVED(no-cites)). Either way: "
@@ -202,6 +232,7 @@ ASKS = [
     ("A5 bank-Q10 number-interp", "question number 10 of june 2019 paper 2"),
     ("B1 bank-coverage P2-Q5",   "explain question 5 from june 2019 paper 2"),
     ("B2 bank-coverage P1-Q3",   "explain question 3 from june 2019 paper 1"),
+    ("B3 paper-1-Q99 refusal",   "explain question 99 from june 2019 paper 1"),
     ("C1 jan2022-2CR",           "explain question 1 jan 2022 paper 2"),
     ("D1 jan2016-2C legacy",     "explain question 2 jan 2016 paper 2"),
     ("E1 CONTROL known-good",    "give me the answer of jan 2022 question 4 paper 1"),
