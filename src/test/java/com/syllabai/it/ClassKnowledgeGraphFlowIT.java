@@ -412,7 +412,8 @@ class ClassKnowledgeGraphFlowIT {
         long attemptsBefore = attemptRows.count();
 
         ClassNodeStudentsView view = heatmapController.nodeStudents(
-                teacher, classId, V6_SUBJECT_ROOT, V6_TOPIC_T1_1);
+                teacher, classId, V6_TOPIC_T1_1 /* nodeId in path */,
+                V6_SUBJECT_ROOT /* rootId as query */);
 
         // the panel restates the class + node it opened from
         assertThat(view.classId()).isEqualTo(classId);
@@ -456,7 +457,7 @@ class ClassKnowledgeGraphFlowIT {
                 + view.proficientCount()).isEqualTo(2);
 
         // THE READ-ONLY PIN, drill-down edition: both new reads wrote nothing
-        heatmapController.nodeStudents(teacher, classId, V6_SUBJECT_ROOT, V6_TOPIC_T1_1);
+        heatmapController.nodeStudents(teacher, classId, V6_TOPIC_T1_1, V6_SUBJECT_ROOT);
         assertThat(skillStates.count()).isEqualTo(skillsBefore);
         assertThat(misconceptionStates.count()).isEqualTo(miscoBefore);
         assertThat(attemptRows.count()).isEqualTo(attemptsBefore);
@@ -498,25 +499,23 @@ class ClassKnowledgeGraphFlowIT {
 
         // ownership + subject-isolation gates on both new endpoints
         assertThatThrownBy(() -> heatmapController.nodeStudents(
-                other, classId, V6_SUBJECT_ROOT, V6_TOPIC_T1_1))
+                other, classId, V6_TOPIC_T1_1, V6_SUBJECT_ROOT))
                 .isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> heatmapController.learnerKnowledgeGraph(
                 other, classId, member.id(), V6_SUBJECT_ROOT))
                 .isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> heatmapController.nodeStudents(
-                teacher, UUID.randomUUID(), V6_SUBJECT_ROOT, V6_TOPIC_T1_1))
+                teacher, UUID.randomUUID(), V6_TOPIC_T1_1, V6_SUBJECT_ROOT))
                 .isInstanceOf(NotFoundException.class);
+        // a node outside the root's subtree: the CHM subject root itself is
+        // NOT inside T1.1's subtree — no silent cross-subject hop
         assertThatThrownBy(() -> heatmapController.nodeStudents(
-                teacher, classId, UUID.randomUUID(), V6_TOPIC_T1_1))
+                teacher, classId, V6_SUBJECT_ROOT /* nodeId */,
+                V6_TOPIC_T1_1 /* rootId */))
                 .isInstanceOf(NotFoundException.class);
-        // the subject root itself is NOT inside T1.1's subtree — no silent
-        // cross-subject hop
+        // unknown root (the graph read service's 404 contract)
         assertThatThrownBy(() -> heatmapController.nodeStudents(
-                teacher, classId, V6_TOPIC_T1_1, V6_SUBJECT_ROOT))
-                .isInstanceOf(NotFoundException.class);
-        // unknown root
-        assertThatThrownBy(() -> heatmapController.nodeStudents(
-                teacher, classId, UUID.randomUUID(), V6_TOPIC_T1_1))
+                teacher, classId, V6_TOPIC_T1_1, UUID.randomUUID()))
                 .isInstanceOf(NotFoundException.class);
     }
 }
