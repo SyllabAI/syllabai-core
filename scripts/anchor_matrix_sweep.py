@@ -53,10 +53,22 @@ implementation 1fc95c3 was discarded in favor of the upstream contract):
       / f8efe458 / aa079c51 — genuine Q3 chemistry content, not
       bleed-shaped (the A-family control on the sibling 2C paper still
       refuses). Operator go recorded 2026-09-30 (Discord trace
-      b4fc2bee098c230126cc126e5ca72457). PROVENANCE GAP: no master-pack
-      ledger record identifies the ingest/validation wave that moved those
-      1C docs to VALIDATED — recorded as an open hygiene item (T-C38
-      lane), not silently accepted.
+      b4fc2bee098c230126cc126e5ca72457). PROVENANCE (gap identified+closed
+      2026-09-30, T-C39, operator trace 1a0f281f435be551): the wave is the
+      T-PS1 OCR lane + COVID resolution of 2026-09-28 (operator IM trace
+      1a0e9c4c5305d55d, agent-performed under the Task-58->60 delegation
+      chain): O5 ingested QP doc 98622045 (18 chunks, pdflane-atoms-ocr
+      1.3.0); O6 apply COMMITTED 21:19:52Z (PLACE QP shell cf68cf74 ->
+      98622045, MS shell 39935310 -> 02e4c38c, paper UNFLAG+VALIDATE,
+      children + 4 doc-VALIDATEs, 50 audit rows); O6b doc-UPDATE remediation
+      COMMITTED 21:21:27Z (rowcount 4, 4 corrective rows — append-only,
+      54 total). Timeline: sweep 2a1676a GREEN 11:16Z -> O6/O6b ~21:20Z ->
+      scheduled sweep aee2af1 B2-only RED 00:27Z next day. Master-pack
+      ledger entry: SyllabAI/syllabai TODO.md T-C39 section; sha-frozen
+      evidence bench/review/psaxis-review-2026-09-28/ocr-lane-2026-09-28/
+      (ocr_O6_report / ocr_O6b_remediation_report / ocr_O7_verify).
+      Children of the same tx landed 09-29 via Task 66 TX-A (rows
+      3940-3976, trace 1a0ea5a6dbc30c79).
   B3 june-2019-P1-Q99               -> GUARD-REFUSAL  (hard anchor added
       2026-09-30 in the same wave as the B2 flip: B2's replacement refusal
       pin on the SAME paper — an out-of-range QNUM on a real June-2019-1C
