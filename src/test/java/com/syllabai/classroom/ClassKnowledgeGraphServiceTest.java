@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassGraphEdgeView;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassGraphNodeView;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassKnowledgeGraphView;
@@ -15,18 +16,21 @@ import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.learner.LearnerKnowledgeGraphService;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
 import com.syllabai.learner.SkillState;
 import com.syllabai.learner.SkillStateRepository;
 import com.syllabai.learner.decay.EbbinghausDecayService;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -55,10 +59,13 @@ class ClassKnowledgeGraphServiceTest {
 
     private final LearnerProperties learnerProperties = new LearnerProperties(null, null, null, null);
     private final EbbinghausDecayService decayService = new EbbinghausDecayService();
+    private final AttemptRepository attempts = mock(AttemptRepository.class);
+    private final LearnerKnowledgeGraphService learnerGraphs =
+            mock(LearnerKnowledgeGraphService.class);
 
     private final ClassKnowledgeGraphService service = new ClassKnowledgeGraphService(
             graph, skillStates, misconceptionStates, coverage, members, users,
-            decayService, learnerProperties);
+            decayService, learnerProperties, attempts, learnerGraphs);
 
     private static final UUID TEACHER = UUID.randomUUID();
     private static final UUID CLASS_ID = UUID.randomUUID();
@@ -385,5 +392,44 @@ class ClassKnowledgeGraphServiceTest {
                 .thenThrow(new NotFoundException("knowledge node", root));
 
         assertThatThrownBy(this::build).isInstanceOf(NotFoundException.class);
+    }
+
+    // ── TFA-07 §14 gate: the teacher's individual-student-graph lens ────
+
+    @Test
+    @DisplayName("§14: a non-member learner is a 404 — the roster is the privacy boundary")
+    void learnerGraphNonMemberIs404() {
+        SchoolClass clazz = liveClass();
+        when(members.existsByClassIdAndStudentId(clazz.id(), independent)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.learnerKnowledgeGraph(clazz, independent, root))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("§14: a DISABLED member is a 404 — the enabled gate matches the aggregation roster")
+    void learnerGraphDisabledMemberIs404() {
+        SchoolClass clazz = liveClass();
+        when(members.existsByClassIdAndStudentId(clazz.id(), learnerC)).thenReturn(true);
+        User disabled = user(learnerC, "C", false); // built OUTSIDE any when() — UnfinishedStubbing
+        when(users.findById(learnerC)).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> service.learnerKnowledgeGraph(clazz, learnerC, root))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("§14: an enabled member gets the SAME F-034 read model — delegation, not a second graph")
+    void learnerGraphDelegatesToF034() {
+        SchoolClass clazz = liveClass();
+        when(members.existsByClassIdAndStudentId(clazz.id(), learnerA)).thenReturn(true);
+        User enabled = user(learnerA, "A", true); // built OUTSIDE any when()
+        when(users.findById(learnerA)).thenReturn(Optional.of(enabled));
+        LearnerKnowledgeGraphView view = new LearnerKnowledgeGraphView(
+                learnerA, root, "4CH1", "Edexcel IGCSE Chemistry 4CH1",
+                Instant.now(), List.of(), List.of());
+        when(learnerGraphs.graphFor(learnerA, root)).thenReturn(view);
+
+        assertThat(service.learnerKnowledgeGraph(clazz, learnerA, root)).isSameAs(view);
     }
 }

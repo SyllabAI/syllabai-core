@@ -1,10 +1,18 @@
 package com.syllabai.classroom;
 
+import com.syllabai.assessment.Attempt;
+import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassGraphEdgeView;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassGraphNodeView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentsView;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassKnowledgeGraphView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.StudentEvidenceItemView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.StudentMisconceptionView;
 import com.syllabai.identity.User;
 import com.syllabai.identity.UserRepository;
+import com.syllabai.learner.LearnerKnowledgeGraphService;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeGraphService.PrerequisiteRelation;
 import com.syllabai.knowledge.dto.NodeView;
@@ -15,13 +23,18 @@ import com.syllabai.learner.SkillStateRepository;
 import com.syllabai.learner.decay.DecayParams;
 import com.syllabai.learner.decay.EbbinghausDecayService;
 import com.syllabai.learner.LearnerProperties;
+import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,9 +70,23 @@ import org.springframework.transaction.annotation.Transactional;
  * roster × scope — no per-learner or per-node loop touches the database.
  * Nothing here writes: the heatmap consumes the learner model and the
  * coverage overlay, it never becomes a second implementation of either.</p>
+ *
+ * <p><b>TFA-07 drill-down (TEACHER_ARCHITECTURE §13.5 + §14).</b> The same
+ * read model serves the drill chain's next legs: a node's affected students
+ * ({@link #nodeStudents}) — the heatmap's roster + band vocabulary at
+ * student grain, with the raw attempts behind the numbers — and the
+ * teacher-authorized individual student graph ({@link #learnerKnowledgeGraph}),
+ * which deliberately DELEGATES to {@link LearnerKnowledgeGraphService} (F-034)
+ * so there is exactly ONE student-graph implementation; the teacher lens adds
+ * only the §17 gates, never a second graph.</p>
  */
 @Service
 public class ClassKnowledgeGraphService {
+
+    /** most recent attempts scanned per node-students read, before grouping */
+    private static final int ATTEMPT_SCAN_CAP = 120;
+    /** recent attempts kept per student in the node detail panel */
+    private static final int EVIDENCE_PER_STUDENT = 3;
 
     private final KnowledgeGraphService graph;
     private final SkillStateRepository skillStates;
@@ -69,6 +96,8 @@ public class ClassKnowledgeGraphService {
     private final UserRepository users;
     private final EbbinghausDecayService decayService;
     private final LearnerProperties learnerProperties;
+    private final AttemptRepository attempts;
+    private final LearnerKnowledgeGraphService learnerGraphs;
 
     public ClassKnowledgeGraphService(KnowledgeGraphService graph,
                                       SkillStateRepository skillStates,
@@ -77,7 +106,9 @@ public class ClassKnowledgeGraphService {
                                       ClassMemberRepository members,
                                       UserRepository users,
                                       EbbinghausDecayService decayService,
-                                      LearnerProperties learnerProperties) {
+                                      LearnerProperties learnerProperties,
+                                      AttemptRepository attempts,
+                                      LearnerKnowledgeGraphService learnerGraphs) {
         this.graph = graph;
         this.skillStates = skillStates;
         this.misconceptionStates = misconceptionStates;
@@ -86,6 +117,8 @@ public class ClassKnowledgeGraphService {
         this.users = users;
         this.decayService = decayService;
         this.learnerProperties = learnerProperties;
+        this.attempts = attempts;
+        this.learnerGraphs = learnerGraphs;
     }
 
     /**
@@ -175,6 +208,201 @@ public class ClassKnowledgeGraphService {
         return new ClassKnowledgeGraphView(
                 clazz.id(), clazz.name(), tree.id(), tree.code(), tree.title(),
                 roster.size(), now, List.copyOf(nodes), List.copyOf(edges));
+    }
+
+    /**
+     * The §13.5 node detail: one node's affected students for an owned class
+     * — the drill chain's "weak node → affected students" leg. The roster is
+     * exactly the heatmap's (enabled members only — the independent-student
+     * rule), each row carries the SAME per-node semantics the student KG
+     * shows that student (raw + effective mastery, shared band vocabulary),
+     * plus their misconception estimates on nodes attached under this node
+     * and a bounded slice of their recent attempts mapped to this node.
+     * Weakest measured students sort first; unmeasured students sit at the
+     * end with honest nulls — the panel must not fabricate.
+     *
+     * <p>Gates: the root must exist (the graph read service throws 404) and
+     * the node must belong to the root's PART_OF subtree — a node outside
+     * the subject is a 404 (subject isolation), never a silent cross-subject
+     * hop. Archived classes stay readable, exactly like the heatmap.</p>
+     */
+    @Transactional(readOnly = true)
+    public ClassNodeStudentsView nodeStudents(SchoolClass clazz, UUID rootId, UUID nodeId) {
+        Instant now = Instant.now(); // ONE clock read: decay + provenance anchor
+        DecayParams decayParams = learnerProperties.decay().toParams();
+        double activeThreshold = learnerProperties.bdt().activeThreshold();
+
+        NodeView tree = graph.treeWithMisconceptions(rootId);
+
+        // the scope: the PART_OF subtree + misconception registry (the heatmap walk)
+        Map<UUID, NodeView> structureById = new LinkedHashMap<>();
+        Map<UUID, List<NodeView>> childrenOf = new HashMap<>();
+        Map<UUID, List<NodeView>> misconceptionsOf = new HashMap<>();
+        java.util.Set<UUID> miscoNodeIds = new java.util.HashSet<>();
+        collect(tree, childrenOf, structureById, misconceptionsOf, miscoNodeIds);
+        NodeView node = structureById.get(nodeId);
+        if (node == null) {
+            // not under this root (or not a structure node) — subject isolation
+            throw new NotFoundException("node is not part of this subject subtree");
+        }
+
+        // the roster: exactly this class's enabled members (the heatmap's gate)
+        List<UUID> memberIds = members.findByClassIdOrderByEnrolledAtAsc(clazz.id())
+                .stream().map(ClassMember::studentId).toList();
+        Map<UUID, String> names = new HashMap<>();
+        List<UUID> roster = new ArrayList<>();
+        if (!memberIds.isEmpty()) {
+            for (User u : users.findAllById(memberIds)) {
+                if (u.enabled()) {
+                    roster.add(u.id());
+                    names.put(u.id(), u.displayName());
+                }
+            }
+        }
+
+        // one batched query per evidence table, whole roster × this node
+        Map<UUID, SkillState> stateByLearner = new HashMap<>();
+        if (!roster.isEmpty()) {
+            for (SkillState s : skillStates.findByLearnerIdInAndNodeIdIn(
+                    roster, Set.of(nodeId))) {
+                stateByLearner.put(s.learnerId(), s);
+            }
+        }
+        List<NodeView> nodeMisconceptions =
+                misconceptionsOf.getOrDefault(nodeId, List.of());
+        Map<UUID, List<MisconceptionState>> miscoByLearner = new HashMap<>();
+        if (!roster.isEmpty() && !nodeMisconceptions.isEmpty()) {
+            Set<UUID> nodeMiscoIds = nodeMisconceptions.stream()
+                    .map(NodeView::id).collect(Collectors.toSet());
+            for (MisconceptionState m : misconceptionStates
+                    .findByLearnerIdInAndMisconceptionNodeIdIn(roster, nodeMiscoIds)) {
+                miscoByLearner.computeIfAbsent(m.learnerId(), k -> new ArrayList<>()).add(m);
+            }
+        }
+        Map<UUID, List<Attempt>> recentByLearner = new HashMap<>();
+        if (!roster.isEmpty()) {
+            for (Attempt a : attempts.findRecentByTopicNodeAndLearnerIdIn(
+                    nodeId, roster, PageRequest.of(0, ATTEMPT_SCAN_CAP))) {
+                List<Attempt> slice = recentByLearner.computeIfAbsent(
+                        a.learnerId(), k -> new ArrayList<>());
+                if (slice.size() < EVIDENCE_PER_STUDENT) {
+                    slice.add(a);
+                }
+            }
+        }
+
+        // coverage state for THIS node, the heatmap's own derivation
+        Map<UUID, TeachingCoverage> coverageRows = new HashMap<>();
+        for (TeachingCoverage row : coverage
+                .findByClassIdOrderBySpecPointNodeIdAsc(clazz.id())) {
+            coverageRows.put(row.specPointNodeId(), row);
+        }
+        Map<UUID, int[]> coverageMemo = new HashMap<>();
+        int[] counts = coverageCounts(nodeId, structureById, childrenOf,
+                coverageRows, coverageMemo);
+        String coverageState;
+        if (isSpecPoint(node)) {
+            TeachingCoverage row = coverageRows.get(node.id());
+            coverageState = row == null ? "unrecorded" : row.status().wire();
+        } else {
+            coverageState = counts[2] > 0 ? "taught"
+                    : counts[1] > 0 ? "not-taught" : "unrecorded";
+        }
+
+        // the §13.3 band distribution, restated from the same states the rows show
+        int struggling = 0;
+        int developing = 0;
+        int proficient = 0;
+        for (SkillState s : stateByLearner.values()) {
+            double effective = decayService.decayed(
+                    s.mastery(), s.lastPracticedAt(), now, decayParams);
+            switch (decayParams.bandOf(effective)) {
+                case "LOW" -> struggling++;
+                case "DEVELOPING" -> developing++;
+                case "SECURE" -> proficient++;
+                default -> throw new IllegalStateException(
+                        "unexpected mastery band: " + decayParams.bandOf(effective));
+            }
+        }
+
+        List<ClassNodeStudentView> students = new ArrayList<>();
+        for (UUID learnerId : roster) {
+            SkillState s = stateByLearner.get(learnerId);
+            Double mastery = null;
+            Double effective = null;
+            String band = null;
+            Integer attemptCount = null;
+            Integer correctCount = null;
+            Instant lastPracticed = null;
+            if (s != null) {
+                mastery = s.mastery();
+                effective = decayService.decayed(
+                        s.mastery(), s.lastPracticedAt(), now, decayParams);
+                band = decayParams.bandOf(effective);
+                attemptCount = s.attempts();
+                correctCount = s.correctCount();
+                lastPracticed = s.lastPracticedAt();
+            }
+            List<StudentMisconceptionView> misconceptions = new ArrayList<>();
+            for (MisconceptionState m : miscoByLearner.getOrDefault(learnerId, List.of())) {
+                NodeView miscoNode = nodeMisconceptions.stream()
+                        .filter(nv -> nv.id().equals(m.misconceptionNodeId()))
+                        .findFirst().orElse(null);
+                // structural invariant: the state's node came from THIS node's
+                // attached misconception set — a miss would be a graph
+                // inconsistency, so it is skipped, not guessed
+                if (miscoNode == null) {
+                    continue;
+                }
+                misconceptions.add(new StudentMisconceptionView(
+                        miscoNode.id(), miscoNode.code(), miscoNode.title(),
+                        m.probability(), m.probability() >= activeThreshold));
+            }
+            List<StudentEvidenceItemView> evidence = new ArrayList<>();
+            for (Attempt a : recentByLearner.getOrDefault(learnerId, List.of())) {
+                evidence.add(new StudentEvidenceItemView(
+                        a.id(), a.question().id(), a.question().externalRef(),
+                        a.correct(), a.marksAwarded(), a.question().marks(),
+                        a.markingState().name(), a.createdAt()));
+            }
+            students.add(new ClassNodeStudentView(
+                    learnerId, names.getOrDefault(learnerId, "unknown"),
+                    mastery, effective, band, attemptCount, correctCount,
+                    lastPracticed, List.copyOf(misconceptions), List.copyOf(evidence)));
+        }
+        // weakest first (the teacher opens this panel BECAUSE the node is weak),
+        // unmeasured last, then display name, then id — deterministic
+        students.sort(Comparator
+                .comparing((ClassNodeStudentView v) -> v.effectiveMastery() == null)
+                .thenComparing((ClassNodeStudentView v) -> v.effectiveMastery() == null
+                        ? 0.0 : v.effectiveMastery().doubleValue())
+                .thenComparing((ClassNodeStudentView v) -> v.displayName() == null
+                        ? "" : v.displayName().toLowerCase())
+                .thenComparing((ClassNodeStudentView v) -> v.learnerId().toString()));
+
+        return new ClassNodeStudentsView(
+                clazz.id(), clazz.name(), rootId, node.id(), node.code(), node.title(),
+                node.type(), coverageState, roster.size(),
+                struggling, developing, proficient, now, List.copyOf(students));
+    }
+
+    /**
+     * The §14 teacher view of ONE student's subject graph: the SAME F-034
+     * read model the student themselves sees (one graph implementation —
+     * this method only adds the §17 gates, never a second KG), reachable by
+     * the teacher ONLY for learners who are ENABLED members of THIS class.
+     * A non-member is a 404 — the roster is the privacy boundary, and an
+     * absent membership neither confirms nor denies any other enrollment.
+     */
+    @Transactional(readOnly = true)
+    public LearnerKnowledgeGraphView learnerKnowledgeGraph(SchoolClass clazz,
+                                                           UUID learnerId,
+                                                           UUID rootId) {
+        if (!members.existsByClassIdAndStudentId(clazz.id(), learnerId)
+                || users.findById(learnerId).filter(User::enabled).isEmpty()) {
+            throw new NotFoundException("learner is not a member of this class");
+        }
+        return learnerGraphs.graphFor(learnerId, rootId);
     }
 
     // ═══════════════════════════ internals ═══════════════════════════

@@ -131,4 +131,25 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
             order by a.createdAt desc
             """)
     List<Attempt> findRecentByTopicNode(@Param("nodeId") UUID nodeId, Pageable pageable);
+
+    /**
+     * TFA-07 class-KG drill-down (§13.5): the most recent attempts on
+     * questions mapped to one topic node, restricted to an explicit learner
+     * roster — the class-KG independent-student rule carried onto the
+     * evidence leg (a student without a membership row never appears in the
+     * teacher's per-node evidence). Batched fetch plan (question included),
+     * page-limited by the caller; the caller passes the ENABLED member ids.
+     */
+    @EntityGraph(attributePaths = "question")
+    @Query("""
+            select a from Attempt a
+            where (a.question.primaryTopicNodeId = :nodeId or exists (
+                select 1 from QuestionTopic qt
+                where qt.question = a.question and qt.nodeId = :nodeId))
+              and a.learnerId in :roster
+            order by a.createdAt desc
+            """)
+    List<Attempt> findRecentByTopicNodeAndLearnerIdIn(@Param("nodeId") UUID nodeId,
+                                                      @Param("roster") Collection<UUID> roster,
+                                                      Pageable pageable);
 }

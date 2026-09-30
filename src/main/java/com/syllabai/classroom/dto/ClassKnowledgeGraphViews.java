@@ -92,4 +92,78 @@ public final class ClassKnowledgeGraphViews {
             UUID nodeId,
             String nodeCode) {
     }
+
+    // ── TFA-07 drill-down (TEACHER_ARCHITECTURE §13.5 + §14) ────────────
+
+    /**
+     * The §13.5 node detail payload: one class-KG node with its affected
+     * students — the drill chain's "weak node → affected students" leg.
+     *
+     * <p>The roster is EXACTLY this class's enabled members (the
+     * independent-student rule, the same gate the heatmap aggregates under)
+     * and {@code distribution} restates the heatmap cell's band counts so
+     * the panel can never disagree with the graph it opened from. An empty
+     * {@code students} list with zero distribution counts is the honest
+     * "nobody measured here" state — never fabricated rows.</p>
+     */
+    public record ClassNodeStudentsView(
+            UUID classId,
+            String className,
+            UUID rootId,
+            UUID nodeId,
+            String nodeCode,
+            String nodeTitle,
+            String nodeType,
+            String coverageState,
+            int learnersEnrolled,
+            int strugglingCount,
+            int developingCount,
+            int proficientCount,
+            Instant asOf,
+            List<ClassNodeStudentView> students) {
+    }
+
+    /**
+     * One affected student on one node: their per-node learner state in the
+     * SAME semantics the student's own KG uses (raw BKT mastery + EFFECTIVE
+     * decayed mastery + the shared band vocabulary), their misconception
+     * estimates on the misconception nodes attached under this node, and a
+     * bounded slice of their most recent attempts mapped to this node (the
+     * evidence behind every number — §13.5 "recent class evidence" at
+     * student grain). Unmeasured = null mastery/band + empty evidence,
+     * honestly.
+     */
+    public record ClassNodeStudentView(
+            UUID learnerId,
+            String displayName,
+            Double mastery,
+            Double effectiveMastery,
+            String band,
+            Integer attempts,
+            Integer correctCount,
+            Instant lastPracticedAt,
+            List<StudentMisconceptionView> misconceptions,
+            List<StudentEvidenceItemView> recentAttempts) {
+    }
+
+    /** one misconception estimate a student carries on a node under this node */
+    public record StudentMisconceptionView(
+            UUID misconceptionNodeId,
+            String code,
+            String title,
+            double probability,
+            boolean active) {
+    }
+
+    /** one recent attempt on this node by this student (raw evidence, verbatim) */
+    public record StudentEvidenceItemView(
+            UUID attemptId,
+            UUID questionId,
+            String questionRef,
+            boolean correct,
+            Integer marksAwarded,
+            int questionMarks,
+            String markingState,
+            Instant createdAt) {
+    }
 }

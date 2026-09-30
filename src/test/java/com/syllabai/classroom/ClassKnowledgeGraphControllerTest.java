@@ -61,6 +61,53 @@ class ClassKnowledgeGraphControllerTest {
         assertThat(controller.graph(TEACHER, CLASS_ID, ROOT)).isSameAs(view);
     }
 
+    @Test
+    @DisplayName("TFA-07 node students: same ownership gates, archived classes stay readable, service delegation")
+    void nodeStudentsGates() {
+        UUID NODE = UUID.randomUUID();
+        when(classes.findById(CLASS_ID)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> controller.nodeStudents(TEACHER, CLASS_ID, NODE, ROOT))
+                .isInstanceOf(NotFoundException.class);
+
+        SchoolClass archived = ownedClass();
+        archived.status(SchoolClass.Status.ARCHIVED);
+        when(classes.findById(CLASS_ID)).thenReturn(Optional.of(archived));
+        assertThatThrownBy(() -> controller.nodeStudents(UUID.randomUUID(), CLASS_ID, NODE, ROOT))
+                .isInstanceOf(ForbiddenException.class);
+
+        com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentsView view =
+                new com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentsView(
+                        CLASS_ID, "10A", ROOT, NODE, "4CH1-1.1", "spec", "SUBTOPIC",
+                        "unrecorded", 0, 0, 0, 0, Instant.now(), List.of());
+        when(heatmaps.nodeStudents(archived, ROOT, NODE)).thenReturn(view);
+        assertThat(controller.nodeStudents(TEACHER, CLASS_ID, NODE, ROOT)).isSameAs(view);
+    }
+
+    @Test
+    @DisplayName("TFA-07 individual student graph: same ownership gates, service delegation")
+    void learnerGraphGates() {
+        UUID LEARNER = UUID.randomUUID();
+        when(classes.findById(CLASS_ID)).thenReturn(Optional.empty());
+        assertThatThrownBy(() ->
+                controller.learnerKnowledgeGraph(TEACHER, CLASS_ID, LEARNER, ROOT))
+                .isInstanceOf(NotFoundException.class);
+
+        when(classes.findById(CLASS_ID)).thenReturn(Optional.of(ownedClass()));
+        assertThatThrownBy(() ->
+                controller.learnerKnowledgeGraph(UUID.randomUUID(), CLASS_ID, LEARNER, ROOT))
+                .isInstanceOf(ForbiddenException.class);
+
+        SchoolClass owned = ownedClass();
+        when(classes.findById(CLASS_ID)).thenReturn(Optional.of(owned));
+        com.syllabai.learner.dto.LearnerKnowledgeGraphView view =
+                new com.syllabai.learner.dto.LearnerKnowledgeGraphView(
+                        LEARNER, ROOT, "4CH1", "Chemistry", Instant.now(),
+                        List.of(), List.of());
+        when(heatmaps.learnerKnowledgeGraph(owned, LEARNER, ROOT)).thenReturn(view);
+        assertThat(controller.learnerKnowledgeGraph(TEACHER, CLASS_ID, LEARNER, ROOT))
+                .isSameAs(view);
+    }
+
     private SchoolClass ownedClass() {
         return new SchoolClass(TEACHER, COURSE, "IGCSE Chemistry", "10A") {
             @Override

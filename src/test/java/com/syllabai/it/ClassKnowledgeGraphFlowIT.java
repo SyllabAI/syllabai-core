@@ -9,8 +9,13 @@ import com.syllabai.classroom.TeacherClassController;
 import com.syllabai.classroom.TeachingCoverageController;
 import com.syllabai.classroom.TeachingCoverageController.MarkRequest;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassGraphNodeView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentView;
+import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassNodeStudentsView;
 import com.syllabai.classroom.dto.ClassKnowledgeGraphViews.ClassKnowledgeGraphView;
 import com.syllabai.classroom.dto.ClassroomViews.TeacherClassView;
+import com.syllabai.assessment.AssessmentService;
+import com.syllabai.assessment.AttemptRepository;
+import com.syllabai.assessment.dto.SubmitAnswerRequest;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.Role;
 import com.syllabai.identity.User;
@@ -24,6 +29,8 @@ import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
 import com.syllabai.learner.SkillState;
 import com.syllabai.learner.SkillStateRepository;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
+import com.syllabai.learner.dto.LearnerKnowledgeGraphView.NodeWithStateView;
 import com.syllabai.shared.ForbiddenException;
 import com.syllabai.shared.NotFoundException;
 import java.time.Instant;
@@ -98,6 +105,10 @@ class ClassKnowledgeGraphFlowIT {
     private TeachingCoverageController coverageController;
     @Autowired
     private ClassKnowledgeGraphController heatmapController;
+    @Autowired
+    private AssessmentService assessment;
+    @Autowired
+    private AttemptRepository attemptRows;
     @Autowired
     private SchoolClassRepository classRows;
     @Autowired
@@ -352,5 +363,159 @@ class ClassKnowledgeGraphFlowIT {
                     assertThat(n.coverageState()).isEqualTo("unrecorded");
                     assertThat(n.recordedSpecPoints()).isZero();
                 });
+    }
+
+    // ── TFA-07 drill-down: node students + the individual student graph ──
+    //
+    // The evidence leg runs on the V6/V7 seed subject (CHM root → T1.1 with
+    // the seed MCQs and the seed misconception): two members submit REAL
+    // attempts (one wrong on the misconception-tagged option, one correct),
+    // so the drill-down reads the same BKT/BDT states the evidence pipeline
+    // wrote — hand-seeded rows would prove nothing about the chain.
+
+    private static final UUID V6_SUBJECT_ROOT =
+            UUID.fromString("20000000-0000-0000-0000-000000000001");
+    private static final UUID V6_TOPIC_T1_1 =
+            UUID.fromString("20000000-0000-0000-0000-000000000012");
+    private static final UUID SEED_MCQ =
+            UUID.fromString("40000000-0000-0000-0000-000000000001");
+    private static final UUID SEED_MCQ_WRONG_OPTION =
+            UUID.fromString("41000000-0000-0000-0000-000000000001");
+    private static final UUID SEED_MCQ_CORRECT_OPTION =
+            UUID.fromString("41000000-0000-0000-0000-000000000003");
+
+    @Test
+    @DisplayName("TFA-07 node students: member-only rows weakest-first, active misconception + raw evidence, restated distribution, read-only")
+    void nodeStudentsDrillDown() {
+        UUID teacher = newTeacher();
+        UUID classId = newClass(teacher);
+
+        User weak = newStudent("Walt Weak");
+        User strong = newStudent("Stella Strong");
+        User outsider = newStudent("Nora NotEnrolled");
+        enroll(teacher, classId, weak.email());
+        enroll(teacher, classId, strong.email());
+
+        // real attempts on the seeded MCQ: the wrong option carries the seed
+        // misconception, so BDT marks exactly one active estimate
+        assessment.submit(weak.id(), new SubmitAnswerRequest(
+                SEED_MCQ, SEED_MCQ_WRONG_OPTION, 25_000L, 4, false, false));
+        assessment.submit(strong.id(), new SubmitAnswerRequest(
+                SEED_MCQ, SEED_MCQ_CORRECT_OPTION, 18_000L, 4, false, false));
+        // the outsider's learner model is FULL of evidence on the same node —
+        // without a membership row she must not surface a single time
+        assessment.submit(outsider.id(), new SubmitAnswerRequest(
+                SEED_MCQ, SEED_MCQ_CORRECT_OPTION, 12_000L, 4, false, false));
+
+        long skillsBefore = skillStates.count();
+        long miscoBefore = misconceptionStates.count();
+        long attemptsBefore = attemptRows.count();
+
+        ClassNodeStudentsView view = heatmapController.nodeStudents(
+                teacher, classId, V6_TOPIC_T1_1 /* nodeId in path */,
+                V6_SUBJECT_ROOT /* rootId as query */);
+
+        // the panel restates the class + node it opened from
+        assertThat(view.classId()).isEqualTo(classId);
+        assertThat(view.nodeCode()).isEqualTo("WCH11-T1.1");
+        assertThat(view.coverageState()).isEqualTo("unrecorded"); // no rows for this class
+        assertThat(view.learnersEnrolled()).isEqualTo(2);
+
+        // member-only: exactly the two enrolled students, weakest FIRST
+        assertThat(view.students()).hasSize(2);
+        assertThat(view.students().stream().map(ClassNodeStudentView::displayName))
+                .containsExactly("Walt Weak", "Stella Strong");
+        ClassNodeStudentView weakRow = view.students().get(0);
+        ClassNodeStudentView strongRow = view.students().get(1);
+        assertThat(weakRow.effectiveMastery()).isLessThan(strongRow.effectiveMastery());
+
+        // the weak member's state: measured, banded, evidenced
+        assertThat(weakRow.band()).isNotEqualTo("UNMEASURED");
+        assertThat(weakRow.attempts()).isGreaterThanOrEqualTo(1);
+        assertThat(weakRow.lastPracticedAt()).isNotNull();
+        // BDT: the misconception-tagged wrong answer is ACTIVE for him
+        assertThat(weakRow.misconceptions()).hasSize(1);
+        assertThat(weakRow.misconceptions().get(0).active()).isTrue();
+        assertThat(weakRow.misconceptions().get(0).probability()).isGreaterThanOrEqualTo(0.5);
+        // and the raw attempts behind the number — his wrong one included
+        assertThat(weakRow.recentAttempts()).isNotEmpty();
+        assertThat(weakRow.recentAttempts().stream()
+                .anyMatch(a -> !a.correct())).isTrue();
+
+        // the strong member: measured too, no active misconception from a
+        // correct answer, evidence present
+        assertThat(strongRow.band()).isNotEqualTo("UNMEASURED");
+        assertThat(strongRow.misconceptions()
+                .stream().anyMatch(m -> m.active())).isFalse();
+        assertThat(strongRow.recentAttempts().stream()
+                .allMatch(a -> a.correct())).isTrue();
+
+        // the §13.3 distribution, restated: the band counts cover exactly
+        // the measured members (both), and the panel cannot disagree with
+        // the rows above
+        assertThat(view.strugglingCount() + view.developingCount()
+                + view.proficientCount()).isEqualTo(2);
+
+        // THE READ-ONLY PIN, drill-down edition: both new reads wrote nothing
+        heatmapController.nodeStudents(teacher, classId, V6_TOPIC_T1_1, V6_SUBJECT_ROOT);
+        assertThat(skillStates.count()).isEqualTo(skillsBefore);
+        assertThat(misconceptionStates.count()).isEqualTo(miscoBefore);
+        assertThat(attemptRows.count()).isEqualTo(attemptsBefore);
+    }
+
+    @Test
+    @DisplayName("TFA-07 individual student graph: same F-034 read model for members, roster-gated for everyone else")
+    void individualStudentGraphGates() {
+        UUID teacher = newTeacher();
+        UUID other = newTeacher();
+        UUID classId = newClass(teacher);
+
+        User member = newStudent("Mia Member");
+        User outsider = newStudent("Olive Outside");
+        enroll(teacher, classId, member.email());
+        assessment.submit(member.id(), new SubmitAnswerRequest(
+                SEED_MCQ, SEED_MCQ_CORRECT_OPTION, 18_000L, 4, false, false));
+
+        // the happy path: the teacher lens over the SAME F-034 read model —
+        // the member's own graph, with the states the evidence pipeline wrote
+        LearnerKnowledgeGraphView graph = heatmapController.learnerKnowledgeGraph(
+                teacher, classId, member.id(), V6_SUBJECT_ROOT);
+        assertThat(graph.learnerId()).isEqualTo(member.id());
+        assertThat(graph.rootCode()).isEqualTo("CHM");
+        NodeWithStateView t1_1 = graph.nodes().stream()
+                .filter(n -> "WCH11-T1.1".equals(n.code()))
+                .findFirst().orElseThrow();
+        assertThat(t1_1.attempts()).isGreaterThanOrEqualTo(1);
+        assertThat(t1_1.mastery()).isNotNull();
+
+        // §17: the roster is the privacy boundary — a non-member is a 404,
+        // whether she exists with a full learner model or not at all
+        assertThatThrownBy(() -> heatmapController.learnerKnowledgeGraph(
+                teacher, classId, outsider.id(), V6_SUBJECT_ROOT))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> heatmapController.learnerKnowledgeGraph(
+                teacher, classId, UUID.randomUUID(), V6_SUBJECT_ROOT))
+                .isInstanceOf(NotFoundException.class);
+
+        // ownership + subject-isolation gates on both new endpoints
+        assertThatThrownBy(() -> heatmapController.nodeStudents(
+                other, classId, V6_TOPIC_T1_1, V6_SUBJECT_ROOT))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> heatmapController.learnerKnowledgeGraph(
+                other, classId, member.id(), V6_SUBJECT_ROOT))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> heatmapController.nodeStudents(
+                teacher, UUID.randomUUID(), V6_TOPIC_T1_1, V6_SUBJECT_ROOT))
+                .isInstanceOf(NotFoundException.class);
+        // a node outside the root's subtree: the CHM subject root itself is
+        // NOT inside T1.1's subtree — no silent cross-subject hop
+        assertThatThrownBy(() -> heatmapController.nodeStudents(
+                teacher, classId, V6_SUBJECT_ROOT /* nodeId */,
+                V6_TOPIC_T1_1 /* rootId */))
+                .isInstanceOf(NotFoundException.class);
+        // unknown root (the graph read service's 404 contract)
+        assertThatThrownBy(() -> heatmapController.nodeStudents(
+                teacher, classId, V6_TOPIC_T1_1, UUID.randomUUID()))
+                .isInstanceOf(NotFoundException.class);
     }
 }
