@@ -39,6 +39,17 @@ public class TutorSession {
     @Column(name = "last_active_at", nullable = false)
     private Instant lastActiveAt;
 
+    /**
+     * V53 (ADR-030): the course this chat serves, as the opaque hub-supplied
+     * reference stored VERBATIM (no FK, no lookup table — the V47/V48/V49/V51
+     * ruling). NULL is legitimate history: pre-V53 rows and asks from
+     * surfaces with no course context. Written once by the service at the
+     * first ref-carrying append; a later ask naming a DIFFERENT course is a
+     * 409 integrity failure the service owns — never a silent scope switch.
+     */
+    @Column(name = "course_ref", nullable = true, length = 64)
+    private String courseRef;
+
     protected TutorSession() {
         // JPA
     }
@@ -61,8 +72,17 @@ public class TutorSession {
         }
     }
 
+    /** V53 write-once attach: the FIRST ref fixes the chat's serving course;
+     *  later different refs are refused by the service, silently ignored here. */
+    void attachCourse(String courseRef) {
+        if (this.courseRef == null && courseRef != null && !courseRef.isBlank()) {
+            this.courseRef = courseRef.strip();
+        }
+    }
+
     public UUID id() { return id; }
     public UUID learnerId() { return learnerId; }
     public Instant createdAt() { return createdAt; }
     public Instant lastActiveAt() { return lastActiveAt; }
+    public String courseRef() { return courseRef; }
 }

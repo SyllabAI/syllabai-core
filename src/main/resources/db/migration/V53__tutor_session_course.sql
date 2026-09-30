@@ -1,0 +1,38 @@
+-- V53: per-course tutor scoping — tutor_sessions records the course a chat
+-- served (ADR-030). Companion ERD delta: syllabai/docs V53 update; the full
+-- decision record is ADR-030-PER_COURSE_TUTOR_SCOPING.md.
+--
+-- CONTEXT: the tutor ask contract carried no course field, the serving scope
+-- was resolved globally (CurriculumScopeResolver.resolveActive — the only
+-- surface-owning ACTIVE curriculum wins, today 4CH1-2017), and this table had
+-- no course column. A learner browsing ANY course could ask and receive
+-- answers grounded in the chemistry corpus — the exact wrong-subject failure
+-- the scope discipline exists to prevent. ADR-030 gives the ask an optional
+-- courseRef and core a fail-closed per-course resolution; this column is the
+-- session-side record of what a chat actually served.
+--
+-- DESIGN RULES (the V51 discipline continues):
+--   - COURSE REFS ARE OPAQUE, HUB-OWNED (the V47 card_id / V48 noteId /
+--     V49 course_slug / V51 course_slug ruling, reused verbatim): course_ref
+--     stores the hub-supplied reference verbatim — no FK, no lookup table,
+--     no check beyond width. Core does not parse it here; the RESOLUTION
+--     happens in CurriculumScopeResolver against core's OWN curriculum
+--     registry (curriculum_versions.code), which is a core-native lookup,
+--     not a hub-registry parse.
+--   - NULL IS LEGITIMATE HISTORY: rows written before this migration, and
+--     asks from surfaces that carry no course context (legacy clients,
+--     anonymous preview), keep NULL. Back-filling would falsify what the
+--     chat really served — the column records provenance, never intent.
+--   - WRITTEN ONCE, AT THE FIRST APPEND THAT CARRIES A REF: the session's
+--     serving scope is fixed by its first ref-carrying ask; a later ask
+--     naming a DIFFERENT course is a 409 integrity failure (the same shape
+--     as the foreign-session probe), never a silent scope switch.
+--   - NO INDEX YET: the only reader today is per-session (owned lookups by
+--     id) and the per-learner list. A per-course transcript scan is a
+--     teacher-analytics future, not a speculative surface now (the house
+--     no-speculative-surface rule).
+--
+-- SCALE NOTE: one nullable varchar on an existing small table (≤50 live
+-- sessions per learner, R13-capped); the ALTER is metadata-only.
+
+ALTER TABLE tutor_sessions ADD COLUMN course_ref VARCHAR(64) NULL;

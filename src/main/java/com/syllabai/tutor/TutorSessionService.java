@@ -65,20 +65,33 @@ public class TutorSessionService {
     }
 
     public record SessionView(UUID sessionId, Instant createdAt, Instant lastActiveAt,
-                              List<TurnView> turns) {
+                              String courseRef, List<TurnView> turns) {
     }
 
     /** One row of the learner's conversation list (s143): identity + recency
      *  + a derived title + how much was said. No transcript content rides the
-     *  list — the opening question only, which the learner themselves typed. */
+     *  list — the opening question only, which the learner themselves typed.
+     *  V53: courseRef = the course this chat serves (null = course-less
+     *  history), so the hub's history pane can group honestly. */
     public record SessionSummaryView(UUID sessionId, Instant createdAt, Instant lastActiveAt,
-                                     int turnCount, String title) {
+                                     String courseRef, int turnCount, String title) {
     }
 
-    /** A session id an ask may append to (null = do not persist this ask). */
+    /** A session id an ask may append to (null = do not persist this ask).
+     *  V53: courseRef is the ask's hub-supplied course reference (null = the
+     *  legacy course-less ask); the FIRST non-null ref fixes the session's
+     *  serving course, a later DIFFERENT ref is a 409 (never a scope switch). */
     public record AppendRequest(UUID sessionId, String question, String answer,
                                 int evidenceCount, boolean refused, String model,
-                                String provider, Double latencyMs) {
+                                String provider, Double latencyMs, String courseRef) {
+
+        /** legacy pre-V53 shape — existing callers compile unchanged. */
+        public AppendRequest(UUID sessionId, String question, String answer,
+                             int evidenceCount, boolean refused, String model,
+                             String provider, Double latencyMs) {
+            this(sessionId, question, answer, evidenceCount, refused, model,
+                    provider, latencyMs, null);
+        }
     }
 
     /** Per-learner open-session cap (R13): POST /tutor/sessions inserts a row
@@ -98,7 +111,8 @@ public class TutorSessionService {
         // use the save() RETURN — @PrePersist assigns the id at persist time
         TutorSession session = sessions.save(new TutorSession(learnerId, Instant.now()));
         log.debug("tutor session {} created", session.id());
-        return new SessionView(session.id(), session.createdAt(), session.lastActiveAt(), List.of());
+        return new SessionView(session.id(), session.createdAt(), session.lastActiveAt(),
+                session.courseRef(), List.of());
     }
 
     /**
@@ -111,7 +125,8 @@ public class TutorSessionService {
         List<TurnView> transcript = turns.findBySessionIdOrderBySeq(sessionId).stream()
                 .map(TurnView::of)
                 .toList();
-        return new SessionView(session.id(), session.createdAt(), session.lastActiveAt(), transcript);
+        return new SessionView(session.id(), session.createdAt(), session.lastActiveAt(),
+                session.courseRef(), transcript);
     }
 
     /**
@@ -157,7 +172,7 @@ public class TutorSessionService {
         }
         return recent.stream()
                 .map(session -> new SessionSummaryView(session.id(), session.createdAt(),
-                        session.lastActiveAt(),
+                        session.lastActiveAt(), session.courseRef(),
                         counts.getOrDefault(session.id(), 0L).intValue(),
                         titles.get(session.id())))
                 .toList();
@@ -199,6 +214,26 @@ public class TutorSessionService {
     }
 
     /**
+     * V53 course-consistency probe (ADR-030): a session that already serves a
+     * course refuses a DIFFERENT one up front (409, the same integrity shape
+     * as the foreign-session probe) — a chat cannot switch courses mid-flight,
+     * and the ask must fail BEFORE the pipeline spends an LLM call. A null
+     * stored ref (course-less history) accepts any ref: the first one wins at
+     * append. The append path re-checks as a backstop so a concurrent ask
+     * cannot flip a session's scope between probe and persist.
+     */
+    @Transactional(readOnly = true)
+    public void requireCourseConsistent(UUID learnerId, UUID sessionId, String courseRef) {
+        TutorSession session = owned(learnerId, sessionId);
+        String served = session.courseRef();
+        if (served != null && courseRef != null && !served.equals(courseRef)) {
+            throw new ConflictException("this chat serves course " + served
+                    + " — it cannot switch to " + courseRef
+                    + "; start a new chat for the other course");
+        }
+    }
+
+    /**
      * Append one exchange (user question + tutor answer) to the learner's
      * session after a completed ask. Foreign/unknown session id ⇒ 404 — the
      * controller treats a missing session on an ask as "do not persist"
@@ -207,6 +242,21 @@ public class TutorSessionService {
     @Transactional
     public void append(UUID learnerId, AppendRequest exchange) {
         TutorSession session = owned(learnerId, exchange.sessionId());
+        // V53 (ADR-030): write-once course attach + 409 mismatch backstop —
+        // the session's serving course is fixed by its first ref-carrying
+        // append; a different ref later is an integrity failure, never a
+        // silent scope switch (the probe ran before the pipeline; this guards
+        // the race).
+        if (exchange.courseRef() != null && !exchange.courseRef().isBlank()) {
+            String served = session.courseRef();
+            if (served == null) {
+                session.attachCourse(exchange.courseRef());
+            } else if (!served.equals(exchange.courseRef().strip())) {
+                throw new ConflictException("this chat serves course " + served
+                        + " — it cannot switch to " + exchange.courseRef().strip()
+                        + "; start a new chat for the other course");
+            }
+        }
         int nextSeq = turns.findTopBySessionIdOrderBySeqDesc(session.id())
                 .map(TutorSessionTurn::seq)
                 .orElse(0) + 1;
