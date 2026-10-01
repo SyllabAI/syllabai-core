@@ -66,6 +66,22 @@ public class KaRagService {
             "moles", "bonding", "equilibria") or ask your teacher to ingest the
             relevant material.""";
 
+    /**
+     * The per-course scope refusal (V53, ADR-030): the ask carried a course
+     * reference that does not resolve to exactly one surface-owning ACTIVE
+     * curriculum in core's own registry. The echoed ref ({@code %s}) makes
+     * the refusal verifiable — the learner sees WHICH course could not be
+     * served — and the text names the honest reason: no cross-corpus
+     * fallback ever fires (a wrong-course answer is worse than a refusal).
+     */
+    static final String COURSE_SCOPE_REFUSAL = """
+            I can't answer that from the validated course material yet. This chat
+            is scoped to the course "%s", and I can't find a validated, serving
+            corpus for it — the course may not be available for tutoring yet, or
+            it may still be awaiting validation. SyllabAI never answers across
+            courses, so I won't borrow another course's material. Try asking your
+            teacher to check the course's tutoring availability.""";
+
     private final KnowledgeRetriever knowledgeRetriever;
     private final VectorRetriever vectorRetriever;
     private final PaperQuestionResolver paperQuestionResolver;
@@ -153,19 +169,50 @@ public class KaRagService {
      */
     public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history,
                                UUID sessionId) {
+        return ask(learnerId, question, history, sessionId, null);
+    }
+
+    /**
+     * Course-aware conversational ask (V53, ADR-030): the hub may tag the ask
+     * with an opaque {@code courseRef} naming the course the learner is
+     * browsing. A present ref resolves EXACTLY that curriculum in core's own
+     * registry (fail-closed: zero or ambiguous matches refuse with
+     * {@link #COURSE_SCOPE_REFUSAL} naming the ref — never a cross-corpus
+     * fallback); an absent ref keeps the legacy {@code resolveActive} path
+     * byte-identical (pilot compatibility is a design decision, D4).
+     *
+     * @param learnerId asking learner (null allowed for anonymous preview)
+     * @param question  the learner's question (the turn to answer now)
+     * @param history   prior turns of this chat, oldest first (client-supplied,
+     *                 sanitized here before any pipeline use)
+     * @param sessionId §22 tutor session this exchange belongs to (null = an
+     *                 unpersisted ask — pre-s140 clients, CLA, SmartLesson)
+     * @param courseRef the opaque hub-supplied course reference (null/blank =
+     *                 legacy course-less ask, pre-V53 behavior unchanged)
+     * @return grounded answer with citations, or a deterministic refusal
+     */
+    public TutorAnswerView ask(UUID learnerId, String question, List<ConversationTurn> history,
+                               UUID sessionId, String courseRef) {
         long startedAt = System.nanoTime();
-        PreparedAsk prep = prepare(learnerId, question, history);
+        PreparedAsk prep = prepare(learnerId, question, history, courseRef);
         boolean refused = prep.evidence().isEmpty();
 
         TutorGenerator.GeneratedAnswer generated;
         ContextAssembler.TutorContext context = null;
         if (refused) {
-            generated = prep.identityBoundUnserved()
-                    ? new TutorGenerator.GeneratedAnswer(PAPER_IDENTITY_REFUSAL.formatted(
-                            Objects.requireNonNullElse(prep.resolution().identityLabel(),
-                                    "that paper question")),
-                            null, "deterministic-paper-refusal")
-                    : new TutorGenerator.GeneratedAnswer(REFUSAL, null, "deterministic-refusal");
+            if (prep.unresolvedCourseRef()) {
+                generated = new TutorGenerator.GeneratedAnswer(
+                        COURSE_SCOPE_REFUSAL.formatted(prep.courseRef()),
+                        null, "deterministic-course-refusal");
+            } else if (prep.identityBoundUnserved()) {
+                generated = new TutorGenerator.GeneratedAnswer(PAPER_IDENTITY_REFUSAL.formatted(
+                        Objects.requireNonNullElse(prep.resolution().identityLabel(),
+                                "that paper question")),
+                        null, "deterministic-paper-refusal");
+            } else {
+                generated = new TutorGenerator.GeneratedAnswer(REFUSAL, null,
+                        "deterministic-refusal");
+            }
         } else {
             context = contextAssembler.assemble(prep.knowledge(), prep.evidence(), learnerId);
             generated = generator.generate(prep.query(), prep.turns(), context);
@@ -231,8 +278,18 @@ public class KaRagService {
      */
     public Flux<TutorStreamEvent> askStream(UUID learnerId, String question,
                                             List<ConversationTurn> history, UUID sessionId) {
+        return askStream(learnerId, question, history, sessionId, null);
+    }
+
+    /** Course-aware streamed twin of {@link #ask(UUID, String, List, UUID,
+     * String)} — same pipeline, same per-course resolution, same refusal
+     * parity (the streamed refusal text is byte-identical to the blocking
+     * one, provider tag {@code deterministic-course-refusal}). */
+    public Flux<TutorStreamEvent> askStream(UUID learnerId, String question,
+                                            List<ConversationTurn> history, UUID sessionId,
+                                            String courseRef) {
         long startedAt = System.nanoTime();
-        PreparedAsk prep = prepare(learnerId, question, history);
+        PreparedAsk prep = prepare(learnerId, question, history, courseRef);
         List<CitationResolver.Citation> citations = citationResolver.resolve(prep.evidence());
         List<TutorAnswerView.TopicMatch> topics = prep.knowledge().topics().stream()
                 .map(topic -> new TutorAnswerView.TopicMatch(
@@ -242,13 +299,19 @@ public class KaRagService {
         int evidenceCount = prep.evidence().size();
 
         if (refused) {
-            String text = prep.identityBoundUnserved()
-                    ? PAPER_IDENTITY_REFUSAL.formatted(Objects.requireNonNullElse(
-                            prep.resolution().identityLabel(), "that paper question"))
-                    : REFUSAL;
-            String provider = prep.identityBoundUnserved()
-                    ? "deterministic-paper-refusal"
-                    : "deterministic-refusal";
+            String text;
+            String provider;
+            if (prep.unresolvedCourseRef()) {
+                text = COURSE_SCOPE_REFUSAL.formatted(prep.courseRef());
+                provider = "deterministic-course-refusal";
+            } else if (prep.identityBoundUnserved()) {
+                text = PAPER_IDENTITY_REFUSAL.formatted(Objects.requireNonNullElse(
+                        prep.resolution().identityLabel(), "that paper question"));
+                provider = "deterministic-paper-refusal";
+            } else {
+                text = REFUSAL;
+                provider = "deterministic-refusal";
+            }
             double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
             events.publishEvent(new TutorAnsweredEvent(
                     learnerId, prep.query(), matchedTopicIds(prep.knowledge()), 0,
@@ -314,14 +377,19 @@ public class KaRagService {
     }
 
     /** Everything the delivery modes share: the retrieval pipeline's output,
-     *  frozen between the grounding gate and generation. */
+     *  frozen between the grounding gate and generation. V53: courseRef is
+     *  the ask's raw ref (null = legacy course-less ask) and
+     *  unresolvedCourseRef marks the per-course fail-closed refusal — the
+     *  ref did not resolve to exactly one surface-owning ACTIVE curriculum. */
     private record PreparedAsk(
             KnowledgeRetriever.KnowledgeContext knowledge,
             List<EvidenceItem> evidence,
             List<ConversationTurn> turns,
             String query,
             boolean identityBoundUnserved,
-            PaperQuestionResolver.Resolution resolution) {
+            PaperQuestionResolver.Resolution resolution,
+            String courseRef,
+            boolean unresolvedCourseRef) {
     }
 
     /**
@@ -331,7 +399,8 @@ public class KaRagService {
      * the blocking and streaming asks — extracted verbatim so the two
      * delivery modes execute the same retrieval decisions.
      */
-    private PreparedAsk prepare(UUID learnerId, String question, List<ConversationTurn> history) {
+    private PreparedAsk prepare(UUID learnerId, String question, List<ConversationTurn> history,
+                                String courseRef) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException("question must not be blank");
         }
@@ -341,7 +410,25 @@ public class KaRagService {
         // 0. active curriculum scope (T-C07, fail-closed): unresolved scope ⇒
         // both retrieval surfaces stay empty ⇒ the deterministic refusal below.
         // Never serve across curricula; never serve unscoped.
-        CurriculumScope scope = curriculumScopes.resolveActive(learnerId).orElse(null);
+        // V53 (ADR-030): a PRESENT courseRef resolves exactly that curriculum
+        // (exact code match, ACTIVE, owns surface) — zero or ambiguous matches
+        // leave the scope unresolved and the ask refuses deterministically
+        // naming the ref. An ABSENT ref keeps the legacy global resolution
+        // byte-identical; there is deliberately NO fallback from a failed
+        // per-course resolution to the global scope (a wrong-course answer is
+        // worse than a refusal).
+        String ref = courseRef == null || courseRef.isBlank() ? null : courseRef.strip();
+        boolean unresolvedCourseRef = false;
+        CurriculumScope scope;
+        if (ref != null) {
+            scope = curriculumScopes.resolveForCourse(ref).orElse(null);
+            if (scope == null) {
+                unresolvedCourseRef = true;
+                log.info("KA-RAG course scope unresolved for ref [{}] — deterministic refusal", ref);
+            }
+        } else {
+            scope = curriculumScopes.resolveActive(learnerId).orElse(null);
+        }
 
         // 0.5 working memory (s139): follow-ups like "why is that?" carry no
         // topic vocabulary of their own — retrieval runs on the question
@@ -428,7 +515,8 @@ public class KaRagService {
                     + "deterministic refusal", resolution.identityLabel());
             evidence = List.of();
         }
-        return new PreparedAsk(knowledge, evidence, turns, query, identityBoundUnserved, resolution);
+        return new PreparedAsk(knowledge, evidence, turns, query, identityBoundUnserved,
+                resolution, ref, unresolvedCourseRef);
     }
 
     private static List<UUID> matchedTopicIds(KnowledgeRetriever.KnowledgeContext knowledge) {

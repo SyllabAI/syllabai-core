@@ -112,11 +112,24 @@ public class TutorController {
      *                  null/absent = single-turn ask (pre-s139 clients)
      * @param sessionId optional §22 session to persist this exchange to;
      *                  null/absent = unpersisted ask (pre-s140 clients)
+     * @param courseRef optional V53 (ADR-030) opaque hub-supplied course
+     *                  reference naming the course the learner is browsing;
+     *                  null/blank = legacy course-less ask (byte-identical
+     *                  pilot behavior). Core never parses it — resolution is
+     *                  an exact-code lookup in core's OWN curriculum registry,
+     *                  fail-closed; a session's course is fixed by its first
+     *                  ref-carrying ask and a different one later is a 409.
      */
     public record TutorAskRequest(
             @NotBlank @Size(max = 2000) String question,
             @Size(max = ConversationTurn.MAX_HISTORY_TURNS) List<@Valid HistoryTurn> history,
-            UUID sessionId) {
+            UUID sessionId,
+            @Size(max = 64) String courseRef) {
+
+        /** legacy pre-V53 shape — existing clients/tests compile unchanged. */
+        public TutorAskRequest(String question, List<HistoryTurn> history, UUID sessionId) {
+            this(question, history, sessionId, null);
+        }
 
         /** One client-held transcript turn. */
         public record HistoryTurn(
@@ -124,6 +137,15 @@ public class TutorController {
                         + ConversationTurn.ROLE_ASSISTANT) String role,
                 @NotBlank @Size(max = ConversationTurn.MAX_TURN_CHARS) String text) {
         }
+    }
+
+    /** V53: blank courseRef = absent — the hub may send "" from unmapped
+     *  courses, and the contract wants ONE absent shape downstream. */
+    private static String normalizeCourseRef(String courseRef) {
+        if (courseRef == null || courseRef.isBlank()) {
+            return null;
+        }
+        return courseRef.strip();
     }
 
     @PostMapping("/ask")
@@ -140,16 +162,23 @@ public class TutorController {
         }
         // §22 integrity probe BEFORE the pipeline: a foreign/unknown session id
         // fails fast (404) instead of spending an LLM call and failing after.
+        String courseRef = normalizeCourseRef(request.courseRef());
         if (request.sessionId() != null) {
             sessionStore.requireOwned(learnerId, request.sessionId());
+            // V53 (ADR-030): a session that already serves a course refuses a
+            // different one up front (409) — before the LLM call, same shape
+            // as the foreign-session probe.
+            if (courseRef != null) {
+                sessionStore.requireCourseConsistent(learnerId, request.sessionId(), courseRef);
+            }
         }
         TutorAnswerView answer = kaRag.ask(learnerId, request.question(), history,
-                request.sessionId());
+                request.sessionId(), courseRef);
         if (request.sessionId() != null) {
             sessionStore.append(learnerId, new TutorSessionService.AppendRequest(
                     request.sessionId(), request.question(), answer.answer(),
                     answer.evidenceCount(), answer.refused(), answer.model(),
-                    answer.provider(), answer.latencyMs()));
+                    answer.provider(), answer.latencyMs(), courseRef));
         }
         return answer;
     }
@@ -181,8 +210,13 @@ public class TutorController {
         }
         // same §22 integrity probe as /ask — BEFORE the stream opens, so a
         // foreign session id is a 404 JSON body, not an opened-then-failed stream
+        String courseRef = normalizeCourseRef(request.courseRef());
         if (request.sessionId() != null) {
             sessionStore.requireOwned(learnerId, request.sessionId());
+            // V53: same 409 course-consistency probe as /ask, before the stream opens
+            if (courseRef != null) {
+                sessionStore.requireCourseConsistent(learnerId, request.sessionId(), courseRef);
+            }
         }
 
         SseEmitter emitter = new SseEmitter(0L);
@@ -201,7 +235,8 @@ public class TutorController {
         });
 
         try {
-            streamExecutor.execute(() -> runStream(learnerId, request, history, emitter, subscription));
+            streamExecutor.execute(() -> runStream(learnerId, request, history, courseRef,
+                    emitter, subscription));
         } catch (RejectedExecutionException e) {
             // admission control: honest, fixed text — the pool (and behind it,
             // the Render CPU tier) is saturated; never queue unbounded
@@ -214,11 +249,13 @@ public class TutorController {
     /** Subscribe the pipeline to the emitter; every event is serialized to
      *  the exact wire shape the hub proxy forwards and the browser parses. */
     private void runStream(UUID learnerId, TutorAskRequest request, List<ConversationTurn> history,
-                           SseEmitter emitter, AtomicReference<Disposable> subscription) {
+                           String courseRef, SseEmitter emitter,
+                           AtomicReference<Disposable> subscription) {
         try {
-            Disposable d = kaRag.askStream(learnerId, request.question(), history, request.sessionId())
+            Disposable d = kaRag.askStream(learnerId, request.question(), history,
+                            request.sessionId(), courseRef)
                     .subscribe(
-                            event -> sendEvent(learnerId, request, emitter, event),
+                            event -> sendEvent(learnerId, request, courseRef, emitter, event),
                             error -> {
                                 // M2 contract: fixed client-safe text — provider error
                                 // bodies and ops guidance stay in the server logs (the
@@ -237,7 +274,7 @@ public class TutorController {
         }
     }
 
-    private void sendEvent(UUID learnerId, TutorAskRequest request,
+    private void sendEvent(UUID learnerId, TutorAskRequest request, String courseRef,
                            SseEmitter emitter, TutorStreamEvent event) {
         try {
             if (event instanceof TutorStreamEvent.Citations c) {
@@ -264,7 +301,7 @@ public class TutorController {
                         sessionStore.append(learnerId, new TutorSessionService.AppendRequest(
                                 request.sessionId(), request.question(), done.fullAnswer(),
                                 done.evidenceCount(), done.refused(), done.model(),
-                                done.provider(), done.latencyMs()));
+                                done.provider(), done.latencyMs(), courseRef));
                     } catch (RuntimeException e) {
                         // a persistence failure must not corrupt the delivered answer
                         log.error("tutor stream session append failed (session {}): {}",

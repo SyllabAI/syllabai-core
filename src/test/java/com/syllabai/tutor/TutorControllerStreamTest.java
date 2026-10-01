@@ -57,6 +57,11 @@ class TutorControllerStreamTest {
         return new TutorController.TutorAskRequest("What is a mole?", List.of(), sessionId);
     }
 
+    private TutorController.TutorAskRequest request(UUID sessionId, String courseRef) {
+        return new TutorController.TutorAskRequest("What is a mole?", List.of(), sessionId,
+                courseRef);
+    }
+
     @Test
     @DisplayName("successful stream appends the §22 session exchange on completion only")
     void sessionAppendOnCompleted() {
@@ -70,7 +75,7 @@ class TutorControllerStreamTest {
                 new TutorStreamEvent.Delta("answer text"),
                 new TutorStreamEvent.Completed("answer text", "groq", "llama-3", false, 2,
                         123.4, List.of()));
-        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId)))
+        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(Flux.fromIterable(events));
 
         SseEmitter emitter = controller.askStream(learnerId, request(sessionId));
@@ -99,7 +104,7 @@ class TutorControllerStreamTest {
         TutorController controller = controller(executor);
         UUID sessionId = UUID.randomUUID();
         UUID learnerId = UUID.randomUUID();
-        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId)))
+        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(Flux.error(new TutorGenerationException(
                         GroundedTutorGenerator.UNAVAILABLE_MESSAGE)));
 
@@ -121,7 +126,7 @@ class TutorControllerStreamTest {
 
         assertThatThrownBy(() -> controller.askStream(learnerId, request(foreign)))
                 .isInstanceOf(IllegalArgumentException.class);
-        verify(kaRag, never()).askStream(any(), any(), any(), any());
+        verify(kaRag, never()).askStream(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -132,12 +137,67 @@ class TutorControllerStreamTest {
         };
         TutorController controller = new TutorController(kaRag, sessionStore, saturated);
         UUID learnerId = UUID.randomUUID();
-        when(kaRag.askStream(any(), any(), any(), any()))
+        when(kaRag.askStream(any(), any(), any(), any(), any()))
                 .thenReturn(Flux.empty());   // never reached
 
         SseEmitter emitter = controller.askStream(learnerId, request(null));
 
         assertThat(emitter).isNotNull();
-        verify(kaRag, never()).askStream(any(), any(), any(), any());
+        verify(kaRag, never()).askStream(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("V53: the courseRef rides the §22 probes, the pipeline call and the session append")
+    void courseRefRidesPipelineAndAppend() {
+        PumpingExecutor executor = new PumpingExecutor();
+        TutorController controller = controller(executor);
+        UUID sessionId = UUID.randomUUID();
+        UUID learnerId = UUID.randomUUID();
+        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId), eq("4CH1-2017")))
+                .thenReturn(Flux.fromIterable(List.of(
+                        new TutorStreamEvent.Completed("answer", "groq", "llama-3", false, 1,
+                                12.0, List.of()))));
+
+        controller.askStream(learnerId, request(sessionId, "4CH1-2017"));
+        executor.pump();
+
+        // the consistency probe ran before the pipeline (same ordering as /ask)
+        org.mockito.Mockito.verify(sessionStore)
+                .requireCourseConsistent(learnerId, sessionId, "4CH1-2017");
+        // the pipeline call carried the ref
+        verify(kaRag).askStream(eq(learnerId), any(), anyList(), eq(sessionId), eq("4CH1-2017"));
+        // and the persisted exchange records what the chat actually served
+        ArgumentCaptor<TutorSessionService.AppendRequest> captor =
+                ArgumentCaptor.forClass(TutorSessionService.AppendRequest.class);
+        verify(sessionStore).append(eq(learnerId), captor.capture());
+        assertThat(captor.getValue().courseRef()).isEqualTo("4CH1-2017");
+    }
+
+    @Test
+    @DisplayName("V53 normalization: a blank courseRef is absent end to end — no probe, legacy pipeline call")
+    void blankCourseRefNormalizesToAbsent() {
+        PumpingExecutor executor = new PumpingExecutor();
+        TutorController controller = controller(executor);
+        UUID sessionId = UUID.randomUUID();
+        UUID learnerId = UUID.randomUUID();
+        when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(Flux.fromIterable(List.of(
+                        new TutorStreamEvent.Completed("answer", "groq", "llama-3", false, 1,
+                                12.0, List.of()))));
+
+        controller.askStream(learnerId, request(sessionId, "   "));
+        executor.pump();
+
+        // blank = absent: no course probe (nothing to be consistent with)
+        verify(sessionStore, never()).requireCourseConsistent(any(), any(), any());
+        // the pipeline and the append saw the ONE absent shape (null)
+        verify(kaRag).askStream(eq(learnerId), any(), anyList(), eq(sessionId),
+                org.mockito.ArgumentMatchers.isNull());
+        // append fires on the Completed event — an empty flux emits none, so
+        // the stub must carry one (same shape as courseRefRidesPipelineAndAppend)
+        ArgumentCaptor<TutorSessionService.AppendRequest> captor =
+                ArgumentCaptor.forClass(TutorSessionService.AppendRequest.class);
+        verify(sessionStore).append(eq(learnerId), captor.capture());
+        assertThat(captor.getValue().courseRef()).isNull();
     }
 }
