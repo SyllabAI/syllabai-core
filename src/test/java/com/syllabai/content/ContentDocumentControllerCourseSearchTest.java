@@ -103,7 +103,7 @@ class ContentDocumentControllerCourseSearchTest {
                         "test-embed", 0.8)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
-                controller.search(REQUESTER, "electrolysis", Document.Kind.NOTES, 10, "   ");
+                controller.search(REQUESTER, "electrolysis", Document.Kind.EXTERNAL_NOTES, 10, "   ");
 
         assertThat(response.getBody()).hasSize(1);
         assertThat(response.getHeaders().getFirst(
@@ -122,7 +122,7 @@ class ContentDocumentControllerCourseSearchTest {
                         "test-embed", 0.7)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
-                controller.search(REQUESTER, "electrolysis", Document.Kind.NOTES, 10, null);
+                controller.search(REQUESTER, "electrolysis", Document.Kind.EXTERNAL_NOTES, 10, null);
 
         assertThat(response.getBody()).hasSize(1);
         assertThat(response.getHeaders().getFirst(
