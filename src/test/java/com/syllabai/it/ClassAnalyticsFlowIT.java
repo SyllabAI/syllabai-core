@@ -1,6 +1,7 @@
 package com.syllabai.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -231,7 +232,9 @@ class ClassAnalyticsFlowIT {
         assertThat(weakRow.path("activeMisconceptions").asInt()).isEqualTo(1);
         JsonNode signal = weakRow.path("misconceptionSignals").get(0);
         assertThat(signal.path("code").asText()).isEqualTo("MIS-T1.1-01");
-        assertThat(signal.path("probability").asDouble()).isEqualTo(0.75);
+        // MED-2/ADR-032: computed at read → fresh evidence is 0.75 minus a
+        // wall-clock epsilon; exact equality is a flake by construction
+        assertThat(signal.path("probability").asDouble()).isCloseTo(0.75, within(1e-4));
         assertThat(signal.path("evidenceCount").asInt()).isEqualTo(1);
         assertThat(signal.path("parentTopicCode").asText()).isEqualTo("WCH11-T1.1");
 
@@ -287,7 +290,7 @@ class ClassAnalyticsFlowIT {
         weakGraph.nodes().stream()
                 .filter(n -> MIS_T1_1_01.equals(n.id()))
                 .forEach(n -> {
-                    assertThat(n.misconceptionProbability()).isEqualTo(0.75);
+                    assertThat(n.misconceptionProbability()).isCloseTo(0.75, within(1e-4));
                     assertThat(n.misconceptionActive()).isTrue();
                 });
 

@@ -1,6 +1,7 @@
 package com.syllabai.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.syllabai.assessment.AssessmentService;
 import com.syllabai.assessment.dto.SubmitAnswerRequest;
@@ -15,6 +16,9 @@ import com.syllabai.recommendation.NextBestActionService;
 import com.syllabai.recommendation.dto.NextBestActionsView;
 import com.syllabai.recommendation.dto.NextBestActionsView.ActionType;
 import com.syllabai.recommendation.dto.NextBestActionsView.ReasonCode;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -82,6 +87,8 @@ class MisconceptionSurfaceFlowIT {
     private AssessmentService assessment;
     @Autowired
     private AuthService authService;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private UUID newLearner() {
         return authService.register(new RegisterRequest(
@@ -133,9 +140,33 @@ class MisconceptionSurfaceFlowIT {
                 .filteredOn(n -> MIS_T1_1_01.equals(n.id()))
                 .singleElement()
                 .satisfies(n -> {
-                    assertThat(n.misconceptionProbability()).isEqualTo(0.75);
+                    // MED-2/ADR-032: computed at read → fresh evidence is 0.75 minus
+                    // a wall-clock epsilon; exact equality is a flake by construction
+                    assertThat(n.misconceptionProbability()).isCloseTo(0.75, within(1e-4));
                     assertThat(n.misconceptionActive()).isTrue();
                 });
+
+        // 5. staleness leg (MED-2/ADR-032): backdating ONLY the anchor — the
+        //    probability column is never rewritten — relaxes the read value to
+        //    0.3 + 0.45·e^(−200/180) ≈ 0.448 < 0.5. The misconception leaves the
+        //    active surfaces and the T-033 NBA rule stops firing, with no write
+        //    anywhere on the read path.
+        jdbc.update(
+                "update misconception_states set last_evidence_at = ? "
+                        + "where learner_id = ? and misconception_node_id = ?",
+                Timestamp.from(Instant.now().minus(200, ChronoUnit.DAYS)),
+                learner, MIS_T1_1_01);
+
+        LearnerKnowledgeGraphView staleView = learnerGraph.graphFor(learner, SUBJECT_ROOT);
+        assertThat(staleView.nodes())
+                .filteredOn(n -> MIS_T1_1_01.equals(n.id()))
+                .singleElement()
+                .satisfies(n -> {
+                    assertThat(n.misconceptionProbability()).isCloseTo(0.4481, within(0.005));
+                    assertThat(n.misconceptionActive()).isFalse();
+                });
+        assertThat(nextBestActions.actionsFor(learner, SUBJECT_ROOT).actions())
+                .noneMatch(a -> a.reasonCode() == ReasonCode.MISCONCEPTION_SUSPECTED);
     }
 
     private static List<NodeView> flatten(NodeView root) {
