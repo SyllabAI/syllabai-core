@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.syllabai.assessment.ExamPaperRepository;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
+import com.syllabai.knowledge.NodeType;
 
 /**
  * Resolves the active {@link CurriculumScope} for the serving paths (T-C07).
@@ -57,6 +58,14 @@ import com.syllabai.knowledge.KnowledgeNodeRepository;
 public class CurriculumScopeResolver {
 
     private static final Logger log = LoggerFactory.getLogger(CurriculumScopeResolver.class);
+
+    /**
+     * Pinned explicit structure-type list (mirrors
+     * {@code KnowledgeNodeRepository.findStructureNodes}; the V15 rule that the
+     * CONCEPT family can never leak into the curriculum structure surface).
+     */
+    private static final List<NodeType> STRUCTURE_NODE_TYPES =
+            List.of(NodeType.UNIT, NodeType.TOPIC, NodeType.SUBTOPIC);
 
     private final CurriculumVersionRepository curriculumVersions;
     private final SubjectRepository subjects;
@@ -160,22 +169,24 @@ public class CurriculumScopeResolver {
         return false;
     }
 
+    /**
+     * Ownership test: KG intent surface (VALIDATED structure) or exam-paper surface.
+     *
+     * <p>T-C32: the VALIDATED-structure question is answered with ONE batched
+     * predicate over the subtree id set (the id set still comes from
+     * {@code findSubtreeIds}, the single source of truth). Before, this loop
+     * issued one {@code findById} per subtree node — ~340 reads per search,
+     * per subject, per ACTIVE version, on every serving request. The evaluated
+     * predicate is unchanged: a subtree owns KG surface iff it contains a
+     * UNIT/TOPIC/SUBTOPIC node whose validation is VALIDATED; an empty subtree
+     * fails closed without touching the repository predicate.</p>
+     */
     private boolean hasValidatedStructure(UUID subjectRootId) {
-        for (UUID nodeId : knowledgeNodes.findSubtreeIds(subjectRootId)) {
-            KnowledgeNode node = knowledgeNodes.findById(nodeId).orElse(null);
-            if (node == null) {
-                continue;
-            }
-            boolean structure = node.nodeType() == com.syllabai.knowledge.NodeType.UNIT
-                    || node.nodeType() == com.syllabai.knowledge.NodeType.TOPIC
-                    || node.nodeType() == com.syllabai.knowledge.NodeType.SUBTOPIC;
-            // VALIDATED-only: SUGGESTED/UNVALIDATED seeds are invisible to
-            // serving (§7 gate, mirrors the retriever + ServableQuestionSpec)
-            if (structure
-                    && node.validationStatus() == KnowledgeNode.ValidationStatus.VALIDATED) {
-                return true;
-            }
+        List<UUID> subtreeIds = knowledgeNodes.findSubtreeIds(subjectRootId);
+        if (subtreeIds.isEmpty()) {
+            return false;
         }
-        return false;
+        return knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
+                subtreeIds, STRUCTURE_NODE_TYPES, KnowledgeNode.ValidationStatus.VALIDATED);
     }
 }
