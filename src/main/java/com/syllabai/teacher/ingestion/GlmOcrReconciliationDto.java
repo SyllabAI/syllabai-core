@@ -1,5 +1,6 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -14,6 +15,7 @@ import java.util.List;
  * bridge must keep review-visible: October 2025 Unit 1 Q18 (part-marks sum 2 vs
  * printed total 8) and October 2025 Unit 1A (QP paper total 80 vs MS 120).</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record GlmOcrReconciliationDto(
         @JsonProperty("findings") List<Finding> findings,
         @JsonProperty("qpPaperTotal") Integer qpPaperTotal,
@@ -26,6 +28,7 @@ public record GlmOcrReconciliationDto(
     }
 
     /** Parser finding: severity "match" | "mismatch" | "qp-only" | "ms-only" | "gap". */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Finding(
             @JsonProperty("questionNumber") String questionNumber,
             @JsonProperty("qpMarks") Integer qpMarks,

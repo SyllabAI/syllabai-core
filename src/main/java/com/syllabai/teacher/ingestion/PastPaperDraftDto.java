@@ -1,5 +1,6 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -12,6 +13,7 @@ import java.util.List;
  * v0 output ({@code reviewRequired=true}) and nothing serves to learners until a
  * teacher validates it (Master Spec §7).</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PastPaperDraftDto(
         @JsonProperty("schemaVersion") String schemaVersion,
         @JsonProperty("paper") PaperMeta paper,
@@ -22,6 +24,7 @@ public record PastPaperDraftDto(
 
     public static final String SUPPORTED_SCHEMA = "1.0";
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record PaperMeta(
             @JsonProperty("board") String board,
             @JsonProperty("qualification") String qualification,
@@ -33,6 +36,7 @@ public record PastPaperDraftDto(
             @JsonProperty("markSchemeDocumentId") String markSchemeDocumentId) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record QuestionDraft(
             @JsonProperty("externalRef") String externalRef,
             @JsonProperty("questionNumber") String questionNumber,
@@ -45,6 +49,7 @@ public record PastPaperDraftDto(
             @JsonProperty("parts") List<PartDraft> parts) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record PartDraft(
             @JsonProperty("label") String label,
             @JsonProperty("prompt") String prompt,
@@ -62,6 +67,7 @@ public record PastPaperDraftDto(
      *                        parser bridge populates it when its extraction
      *                        carries the scheme's general-instructions block.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkSchemeDraft(
             @JsonProperty("version") String version,
             @JsonProperty("sourceDocumentId") String sourceDocumentId,
@@ -79,6 +85,7 @@ public record PastPaperDraftDto(
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkPointDraft(
             @JsonProperty("questionRef") String questionRef,
             @JsonProperty("order") int order,

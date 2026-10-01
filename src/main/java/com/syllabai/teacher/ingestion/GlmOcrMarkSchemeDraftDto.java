@@ -1,6 +1,8 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.syllabai.teacher.ingestion.GlmOcrPaperDraftDto.FigureRef;
 import com.syllabai.teacher.ingestion.GlmOcrPaperDraftDto.PaperMeta;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +18,16 @@ import java.util.Map;
  * optional indicative-content table. The marking-semantics vocabulary (Allow /
  * Ignore / dependent-on-MP / ecf / Or / Any-two-from) survives here as structured
  * metadata; the bridge persists it verbatim and never flattens or repairs it.</p>
+ *
+ * <p>{@code figureRefs} (parser PR #2, 2026-09-15) is a TYPED field, not a
+ * tolerated unknown: the bridge persists the DTO re-serialization as the
+ * verbatim draft record, so a field the parser emits must be known here or
+ * it would be silently dropped from that record. {@code @JsonIgnoreProperties}
+ * on this contract is for FUTURE parser fields — the forward-compat net for
+ * the next evolution, never an excuse to skip modeling a known one (the
+ * synchronized-deploy trap this PR closes, s145 review).</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record GlmOcrMarkSchemeDraftDto(
         @JsonProperty("schemaVersion") String schemaVersion,
         @JsonProperty("extractionMethod") String extractionMethod,
@@ -26,6 +37,7 @@ public record GlmOcrMarkSchemeDraftDto(
         @JsonProperty("questionTotals") Map<String, Integer> questionTotals,
         @JsonProperty("paperTotal") Integer paperTotal,
         @JsonProperty("icTable") IcTable icTable,
+        @JsonProperty("figureRefs") List<FigureRef> figureRefs,
         @JsonProperty("warnings") List<String> warnings) {
 
     public static final String SUPPORTED_SCHEMA = "1.0";
@@ -33,6 +45,9 @@ public record GlmOcrMarkSchemeDraftDto(
     public GlmOcrMarkSchemeDraftDto {
         entries = entries == null ? List.of() : List.copyOf(entries);
         questionTotals = questionTotals == null ? Map.of() : Map.copyOf(questionTotals);
+        // figureRefs deliberately NOT null-normalized — mirrors the parser's
+        // own contract: null means "produced by a pre-figureRefs engine", an
+        // empty list is never produced, and the distinction is review-visible.
         warnings = warnings == null ? List.of() : List.copyOf(warnings);
     }
 
@@ -41,6 +56,7 @@ public record GlmOcrMarkSchemeDraftDto(
      * "13(b)(i)"). {@code marks} is the printed Mark cell — null when
      * rowspan-deferred or absent (never guessed).
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkSchemeEntry(
             @JsonProperty("entryId") String entryId,
             @JsonProperty("label") String label,
@@ -66,6 +82,7 @@ public record GlmOcrMarkSchemeDraftDto(
      * the segment carried no marker — the bridge materializes 0 (unknown), never
      * a guessed value, with the raw evidence preserved.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record MarkPoint(
             @JsonProperty("ordinal") int ordinal,
             @JsonProperty("text") String text,
@@ -84,12 +101,14 @@ public record GlmOcrMarkSchemeDraftDto(
     }
 
     /** One Additional-Guidance line, classified by leading keyword. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record GuidanceLine(
             @JsonProperty("kind") String kind,
             @JsonProperty("text") String text) {
     }
 
     /** Indicative-content table (QWC questions). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record IcTable(
             @JsonProperty("rows") List<List<String>> rows,
             @JsonProperty("location") String location) {
