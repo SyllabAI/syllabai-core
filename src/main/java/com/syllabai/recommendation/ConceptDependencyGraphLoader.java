@@ -23,7 +23,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * Loads the settled T-C11 concept graph snapshot into a
  * {@link ConceptDependencyGraph} at startup.
  *
- * <p><strong>Snapshot contract (2026-09-13, close of T-C11 Batch 4):</strong>
+ * <p><strong>Snapshot contract (2026-09-13, close of T-C11 Batch 4; re-pinned
+ * 2026-10-01 on the practical-endpoint retarget):</strong>
  * {@code classpath:concept-graph/concept_edges.yaml}, {@code concept-graph/concepts.yaml}
  * and {@code concept-graph/practicals.yaml} are byte-verbatim copies of the
  * settled store in the syllabai-resources repo (113 concept nodes + 12 practical
@@ -35,9 +36,14 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * is therefore always a conscious, reviewable change: copy the new settled
  * bytes, update the three hashes, and update this comment. (The store files
  * are generated deterministically by the resources repo, so byte-identity is
- * meaningful.) Practical nodes participate because 12 validated
- * REQUIRES_PREREQUISITE edges originate at them — a real pedagogical dependency
- * the settled store carries (the practical requires its underlying concepts).</p>
+ * meaningful.) The 12 validated REQUIRES_PREREQUISITE edges originating at the
+ * required practicals — a real pedagogical dependency the settled store carries
+ * (the practical requires its underlying concepts) — have sourced at the
+ * practicals' REAL spec statements since the 2026-10-01 endpoint retarget
+ * (previously the ad-hoc 4CH1-PR-xx codes): the loader therefore admits each
+ * practical's {@code spec_point} code as a known endpoint. Those spec
+ * statements are official store content pinned via practicals.yaml; no
+ * additional resource or pin is needed.</p>
  *
  * <p>Parsing is safe (SnakeYAML {@link SafeConstructor} — plain data only, the
  * files are static packaged resources, never user input) and PART_OF edges are
@@ -56,9 +62,10 @@ public class ConceptDependencyGraphLoader {
     static final String NODES_RESOURCE = "concept-graph/concepts.yaml";
     static final String PRACTICALS_RESOURCE = "concept-graph/practicals.yaml";
 
-    /** SHA-256 of the settled concept_edges.yaml snapshot (Batch-4 close, 2026-09-13). */
+    /** SHA-256 of the settled concept_edges.yaml snapshot (Batch-4 close 2026-09-13;
+     * re-pinned on the 2026-10-01 practical-endpoint retarget). */
     static final String EDGES_SHA256 =
-            "e583ae50916fcb54a924bb13f42625a840e3d9baaec8fa5f69e62122716e5f07";
+            "87af6866a53babbbb5ee77415ff91287d68a71808868713e44756dfa81dc16e9";
     /** SHA-256 of the settled concepts.yaml snapshot (Batch-4 close, 2026-09-13). */
     static final String NODES_SHA256 =
             "69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613";
@@ -93,6 +100,10 @@ public class ConceptDependencyGraphLoader {
 
         Set<String> nodeCodes = readNodeCodes(nodesDoc, "nodes", NODES_RESOURCE);
         nodeCodes.addAll(readNodeCodes(practicalsDoc, "practicals", PRACTICALS_RESOURCE));
+        // the practicals' real spec statements are legal edge endpoints since the
+        // 2026-10-01 endpoint retarget (the 12 validated practical prerequisite
+        // edges source at them) — official store content, pinned via practicals.yaml
+        nodeCodes.addAll(readPracticalSpecPointCodes(practicalsDoc));
         nodeCodes = java.util.Set.copyOf(nodeCodes);
         List<RawEdge> rawEdges = readRawEdges(edgesDoc);
 
@@ -121,6 +132,25 @@ public class ConceptDependencyGraphLoader {
                 throw new IllegalStateException(
                         "concept graph snapshot: duplicate node code '" + code + "'");
             }
+        }
+        return codes;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> readPracticalSpecPointCodes(Map<String, Object> practicalsDoc) {
+        Object practicals = practicalsDoc == null ? null : practicalsDoc.get("practicals");
+        if (!(practicals instanceof List<?> list) || list.isEmpty()) {
+            throw new IllegalStateException(
+                    "concept graph snapshot: no practicals in " + PRACTICALS_RESOURCE);
+        }
+        Set<String> codes = new HashSet<>();
+        for (Object practical : list) {
+            if (!(practical instanceof Map<?, ?> m)
+                    || !(m.get("spec_point") instanceof String sp) || sp.isBlank()) {
+                throw new IllegalStateException("concept graph snapshot: practical without a "
+                        + "spec_point in " + PRACTICALS_RESOURCE);
+            }
+            codes.add(sp);
         }
         return codes;
     }

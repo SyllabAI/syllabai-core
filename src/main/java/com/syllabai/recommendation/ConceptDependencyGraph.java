@@ -51,7 +51,9 @@ public final class ConceptDependencyGraph {
         MISCONCEPTION_OF
     }
 
-    /** A raw edge as parsed from the store: endpoints are T-C11 concept codes. */
+    /** A raw edge as parsed from the store: endpoints are T-C11 concept/practical
+     * codes and — since the 2026-10-01 practical-endpoint retarget — the required
+     * practicals' real spec-statement codes. */
     public record RawEdge(String source, String relation, String target, String validationStatus) {
     }
 
@@ -152,7 +154,7 @@ public final class ConceptDependencyGraph {
     private static void requireKnown(String code, Set<String> knownNodeCodes) {
         if (!knownNodeCodes.contains(code)) {
             throw new IllegalArgumentException(
-                    "concept graph: edge endpoint '" + code + "' is not a known concept node");
+                    "concept graph: edge endpoint '" + code + "' is not a known graph node");
         }
     }
 }

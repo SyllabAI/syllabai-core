@@ -7,6 +7,11 @@
 #   scripts/c11_batch4_decisions.yaml (extraction_pass c11-s16-batch-4)
 # DO NOT hand-edit: re-run the script. Provenance tier AI_SUGGESTED; validation gate = operator review (see meta.validation_gate).
 # Generation dates pinned per record; store date 2026-09-13 (deterministic contract; byte-identical re-runs).
+# 2026-10-01 practical-endpoint retarget (scripts/retarget_pr_endpoints.py, the
+# upstream lockstep of the syllabai-hub mirror retarget): the 12 validated
+# practical prerequisite edges now source at their real spec statements. A c11
+# generator re-run would re-emit the ad-hoc PR-xx sources and MUST be followed
+# by this script. Record: docs/PR_ENDPOINT_RETARGET.md.
 
 meta:
   task: T-C11
@@ -144,6 +149,18 @@ meta:
     promoted_edges: 153
     human_validated_edges: 153
   promotion_record: scripts/c11_promotions.yaml
+  practical_endpoint_retarget: >-
+    The 12 HUMAN_VALIDATED practical prerequisite edges previously sourced at the
+    ad-hoc practical-node codes (4CH1-PR-01/02/03/04/09/10/11); they now source at
+    their real core-practical spec statements (4CH1-1.7C, 4CH1-1.13, 4CH1-1.36,
+    4CH1-1.60C, 4CH1-3.8, 4CH1-3.15, 4CH1-3.16) — the same verified 1:1 spec-order
+    mapping as the syllabai-hub mirror (fix_pr_edges.py fd05d75, fix_pr_mirror.py),
+    so the settled store and its read-model mirror agree again. Edge evidence and
+    provenance fields are untouched: the seed-built provenance line stays
+    byte-stable and re-activation reuses the migrated rows (V47 moves the seeded
+    rows in place). Practical NODES remain first-class official content,
+    PART_OF-anchored under their spec statements. Record:
+    docs/PR_ENDPOINT_RETARGET.md.
 edges:
 - source: 4CH1-CON-ACTIVATION-ENERGY
   relation: PART_OF
@@ -6363,7 +6380,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-11'
-- source: 4CH1-PR-01
+- source: 4CH1-1.7C
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-SATURATED-SOLUTION
   evidence:
@@ -6387,7 +6404,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-01
+- source: 4CH1-1.7C
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-SOLUBILITY
   evidence:
@@ -6411,7 +6428,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-02
+- source: 4CH1-1.13
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-CHROMATOGRAPHY
   evidence:
@@ -6438,7 +6455,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-02
+- source: 4CH1-1.13
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-RF-VALUE
   evidence:
@@ -6464,7 +6481,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-03
+- source: 4CH1-1.36
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-EXP-FORMULA-DEDUCTION
   evidence:
@@ -6489,7 +6506,7 @@ edges:
   validated_date: '2026-09-12'
   version: 1
   created_at: '2026-09-11'
-- source: 4CH1-PR-04
+- source: 4CH1-1.60C
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-AQUEOUS-DISCHARGE
   evidence:
@@ -6514,7 +6531,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-04
+- source: 4CH1-1.60C
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-ELECTROLYSIS
   evidence:
@@ -6539,7 +6556,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-12'
-- source: 4CH1-PR-09
+- source: 4CH1-3.8
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-CALORIMETRY
   evidence:
@@ -6564,7 +6581,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-13'
-- source: 4CH1-PR-10
+- source: 4CH1-3.15
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-RATE-EXPERIMENTS
   evidence:
@@ -6591,7 +6608,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-13'
-- source: 4CH1-PR-10
+- source: 4CH1-3.15
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-RATE-FACTORS
   evidence:
@@ -6616,7 +6633,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-13'
-- source: 4CH1-PR-11
+- source: 4CH1-3.16
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-CATALYST
   evidence:
@@ -6645,7 +6662,7 @@ edges:
   validated_date: '2026-09-13'
   version: 1
   created_at: '2026-09-13'
-- source: 4CH1-PR-11
+- source: 4CH1-3.16
   relation: REQUIRES_PREREQUISITE
   target: 4CH1-CON-RATE-EXPERIMENTS
   evidence:

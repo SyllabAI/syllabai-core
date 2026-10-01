@@ -16,7 +16,10 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 /**
  * The packaged settled T-C11 snapshot is loadable and exactly what the
  * recommendation path consumes: SHA-256-pinned verbatim bytes of the Batch-4
- * close (2026-09-13) — 113 nodes, 275 edges, 158 semantic edges of which 153
+ * close (2026-09-13), re-pinned on the 2026-10-01 practical-endpoint retarget
+ * (the 12 validated practical prerequisite edges source at the practicals' real
+ * spec statements; the practicals' spec_point codes are admitted endpoints) —
+ * 113 nodes, 275 edges, 158 semantic edges of which 153
  * HUMAN_VALIDATED; the only non-validated semantic edges are the three frozen
  * pilot HOLDs (SUGGESTED) and the two REVIEW_REQUIRED edges. This pins the
  * whole downstream guarantee: if the snapshot drifts, startup fails; if the
@@ -79,6 +82,23 @@ class ConceptDependencyGraphLoaderTest {
     }
 
     @Test
+    @DisplayName("the retargeted practical prerequisite edges source at the real spec statements")
+    void retargetedPracticalEdgesSourceAtSpecStatements() {
+        ConceptDependencyGraph graph = loader.load();
+
+        // the 2026-10-01 retarget: same 12 validated dependencies, real endpoints —
+        // e.g. the solubility practical's spec statement requires the saturation concept
+        assertThat(graph.edges(SemanticRelation.REQUIRES_PREREQUISITE))
+                .contains(new Edge("4CH1-1.7C", SemanticRelation.REQUIRES_PREREQUISITE,
+                        "4CH1-CON-SATURATED-SOLUTION"))
+                .contains(new Edge("4CH1-3.16", SemanticRelation.REQUIRES_PREREQUISITE,
+                        "4CH1-CON-CATALYST"));
+        assertThat(graph.edges(SemanticRelation.REQUIRES_PREREQUISITE).stream()
+                .filter(e -> e.source().startsWith("4CH1-PR-"))
+                .findAny()).isEmpty();
+    }
+
+    @Test
     @DisplayName("deterministic: two loads produce identical, immutable graphs")
     void deterministicLoads() {
         ConceptDependencyGraph first = loader.load();
@@ -96,7 +116,7 @@ class ConceptDependencyGraphLoaderTest {
         // the pin values are exercised by every load() above; assert the constants
         // are the settled ones so accidental edits surface here rather than at boot
         assertThat(ConceptDependencyGraphLoader.EDGES_SHA256)
-                .isEqualTo("e583ae50916fcb54a924bb13f42625a840e3d9baaec8fa5f69e62122716e5f07");
+                .isEqualTo("87af6866a53babbbb5ee77415ff91287d68a71808868713e44756dfa81dc16e9");
         assertThat(ConceptDependencyGraphLoader.NODES_SHA256)
                 .isEqualTo("69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613");
         assertThat(ConceptDependencyGraphLoader.PRACTICALS_SHA256)
@@ -150,7 +170,7 @@ class ConceptDependencyGraphLoaderTest {
                         readPackaged(ConceptDependencyGraphLoader.NODES_RESOURCE),
                         readPackaged(ConceptDependencyGraphLoader.PRACTICALS_RESOURCE)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not a known concept node");
+                .hasMessageContaining("not a known graph node");
     }
 
     /** mutates the one semantic edge (source, relation, target) that is HUMAN_VALIDATED; true if found */

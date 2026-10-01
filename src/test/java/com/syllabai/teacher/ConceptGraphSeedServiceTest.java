@@ -162,6 +162,18 @@ class ConceptGraphSeedServiceTest {
         // practical node anchored under its SP (official spec content)
         assertThat(nodeByCode.get("4CH1-PR-01").nodeType()).isEqualTo(NodeType.SUBTOPIC);
         assertThat(findEdge("4CH1-PR-01", "4CH1-1.7C", RelationType.PART_OF)).isNotNull();
+
+        // 2026-10-01 practical-endpoint retarget: the 12 validated practical
+        // prerequisite edges source at their REAL spec statements, not the
+        // ad-hoc practical nodes — the practicals keep only their PART_OF anchor
+        assertThat(findEdge("4CH1-1.7C", "4CH1-CON-SATURATED-SOLUTION",
+                RelationType.REQUIRES_PREREQUISITE)).isNotNull();
+        assertThat(findEdge("4CH1-3.16", "4CH1-CON-CATALYST",
+                RelationType.REQUIRES_PREREQUISITE)).isNotNull();
+        assertThat(edgeByKey.values().stream()
+                .filter(e -> e.relationType() == RelationType.REQUIRES_PREREQUISITE)
+                .filter(e -> nodeById.get(e.sourceId()).code().startsWith("4CH1-PR-"))
+                .findAny()).isEmpty();
     }
 
     // ── B: unsettled specification point ───────────────────────────

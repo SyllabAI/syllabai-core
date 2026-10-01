@@ -38,7 +38,11 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * 153 HUMAN_VALIDATED semantic edges separately, and drops nothing silently —
  * the 5 frozen non-validated semantic edges (3 pilot HOLDs + 2
  * REVIEW_REQUIRED) are excluded <em>by count check</em> so the seed provably
- * never materializes them.</p>
+ * never materializes them. Since the 2026-10-01 practical-endpoint retarget,
+ * 12 of the 153 validated semantic edges source at spec statements (the real
+ * core-practical points) instead of the ad-hoc practical-node codes; edge
+ * provenance fields are untouched, so the seed-built provenance lines are
+ * byte-stable across the retarget.</p>
  */
 @Component
 public class ConceptGraphSnapshotLoader {
@@ -50,11 +54,14 @@ public class ConceptGraphSnapshotLoader {
     static final String CONCEPT_EDGES_RESOURCE = "concept-graph/concept_edges.yaml";
     static final String PRACTICALS_RESOURCE = "concept-graph/practicals.yaml";
 
-    // session-55 pins (the settled T-C11 store, Batch-4 close 2026-09-13)
+    // session-55 pins (the settled T-C11 store); CONCEPT_EDGES re-pinned
+    // deliberately on the 2026-10-01 practical-endpoint retarget (the 12
+    // validated practical prerequisite edges now source at their real spec
+    // statements — scripts/retarget_pr_endpoints.py, docs/PR_ENDPOINT_RETARGET.md)
     static final String CONCEPTS_SHA256 =
             "69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613";
     static final String CONCEPT_EDGES_SHA256 =
-            "e583ae50916fcb54a924bb13f42625a840e3d9baaec8fa5f69e62122716e5f07";
+            "87af6866a53babbbb5ee77415ff91287d68a71808868713e44756dfa81dc16e9";
     static final String PRACTICALS_SHA256 =
             "e53e5f87606a2b5a5b7e534f0375d970498ea85a5655ca32e5bd4526dc9fa528";
 
@@ -230,8 +237,14 @@ public class ConceptGraphSnapshotLoader {
                     "anchor edge " + a.conceptCode() + " -> " + a.specPointCode()
                             + " has an unknown endpoint");
         }
+        // validated semantic edges resolve against concept/misconception/practical
+        // nodes AND spec statements: the 2026-10-01 practical-endpoint retarget
+        // sources the 12 practical prerequisite edges at their real spec points
+        // (previously the ad-hoc 4CH1-PR-xx practical-node codes)
+        Set<String> semanticEndpoints = new HashSet<>(nodeCodes);
+        semanticEndpoints.addAll(spCodes);
         for (ConceptGraphSnapshot.ValidatedEdge e : validated) {
-            require(nodeCodes.contains(e.source()) && nodeCodes.contains(e.target()),
+            require(semanticEndpoints.contains(e.source()) && semanticEndpoints.contains(e.target()),
                     "semantic edge " + e.source() + " -> " + e.target()
                             + " has an unknown endpoint");
         }
