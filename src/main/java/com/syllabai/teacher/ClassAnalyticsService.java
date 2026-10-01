@@ -15,6 +15,7 @@ import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
+import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
 import com.syllabai.learner.SkillState;
@@ -82,6 +83,7 @@ public class ClassAnalyticsService {
     private final KnowledgeGraphService graph;
     private final SkillStateRepository skillStates;
     private final MisconceptionStateRepository misconceptionStates;
+    private final BdtEngine bdtEngine;
     private final TutorTopicEngagementRepository engagements;
     private final ReviewScheduleRepository reviewSchedules;
     private final AttemptRepository attempts;
@@ -94,6 +96,7 @@ public class ClassAnalyticsService {
     public ClassAnalyticsService(KnowledgeGraphService graph,
                                  SkillStateRepository skillStates,
                                  MisconceptionStateRepository misconceptionStates,
+                                 BdtEngine bdtEngine,
                                  TutorTopicEngagementRepository engagements,
                                  ReviewScheduleRepository reviewSchedules,
                                  AttemptRepository attempts,
@@ -105,6 +108,7 @@ public class ClassAnalyticsService {
         this.graph = graph;
         this.skillStates = skillStates;
         this.misconceptionStates = misconceptionStates;
+        this.bdtEngine = bdtEngine;
         this.engagements = engagements;
         this.reviewSchedules = reviewSchedules;
         this.attempts = attempts;
@@ -457,7 +461,7 @@ public class ClassAnalyticsService {
         for (NodeView misco : scope.misconceptionsOf().getOrDefault(node.id(), List.of())) {
             for (MisconceptionState m : agg.misconceptions()) {
                 if (m.misconceptionNodeId().equals(misco.id())
-                        && m.probability() >= threshold) {
+                        && relaxed(m) >= threshold) {
                     activeSignals++;
                     affectedLearners.add(m.learnerId());
                 }
@@ -610,8 +614,8 @@ public class ClassAnalyticsService {
         // active misconception signals, strongest first (BDT estimates)
         double threshold = learnerProperties.bdt().activeThreshold();
         List<MisconceptionSignalView> signals = learnerMisco.stream()
-                .filter(m -> m.probability() >= threshold)
-                .sorted(Comparator.comparingDouble(MisconceptionState::probability).reversed())
+                .filter(m -> relaxed(m) >= threshold)
+                .sorted(Comparator.comparingDouble((MisconceptionState m) -> relaxed(m)).reversed())
                 .limit(MISCONCEPTION_SIGNALS_PER_LEARNER)
                 .map(m -> {
                     NodeView n = scope.misconceptionById().get(m.misconceptionNodeId());
@@ -619,7 +623,7 @@ public class ClassAnalyticsService {
                     NodeView p = parentTopic == null ? null : scope.structureById().get(parentTopic);
                     return new MisconceptionSignalView(m.misconceptionNodeId(),
                             n == null ? "?" : n.code(), n == null ? "?" : n.title(),
-                            round(m.probability()), m.evidenceCount(), parentTopic,
+                            round(relaxed(m)), m.evidenceCount(), parentTopic,
                             p == null ? null : p.code());
                 })
                 .toList();
@@ -664,11 +668,11 @@ public class ClassAnalyticsService {
         for (NodeView misco : scope.misconceptionsOf().getOrDefault(topic.id(), List.of())) {
             for (MisconceptionState m : agg.misconceptions()) {
                 if (m.misconceptionNodeId().equals(misco.id())
-                        && m.probability() >= threshold) {
+                        && relaxed(m) >= threshold) {
                     signalsOf.computeIfAbsent(m.learnerId(), k -> new ArrayList<>())
                             .add(new MisconceptionSignalView(
                                     m.misconceptionNodeId(), misco.code(), misco.title(),
-                                    round(m.probability()), m.evidenceCount(),
+                                    round(relaxed(m)), m.evidenceCount(),
                                     topic.id(), topic.code()));
                 }
             }
@@ -738,5 +742,17 @@ public class ClassAnalyticsService {
         }
         return o instanceof Instant i ? i
                 : Instant.ofEpochMilli(((java.sql.Timestamp) o).getTime());
+    }
+
+    /**
+     * MED-2/ADR-032: staleness-relaxed P(held) for a stored misconception row —
+     * recomputed from the (P_e, lastEvidenceAt) anchor on every call, never
+     * persisted, so teacher surfaces and learner surfaces gate on the same
+     * value (one semantics everywhere — the S3-1 lesson).
+     */
+    private double relaxed(MisconceptionState m) {
+        var bdt = learnerProperties.bdt();
+        return bdtEngine.relaxedToPrior(m.probability(), bdt.prior(), m.lastEvidenceAt(),
+                Instant.now(), java.time.Duration.ofDays(bdt.stalenessTauDays()));
     }
 }

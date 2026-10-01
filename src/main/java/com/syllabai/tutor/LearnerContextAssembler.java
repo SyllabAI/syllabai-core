@@ -85,9 +85,10 @@ public class LearnerContextAssembler implements ContextAssembler {
         Map<UUID, Double> fluencyGaps = learnerModel.skillStates(learnerId).stream()
                 .filter(s -> relevantNodes.contains(s.nodeId()) && s.proceduralFluencyGap() != null)
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.proceduralFluencyGap(), (a, b) -> a));
-        Set<UUID> activeMisconceptions = learnerModel.misconceptionStates(learnerId).stream()
-                .filter(m -> m.probability() >= ACTIVE_MISCONCEPTION_THRESHOLD)
-                .map(m -> m.misconceptionNodeId()).collect(Collectors.toSet());
+        // MED-2/ADR-032: membership on the staleness-relaxed probability
+        Set<UUID> activeMisconceptions = learnerModel.misconceptionReadings(learnerId).stream()
+                .filter(r -> r.effective() >= ACTIVE_MISCONCEPTION_THRESHOLD)
+                .map(r -> r.state().misconceptionNodeId()).collect(Collectors.toSet());
         List<KnowledgeRetriever.KnowledgeContext.MisconceptionSignal> relevantMisconceptions =
                 knowledge.misconceptions().stream()
                         .filter(m -> activeMisconceptions.contains(m.nodeId())).toList();

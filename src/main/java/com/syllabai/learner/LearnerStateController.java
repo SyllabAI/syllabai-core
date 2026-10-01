@@ -78,7 +78,7 @@ public class LearnerStateController {
         DecayParams decayParams = properties.decay().toParams();
 
         var skills = learnerModel.skillStates(learnerId);
-        var misconceptions = learnerModel.misconceptionStates(learnerId);
+        var misconceptions = learnerModel.misconceptionReadings(learnerId);
         var reviews = reviewSchedules
                 .findByLearnerIdAndStatusOrderByDueAtAsc(learnerId, ReviewSchedule.Status.PENDING);
 
@@ -88,7 +88,7 @@ public class LearnerStateController {
         // missing node row yields null and clients keep their own fallback.
         Set<UUID> nodeIds = new HashSet<>();
         skills.forEach(s -> nodeIds.add(s.nodeId()));
-        misconceptions.forEach(m -> nodeIds.add(m.misconceptionNodeId()));
+        misconceptions.forEach(r -> nodeIds.add(r.state().misconceptionNodeId()));
         reviews.forEach(r -> nodeIds.add(r.nodeId()));
         // V21 (P7): what the learner has been asking the Tutor about (last 30
         // days, top 10 topics) — structured engagement signal, chat text stays
@@ -115,11 +115,13 @@ public class LearnerStateController {
                 .toList();
 
         List<MisconceptionStateView> misconceptionViews = misconceptions.stream()
-                .map(m -> new MisconceptionStateView(
-                        m.misconceptionNodeId(), m.probability(),
-                        m.probability() >= properties.bdt().activeThreshold(),
-                        m.evidenceCount(), m.lastEvidenceAt(),
-                        titles.get(m.misconceptionNodeId())))
+                // MED-2/ADR-032: the learner-facing view shows the staleness-relaxed
+                // probability (JSON shape unchanged; probability is the relaxed value)
+                .map(r -> new MisconceptionStateView(
+                        r.state().misconceptionNodeId(), r.effective(),
+                        r.effective() >= properties.bdt().activeThreshold(),
+                        r.evidenceCount(), r.state().lastEvidenceAt(),
+                        titles.get(r.state().misconceptionNodeId())))
                 .toList();
 
         List<LearnerStateView.ReviewView> reviewViews = reviews

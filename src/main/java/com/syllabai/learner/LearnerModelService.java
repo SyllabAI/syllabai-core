@@ -183,4 +183,26 @@ public class LearnerModelService {
     public List<MisconceptionState> misconceptionStates(UUID learnerId) {
         return misconceptionStates.findByLearnerIdOrderByProbabilityDesc(learnerId);
     }
+
+    /**
+     * Read model for adaptive/display surfaces: every row comes back with its
+     * staleness-relaxed probability (MED-2, ADR-032) — {@code effective = prior +
+     * (P_e − prior)·e^(−age/τ_s)} recomputed from the (P_e, lastEvidenceAt)
+     * anchor and never persisted. Sorted by the <em>effective</em> probability
+     * descending: a fresh 0.6 diagnosis must outrank a stale 0.9 one, which the
+     * repository's raw-probability ordering cannot express. Surfaces that need
+     * the anchored row itself use {@link #misconceptionStates(UUID)}.
+     */
+    @Transactional(readOnly = true)
+    public List<MisconceptionReading> misconceptionReadings(UUID learnerId) {
+        var bdt = properties.bdt();
+        double prior = bdt.prior();
+        java.time.Duration tau = java.time.Duration.ofDays(bdt.stalenessTauDays());
+        java.time.Instant now = java.time.Instant.now();
+        return misconceptionStates.findByLearnerIdOrderByProbabilityDesc(learnerId).stream()
+                .map(m -> new MisconceptionReading(m,
+                        bdtEngine.relaxedToPrior(m.probability(), prior, m.lastEvidenceAt(), now, tau)))
+                .sorted(java.util.Comparator.comparingDouble(MisconceptionReading::effective).reversed())
+                .toList();
+    }
 }

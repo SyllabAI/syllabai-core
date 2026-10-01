@@ -4,7 +4,7 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.learner.LearnerModelService;
-import com.syllabai.learner.MisconceptionState;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.SkillState;
 import com.syllabai.shared.BadRequestException;
 import java.util.ArrayList;
@@ -68,8 +68,9 @@ public class ClaToolRegistry {
     public record SpecAnchor(UUID nodeId, String code, String type, String title, int depth) {
     }
 
-    /** the learner's OWN measured state, scoped to the context (GET_LEARNER_STATE) */
-    public record OwnLearnerState(List<SkillState> skills, List<MisconceptionState> misconceptions) {
+    /** the learner's OWN measured state, scoped to the context (GET_LEARNER_STATE);
+     *  misconceptions carry staleness-relaxed probabilities (ADR-032) */
+    public record OwnLearnerState(List<SkillState> skills, List<MisconceptionReading> misconceptions) {
 
         public boolean isEmpty() {
             return skills.isEmpty() && misconceptions.isEmpty();
@@ -145,8 +146,8 @@ public class ClaToolRegistry {
         List<SkillState> skills = learnerModel.skillStates(learnerId).stream()
                 .filter(s -> scopeNodeIds.contains(s.nodeId()))
                 .toList();
-        List<MisconceptionState> misconceptions = learnerModel.misconceptionStates(learnerId).stream()
-                .filter(m -> scopeNodeIds.contains(m.misconceptionNodeId()))
+        List<MisconceptionReading> misconceptions = learnerModel.misconceptionReadings(learnerId).stream()
+                .filter(r -> scopeNodeIds.contains(r.state().misconceptionNodeId()))
                 .toList();
         OwnLearnerState state = new OwnLearnerState(List.copyOf(skills), List.copyOf(misconceptions));
         return new ToolResultWith<>(Tool.GET_LEARNER_STATE,

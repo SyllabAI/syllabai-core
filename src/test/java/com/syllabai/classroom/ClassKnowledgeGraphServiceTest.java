@@ -20,6 +20,7 @@ import com.syllabai.learner.LearnerKnowledgeGraphService;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
+import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.SkillState;
 import com.syllabai.learner.SkillStateRepository;
 import com.syllabai.learner.decay.EbbinghausDecayService;
@@ -64,8 +65,8 @@ class ClassKnowledgeGraphServiceTest {
             mock(LearnerKnowledgeGraphService.class);
 
     private final ClassKnowledgeGraphService service = new ClassKnowledgeGraphService(
-            graph, skillStates, misconceptionStates, coverage, members, users,
-            decayService, learnerProperties, attempts, learnerGraphs);
+            graph, skillStates, misconceptionStates, new BdtEngine(), coverage, members,
+            users, decayService, learnerProperties, attempts, learnerGraphs);
 
     private static final UUID TEACHER = UUID.randomUUID();
     private static final UUID CLASS_ID = UUID.randomUUID();

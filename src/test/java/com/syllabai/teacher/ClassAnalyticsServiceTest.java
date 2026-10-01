@@ -21,6 +21,7 @@ import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
+import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
 import com.syllabai.learner.SkillState;
@@ -65,9 +66,9 @@ class ClassAnalyticsServiceTest {
             new RecommendationProperties(0.45, 0.2, 0.5, 2, 8, 2, 2, 14);
 
     private final ClassAnalyticsService service = new ClassAnalyticsService(
-            graph, skillStates, misconceptionStates, engagements, reviewSchedules,
-            attempts, answers, users, servableQuestions, learnerProperties,
-            recommendationProperties);
+            graph, skillStates, misconceptionStates, new BdtEngine(), engagements,
+            reviewSchedules, attempts, answers, users, servableQuestions,
+            learnerProperties, recommendationProperties);
 
     private final UUID root = UUID.randomUUID();
     private final UUID section = UUID.randomUUID();

@@ -55,9 +55,9 @@ public class LearnerKnowledgeGraphService {
         for (SkillState s : learnerModel.skillStates(learnerId)) {
             skills.put(s.nodeId(), s);
         }
-        Map<UUID, MisconceptionState> misconceptions = new HashMap<>();
-        for (MisconceptionState m : learnerModel.misconceptionStates(learnerId)) {
-            misconceptions.put(m.misconceptionNodeId(), m);
+        Map<UUID, MisconceptionReading> misconceptions = new HashMap<>();
+        for (MisconceptionReading r : learnerModel.misconceptionReadings(learnerId)) {
+            misconceptions.put(r.state().misconceptionNodeId(), r);
         }
         // earliest PENDING review per node (the repository returns dueAt-ascending)
         Map<UUID, ReviewSchedule> earliestReview = new HashMap<>();
@@ -93,14 +93,14 @@ public class LearnerKnowledgeGraphService {
 
     private void walk(NodeView node,
                       Map<UUID, SkillState> skills,
-                      Map<UUID, MisconceptionState> misconceptions,
+                      Map<UUID, MisconceptionReading> misconceptions,
                       Map<UUID, ReviewSchedule> earliestReview,
                       DecayParams decayParams,
                       Instant now,
                       List<NodeWithStateView> out,
                       Map<UUID, NodeWithStateView> byId) {
         SkillState skill = skills.get(node.id());
-        MisconceptionState misconception = misconceptions.get(node.id());
+        MisconceptionReading misconception = misconceptions.get(node.id());
         ReviewSchedule review = earliestReview.get(node.id());
 
         Double mastery = null;
@@ -123,9 +123,10 @@ public class LearnerKnowledgeGraphService {
         Double misconceptionProbability = null;
         Boolean misconceptionActive = null;
         if (misconception != null) {
-            misconceptionProbability = misconception.probability();
+            // MED-2/ADR-032: overlay carries the staleness-relaxed probability
+            misconceptionProbability = misconception.effective();
             misconceptionActive =
-                    misconception.probability() >= properties.bdt().activeThreshold();
+                    misconception.effective() >= properties.bdt().activeThreshold();
         }
 
         NodeWithStateView view = new NodeWithStateView(

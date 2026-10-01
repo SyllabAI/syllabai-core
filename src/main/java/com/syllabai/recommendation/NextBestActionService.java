@@ -10,7 +10,7 @@ import com.syllabai.recommendation.ConceptDependencyGraph.Edge;
 import com.syllabai.recommendation.ConceptDependencyGraph.SemanticRelation;
 import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.LearnerProperties;
-import com.syllabai.learner.MisconceptionState;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
 import com.syllabai.learner.SkillState;
@@ -141,9 +141,11 @@ public class NextBestActionService {
         for (SkillState s : learnerModel.skillStates(learnerId)) {
             skills.put(s.nodeId(), s);
         }
-        Map<UUID, MisconceptionState> misconceptions = new HashMap<>();
-        for (MisconceptionState m : learnerModel.misconceptionStates(learnerId)) {
-            misconceptions.put(m.misconceptionNodeId(), m);
+        // MED-2/ADR-032: gate and rank on the staleness-relaxed probability —
+        // stale evidence loses prescribing force toward the BDT prior
+        Map<UUID, MisconceptionReading> misconceptions = new HashMap<>();
+        for (MisconceptionReading r : learnerModel.misconceptionReadings(learnerId)) {
+            misconceptions.put(r.state().misconceptionNodeId(), r);
         }
 
         // flatten the subtree once: node registry + parent-of (misconceptions attach
@@ -312,13 +314,13 @@ public class NextBestActionService {
         // intervention surface for a grounded explanation
         record MisconceptionCandidate(double probability, NodeView node, NodeView parentTopic) { }
         List<MisconceptionCandidate> misconceptionCandidates = new ArrayList<>();
-        for (Map.Entry<UUID, MisconceptionState> e : misconceptions.entrySet()) {
+        for (Map.Entry<UUID, MisconceptionReading> e : misconceptions.entrySet()) {
             NodeView node = byId.get(e.getKey());
             if (node == null) continue;
-            MisconceptionState m = e.getValue();
-            if (m.probability() < learnerProperties.bdt().activeThreshold()) continue;
+            MisconceptionReading r = e.getValue();
+            if (r.effective() < learnerProperties.bdt().activeThreshold()) continue;
             NodeView parent = byId.get(parentOf.get(node.id()));
-            misconceptionCandidates.add(new MisconceptionCandidate(m.probability(), node, parent));
+            misconceptionCandidates.add(new MisconceptionCandidate(r.effective(), node, parent));
         }
         misconceptionCandidates.sort(Comparator
                 .comparingDouble(MisconceptionCandidate::probability).reversed()
@@ -329,12 +331,12 @@ public class NextBestActionService {
             if (!topicsWithActions.add(node.id())) continue;
             String parent = mc.parentTopic() == null ? ""
                     : " on " + mc.parentTopic().code() + " (" + mc.parentTopic().title() + ")";
-            MisconceptionState m = misconceptions.get(node.id());
+            MisconceptionReading r = misconceptions.get(node.id());
             ranked.add(new NextBestActionView(0, ActionType.ASK_TUTOR,
                     ReasonCode.MISCONCEPTION_SUSPECTED,
                     node.id(), node.code(), node.title(), null, 0,
-                    "Misconception probability " + fmt(m.probability()) + " from "
-                            + m.evidenceCount() + " evidence item(s)" + parent
+                    "Misconception probability " + fmt(r.effective()) + " from "
+                            + r.evidenceCount() + " evidence item(s)" + parent
                             + " — ask the Tutor for a grounded explanation"));
         }
 
@@ -352,12 +354,12 @@ public class NextBestActionService {
             NodeView misNode = byCode.get(edge.source());
             NodeView corrective = byCode.get(edge.target());
             if (misNode == null || corrective == null) continue;   // not in this subtree
-            MisconceptionState m = misconceptions.get(misNode.id());
-            if (m == null || m.probability() < learnerProperties.bdt().activeThreshold()) {
+            MisconceptionReading r = misconceptions.get(misNode.id());
+            if (r == null || r.effective() < learnerProperties.bdt().activeThreshold()) {
                 continue;   // no active learner evidence — the graph alone never acts
             }
             correctiveCandidates.add(new CorrectiveCandidate(
-                    m.probability(), m.evidenceCount(), misNode, corrective));
+                    r.effective(), r.evidenceCount(), misNode, corrective));
         }
         correctiveCandidates.sort(Comparator
                 .comparingDouble(CorrectiveCandidate::probability).reversed()

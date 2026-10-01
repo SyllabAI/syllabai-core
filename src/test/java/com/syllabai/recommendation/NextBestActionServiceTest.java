@@ -15,6 +15,7 @@ import com.syllabai.knowledge.KnowledgeGraphService.PrerequisiteRelation;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.LearnerProperties;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
@@ -105,7 +106,7 @@ class NextBestActionServiceTest {
 
     private void givenNoEvidence() {
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
@@ -292,8 +293,8 @@ class NextBestActionServiceTest {
     void activeMisconceptionAsksTutor() {
         givenTree();
         givenNoEvidence();
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
-                misconception(MIS_M1, 0.75)));   // ≥ bdt activeThreshold (0.5)
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
+                misconception(MIS_M1, 0.75))));   // ≥ bdt activeThreshold (0.5)
 
         NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
 
@@ -312,8 +313,8 @@ class NextBestActionServiceTest {
     void inactiveMisconceptionExcluded() {
         givenTree();
         givenNoEvidence();
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
-                misconception(MIS_M1, 0.20)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
+                misconception(MIS_M1, 0.20))));
 
         assertThat(service.actionsFor(LEARNER, ROOT).actions()).isEmpty();
     }
@@ -436,8 +437,8 @@ class NextBestActionServiceTest {
                 ReviewSchedule.Status.PENDING)).thenReturn(List.of(review(TOPIC_A, NOW)));
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(
                 skill(TOPIC_B, 3, 0.20), skill(TOPIC_C, 4, 0.75)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
-                misconception(MIS_M1, 0.75)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
+                misconception(MIS_M1, 0.75))));
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
         when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(1);
 
@@ -535,7 +536,7 @@ class NextBestActionServiceTest {
         when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(settledSliceTree());
         when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
@@ -616,8 +617,7 @@ class NextBestActionServiceTest {
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
-                List.of(misconception(G_MIS_BEC, 0.75)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(misconception(G_MIS_BEC, 0.75))));
 
         NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
 
@@ -643,8 +643,7 @@ class NextBestActionServiceTest {
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
-                List.of(misconception(G_MIS_BEC, 0.20)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(misconception(G_MIS_BEC, 0.20))));
 
         assertThat(graphService.actionsFor(LEARNER, G_ROOT).actions()).isEmpty();
     }
@@ -681,8 +680,7 @@ class NextBestActionServiceTest {
                 skill(G_BEC, 3, 0.20),     // would trigger the validated BEC→COV edge
                 skill(G_RM, 3, 0.15),      // would trigger the SUGGESTED RM→EQS edge if it leaked
                 skill(G_CRY, 3, 0.10)));   // would trigger the RR CRY→SOL edge if it leaked
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
-                List.of(misconception(G_MIS_EQS, 0.75)));   // would trigger the SUGGESTED RB edge if it leaked
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(misconception(G_MIS_EQS, 0.75))));   // would trigger the SUGGESTED RB edge if it leaked
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
@@ -734,7 +732,7 @@ class NextBestActionServiceTest {
                 node(G_ROOT, "4CH1", "SUBJECT", "Edexcel IGCSE Chemistry", List.of(unit)));
         when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
@@ -770,8 +768,8 @@ class NextBestActionServiceTest {
         // the graph stage alone
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
         when(learnerModel.skillStates(LEARNER2)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(LEARNER2)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
+        when(learnerModel.misconceptionReadings(LEARNER2)).thenReturn(readings(List.of()));
 
         NextBestActionsView learner1 = graphService.actionsFor(LEARNER, G_ROOT);
         NextBestActionsView learner2 = graphService.actionsFor(LEARNER2, G_ROOT);
@@ -792,8 +790,7 @@ class NextBestActionServiceTest {
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
-                List.of(misconception(G_MIS_BEC, 0.75)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(misconception(G_MIS_BEC, 0.75))));
         when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
 
         NextBestActionsView first = graphService.actionsFor(LEARNER, G_ROOT);
@@ -831,7 +828,7 @@ class NextBestActionServiceTest {
                 node(G_ROOT, "4CH1-ROOT", "SUBJECT", "Chemistry", List.of(unit)));
         when(graph.prerequisiteRelations(G_ROOT)).thenReturn(List.of());
         when(learnerModel.skillStates(LEARNER)).thenReturn(weak);
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(answers.findByLearnerIdOrderByCreatedAtDesc(LEARNER)).thenReturn(List.of());
@@ -858,8 +855,7 @@ class NextBestActionServiceTest {
                 answers, servableQuestions, settled, engagementReader);
         givenSettledSliceNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(G_BEC, 3, 0.20)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(
-                List.of(misconception(G_MIS_BEC, 0.75)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(misconception(G_MIS_BEC, 0.75))));
         when(servableQuestions.countServableByTopic(Mockito.any(UUID.class))).thenReturn(2);
 
         NextBestActionsView view = graphService.actionsFor(LEARNER, G_ROOT);
@@ -985,5 +981,17 @@ class NextBestActionServiceTest {
         NextBestActionsView view = service.actionsFor(LEARNER, ROOT);
 
         assertThat(view.actions()).noneMatch(a -> a.targetNodeId().equals(TOPIC_C));
+    }
+
+    /** ADR-032 stub helper: fresh-evidence semantics — relaxed value equals the anchored posterior */
+    /** ADR-032 stub helper (list overload): fresh-evidence semantics — relaxed equals anchored */
+    private static java.util.List<MisconceptionReading> readings(java.util.List<MisconceptionState> states) {
+        return readings(states.toArray(new MisconceptionState[0]));
+    }
+
+    private static java.util.List<MisconceptionReading> readings(MisconceptionState... states) {
+        return java.util.Arrays.stream(states)
+                .map(s -> new MisconceptionReading(s, s.probability()))
+                .toList();
     }
 }

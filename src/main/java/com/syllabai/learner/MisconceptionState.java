@@ -29,7 +29,14 @@ public class MisconceptionState {
     @Column(name = "misconception_node_id", nullable = false)
     private UUID misconceptionNodeId;
 
-    /** current P(misconception held) */
+    /**
+     * Evidence-anchored P(misconception held): the BDT posterior computed at
+     * {@code lastEvidenceAt} — an anchor, never a live estimate. Readers MUST
+     * relax it toward the population prior for age via
+     * {@code BdtEngine.relaxedToPrior} (MED-2, ADR-032) and consume the relaxed
+     * value for gates, ranking and display; this field is never rewritten by
+     * reads. Same architecture as {@code SkillState.mastery} (ADR-031).
+     */
     @Column(name = "probability", nullable = false)
     private double probability;
 
