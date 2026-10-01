@@ -391,7 +391,9 @@ class TutorSessionServiceTest {
         service.requireCourseConsistent(learner, withCourse, "4CH1-2017");
         assertThatThrownBy(() -> service.requireCourseConsistent(learner, withCourse, "4PH1-2017"))
                 .isInstanceOf(ConflictException.class);
-        // a course-less session accepts any ref (the first one wins at append)
+        // a course-less session accepts any ref (the first one wins at append);
+        // the courseless session must be resolvable for the probe to reach the check
+        when(sessions.findByIdAndLearnerId(courseless, learner)).thenReturn(Optional.of(legacy));
         service.requireCourseConsistent(learner, courseless, "4PH1-2017");
     }
 }

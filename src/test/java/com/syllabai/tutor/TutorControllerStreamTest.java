@@ -181,7 +181,9 @@ class TutorControllerStreamTest {
         UUID sessionId = UUID.randomUUID();
         UUID learnerId = UUID.randomUUID();
         when(kaRag.askStream(eq(learnerId), any(), anyList(), eq(sessionId), org.mockito.ArgumentMatchers.isNull()))
-                .thenReturn(Flux.empty());
+                .thenReturn(Flux.fromIterable(List.of(
+                        new TutorStreamEvent.Completed("answer", "groq", "llama-3", false, 1,
+                                12.0, List.of()))));
 
         controller.askStream(learnerId, request(sessionId, "   "));
         executor.pump();
@@ -191,6 +193,8 @@ class TutorControllerStreamTest {
         // the pipeline and the append saw the ONE absent shape (null)
         verify(kaRag).askStream(eq(learnerId), any(), anyList(), eq(sessionId),
                 org.mockito.ArgumentMatchers.isNull());
+        // append fires on the Completed event — an empty flux emits none, so
+        // the stub must carry one (same shape as courseRefRidesPipelineAndAppend)
         ArgumentCaptor<TutorSessionService.AppendRequest> captor =
                 ArgumentCaptor.forClass(TutorSessionService.AppendRequest.class);
         verify(sessionStore).append(eq(learnerId), captor.capture());
