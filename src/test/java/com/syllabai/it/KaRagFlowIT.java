@@ -27,6 +27,8 @@ import com.syllabai.tutor.dto.TutorAnswerView;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
@@ -47,10 +49,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Integration test (T-024): the KA-RAG pipeline end-to-end against a real
  * pgvector Postgres — real-corpus fixtures on both retrieval sides (the
  * 4CH0/1C Jan 2012 mark scheme canonical document AND the IAL Chemistry 2018
- * spec curriculum draft), deterministic fake embeddings (no network), and a
- * recording generator stub so the orchestration, fusion, citations and
- * telemetry are exercised without a live LLM. Grounded generation itself is
- * covered by GroundedTutorGeneratorTest against a fake provider.
+ * spec curriculum draft), deterministic production-geometry fake embeddings
+ * (no network; T-C43), and a recording generator stub so the orchestration,
+ * fusion, citations and telemetry are exercised without a live LLM. Grounded
+ * generation itself is covered by GroundedTutorGeneratorTest against a fake
+ * provider.
  */
 @SpringBootTest
 @ActiveProfiles("it")
@@ -68,14 +71,14 @@ class KaRagFlowIT {
                     .withUsername("syllabai")
                     .withPassword("syllabai");
 
-    /** deterministic bag-of-words hashing — search works offline, no API keys */
+    /** production-geometry fake embeddings — search works offline, no API keys */
     @TestConfiguration
     static class KaRagTestConfig {
 
         @Bean
         @Primary
         EmbeddingProvider fakeEmbeddingProvider() {
-            return new HashingEmbeddingProvider();
+            return new ProductionGeometryEmbeddingProvider();
         }
 
         /** records invocations; the refusal path must never reach it */
@@ -251,8 +254,10 @@ class KaRagFlowIT {
         seedCorpus();
         int callsBefore = generator.calls.get();
 
-        // NB: tokens chosen to be collision-free against the corpus under the
-        // fake hashing embeddings (real Gemini embeddings need no such care)
+        // NB: the query carries none of the double's anchored topic vocabulary
+        // (so it never touches the semantics axis) and its tokens stay
+        // collision-free against the corpus under the hashing remainder leg
+        // (real Gemini embeddings need no such care)
         TutorAnswerView answer = kaRag.ask(learnerId, "cooking recipes ancient pyramids");
 
         assertThat(answer.refused()).isTrue();
@@ -272,13 +277,36 @@ class KaRagFlowIT {
                 .isEqualTo("deterministic-refusal");
     }
 
-    // ── deterministic fake embeddings (shared shape with ContentPipelineIT) ──
+    // ── calibrated fake embeddings (T-C43) — KaRagFlowIT-local ─────────────
+    // MIN_COSINE is calibrated to production geometry (0.50 of real Gemini
+    // cosine similarity; the T-C42 calibration pack). The bag-of-hashed-words
+    // double shared with ContentPipelineIT cannot exercise that floor — a
+    // short query vs a long chunk caps at ~0.15–0.4 by construction, so
+    // hybridAsk lost its MARK_SCHEME leg the moment the floor moved (CI on
+    // PR #44). This double reproduces the envelope the pack measured —
+    // same-topic pairs ≥ 0.62, unrelated pairs ≤ 0.44 — deterministically and
+    // offline, so the serving path's own tests certify the calibrated floor.
+    // The pipeline-level IT keeps the plain hashing double: its assertions
+    // never cross the retrieval floor.
 
-    static final class HashingEmbeddingProvider implements EmbeddingProvider {
+    static final class ProductionGeometryEmbeddingProvider implements EmbeddingProvider {
+
+        /** deterministic unit "corpus semantics" axis (fixed seed, offline) */
+        private static final float[] SEMANTICS_AXIS = axis();
+
+        /**
+         * The topical vocabulary the IT queries share with the fixture
+         * corpus. Membership lifts a text onto the semantics axis — the
+         * fake-embedding analogue of "semantically on-topic".
+         */
+        private static final Set<String> TOPIC_VOCABULARY = Set.of(
+                "chlorine", "iodine", "astatine", "halogen", "halogens",
+                "bonding", "structure", "molecule", "molecules",
+                "atom", "atoms", "electron", "electrons", "ion", "ions");
 
         @Override
         public String model() {
-            return "fake-hashing";
+            return "fake-production-geometry";
         }
 
         @Override
@@ -301,7 +329,70 @@ class KaRagFlowIT {
             return texts.stream().map(this::embed).toList();
         }
 
+        /**
+         * Anchored texts (sharing the fixture's topical vocabulary) are
+         * lifted onto the semantics axis: v = 0.9·u + √0.19·r(text), with r
+         * the orthogonalized bag-of-hashed-words direction of the text.
+         * Same-topic pairs land in [0.62, 1.0] cosine — clear of the 0.50
+         * production floor. Unanchored texts return the pure remainder,
+         * orthogonal to u, so unrelated pairs cap at √0.19 ≈ 0.44. This is
+         * NOT the universal common-component lift ruled out in the T-C43
+         * analysis — the axis component is gated on topical vocabulary, so
+         * refusalAsk's off-corpus query keeps its sub-floor geometry by
+         * construction.
+         */
         private float[] embed(String text) {
+            float[] remainder = hashing(text);
+            for (String word : text.toLowerCase().split("[^a-z0-9]+")) {
+                if (TOPIC_VOCABULARY.contains(word)) {
+                    return lift(remainder);
+                }
+            }
+            return remainder;
+        }
+
+        /** v = 0.9·u + √0.19·r — unit norm, r ⊥ u (Gram–Schmidt, guarded) */
+        private static float[] lift(float[] hashing) {
+            double projection = 0;
+            for (int i = 0; i < hashing.length; i++) {
+                projection += hashing[i] * SEMANTICS_AXIS[i];
+            }
+            float[] r = new float[hashing.length];
+            double norm = 0;
+            for (int i = 0; i < r.length; i++) {
+                r[i] = hashing[i] - (float) (projection * SEMANTICS_AXIS[i]);
+                norm += r[i] * r[i];
+            }
+            if (norm < 1e-12) {
+                throw new IllegalStateException(
+                        "hashing vector parallel to the semantics axis — reseed the axis");
+            }
+            float rScale = (float) (Math.sqrt(0.19) / Math.sqrt(norm));
+            float[] vector = new float[hashing.length];
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] = (float) (0.9 * SEMANTICS_AXIS[i]) + rScale * r[i];
+            }
+            return vector;
+        }
+
+        /** fixed-seed unit Gaussian axis — deterministic across JVMs */
+        private static float[] axis() {
+            Random random = new Random(0xC0FFEE42L);
+            float[] axis = new float[768];
+            double norm = 0;
+            for (int i = 0; i < axis.length; i++) {
+                axis[i] = (float) random.nextGaussian();
+                norm += axis[i] * axis[i];
+            }
+            float scale = (float) (1.0 / Math.sqrt(norm));
+            for (int i = 0; i < axis.length; i++) {
+                axis[i] *= scale;
+            }
+            return axis;
+        }
+
+        /** the legacy bag-of-hashed-words embedder — now the remainder leg */
+        private static float[] hashing(String text) {
             float[] vector = new float[768];
             for (String word : text.toLowerCase().split("[^a-z0-9]+")) {
                 if (word.isBlank()) {
