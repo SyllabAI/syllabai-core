@@ -29,7 +29,13 @@ public class SkillState {
     @Column(name = "node_id", nullable = false)
     private UUID nodeId;
 
-    /** current BKT mastery estimate P(L) */
+    /**
+     * BKT posterior P(L) as of {@code last_practiced_at} — the decay anchor P₀
+     * (ADR-031). Forgetting decay is COMPUTED at read (EbbinghausDecayService) and
+     * never persisted into this column: the nightly job and every read surface
+     * recompute effective mastery from (P₀, last_practiced_at, now), so a pass can
+     * never consume its own output and decay cannot compound.
+     */
     @Column(name = "mastery", nullable = false)
     private double mastery;
 
@@ -55,12 +61,12 @@ public class SkillState {
      */
     /**
      * Optimistic-lock version (C-4): the evidence path does read-modify-write on
-     * this row inside the assessment submit flow, so two concurrent writes (two
-     * submissions, or a submission racing the nightly decay batch) used to
-     * silently lose one update — BKT state under-counted evidence. A conflicting
-     * write now fails its transaction with OptimisticLockingFailureException,
-     * mapped to HTTP 409 by the shared handler; the nightly decay batch rolls
-     * back as a whole and recomputes idempotently on its next run.
+     * this row inside the assessment submit flow, so two concurrent submissions
+     * used to silently lose one update — BKT state under-counted evidence. A
+     * conflicting write fails its transaction with OptimisticLockingFailureException,
+     * mapped to HTTP 409 by the shared handler. Since ADR-031 the nightly decay
+     * batch no longer writes this table at all, so submission-vs-submission is the
+     * only remaining contention on the version column.
      */
     @jakarta.persistence.Version
     @Column(name = "version", nullable = false)
@@ -87,11 +93,6 @@ public class SkillState {
             this.correctCount++;
         }
         this.lastPracticedAt = practicedAt;
-    }
-
-    public void applyDecay(double decayedMastery, Instant when) {
-        this.mastery = decayedMastery;
-        this.updatedAt = when;
     }
 
     @PrePersist
