@@ -1,4 +1,4 @@
--- V55 (T-C40 ③a, 2026-10-01): persist the production-critical pgvector HNSW
+-- V56 (T-C40 ③a, 2026-10-01): persist the production-critical pgvector HNSW
 -- filtered-scan settings in a migration.
 --
 -- WHY THIS EXISTS (review R6, RAG_ENGINE_REVIEW_2026-10-01.md): the 2026-09-28
