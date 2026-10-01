@@ -119,17 +119,36 @@ public class ContentDocumentController {
      * structured log line records the stage funnel. The JSON body stays a bare
      * array on every path — wire-compatible with all existing consumers — and
      * the happy path runs exactly the queries it ran before.</p>
+     *
+     * <p>ADR-030 follow-through — course-aware search: an OPTIONAL {@code courseRef}
+     * (the same opaque hub-supplied reference the tutor ask carries since V53)
+     * switches the resolution from the global {@code resolveActive} singleton to
+     * {@code resolveForCourse} — exact ACTIVE code match plus the same
+     * owns-surface test, exactly one owner serves. A ref that names zero or
+     * ambiguous owners yields {@code 200 + []} labelled
+     * {@link SearchEmptyCause#COURSE_REF_UNRESOLVED} with NO retrieval run and NO
+     * fallback to the global scope (a wrong-corpus answer is worse than an empty
+     * one). A blank or absent ref keeps the legacy path byte-identical — pilot
+     * compatibility is a design decision, not a fallback.</p>
      */
     @GetMapping("/search")
     public ResponseEntity<List<ChunkHitView>> search(@CurrentUserId UUID requesterId,
                                      @RequestParam @NotBlank String query,
                                      @RequestParam(required = false) Document.Kind kind,
-                                     @RequestParam(defaultValue = "10") int limit) {
-        var scope = curriculumScopes.resolveActive(requesterId);
+                                     @RequestParam(defaultValue = "10") int limit,
+                                     @RequestParam(required = false) String courseRef) {
+        boolean courseTagged = courseRef != null && !courseRef.isBlank();
+        var scope = courseTagged
+                ? curriculumScopes.resolveForCourse(courseRef.strip())
+                : curriculumScopes.resolveActive(requesterId);
         if (scope.isEmpty()) {
-            LOG.info("search_empty cause=SCOPE_UNRESOLVED requester={}", requesterId);
+            SearchEmptyCause cause = courseTagged
+                    ? SearchEmptyCause.COURSE_REF_UNRESOLVED
+                    : SearchEmptyCause.SCOPE_UNRESOLVED;
+            LOG.info("search_empty cause={} requester={}{}", cause, requesterId,
+                    courseTagged ? " ref=" + describeRef(courseRef) : "");
             return ResponseEntity.ok()
-                    .header(EMPTY_CAUSE_HEADER, SearchEmptyCause.SCOPE_UNRESOLVED.name())
+                    .header(EMPTY_CAUSE_HEADER, cause.name())
                     .body(List.of());
         }
         List<ChunkHit> hits = retrieval.search(query, kind, scope.get(), limit);
@@ -145,6 +164,17 @@ public class ContentDocumentController {
         return ResponseEntity.ok()
                 .header(EMPTY_CAUSE_HEADER, cause.name())
                 .body(List.of());
+    }
+
+    /** Log-safe rendering of the caller-supplied ref: control characters
+     *  flattened and hard-capped at the course_ref width — an untrusted wire
+     *  value never writes a newline into the serving log. */
+    private static String describeRef(String courseRef) {
+        String ref = courseRef.strip();
+        if (ref.length() > 64) {
+            ref = ref.substring(0, 64) + "...";
+        }
+        return ref.replaceAll("[\\x00-\\x1f\\x7f]", "?");
     }
 
     private CanonicalDocumentDto parse(String rawJson) {

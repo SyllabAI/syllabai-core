@@ -21,6 +21,14 @@ public enum SearchEmptyCause {
      *  unresolved (the designed T-C07 refusal). No diagnostic SQL runs. */
     SCOPE_UNRESOLVED,
 
+    /** A present {@code courseRef} named no ACTIVE surface-owning curriculum
+     *  (the ADR-030 follow-through: fail-closed per-course search, the V53
+     *  {@code resolveForCourse} semantics applied to this endpoint). Same
+     *  refusal shape as {@link #SCOPE_UNRESOLVED} — no retrieval runs, no
+     *  diagnostic SQL runs, and there is NO fallback to the global scope
+     *  (a wrong-corpus answer is worse than an empty one). */
+    COURSE_REF_UNRESOLVED,
+
     /** Scope resolved, but zero chunks match the scope/kind predicate at all —
      *  the corpus has nothing this caller's curriculum can see. */
     SCOPE_EMPTY,
