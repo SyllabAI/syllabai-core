@@ -22,12 +22,15 @@ import org.springframework.transaction.annotation.Transactional;
  * Nightly forgetting-decay batch (Master Spec §11 "forgetting decay applied nightly",
  * §31 job APPLY_FORGETTING_DECAY, backlog F-159).
  *
- * <p>For every skill state idle beyond the grace period, mastery is decayed
- * (P(t)=P₀·e^(−t/τ), τ by proficiency band) and a review is scheduled when the
- * effective mastery crosses the review threshold. Every decay write and every
- * scheduled review is also published as a domain event so the research module can
- * log DECAY_APPLIED / REVIEW_SCHEDULED telemetry (§18). Disabled by default; enable
- * in the production profile via {@code syllabai.learner.decay-job.enabled=true}.</p>
+ * <p>For every skill state idle beyond the grace period, the effective mastery is
+ * COMPUTED (P(t)=P₀·e^(−t/τ)) from the stored post-practice posterior — decay is
+ * never persisted (ADR-031: {@code skill_states.mastery} is the decay anchor P₀,
+ * every pass recomputes from it, so consecutive passes cannot compound) — and a
+ * review is scheduled when the effective mastery crosses the review threshold. Every
+ * materially-decayed state and every scheduled review is published as a domain event
+ * so the research module can log DECAY_APPLIED / REVIEW_SCHEDULED telemetry (§18).
+ * Disabled by default; enable in the production profile via
+ * {@code syllabai.learner.decay-job.enabled=true}.</p>
  *
  * <p><b>Run-if-missed trigger (session-114).</b> The batch used to fire on a
  * single in-process cron tick at 03:00 UTC — on the Render free tier the JVM
@@ -45,11 +48,13 @@ import org.springframework.transaction.annotation.Transactional;
  * the ledger's primary key fails the loser's transaction and its idempotent
  * writes roll back (C-4 posture unchanged).</p>
  *
- * <p>Conflict posture (C-4): {@code skill_states} rows carry an optimistic-lock
- * version. If a learner submits evidence while this batch holds the same row, the
- * batch transaction fails at flush and rolls back as a whole — the decay is
- * recomputed from the stored (still pre-decay) state on the next tick, so a lost
- * run self-heals and no decay is ever applied twice.</p>
+ * <p>Conflict posture (C-4, narrowed by ADR-031): the batch no longer writes
+ * {@code skill_states} rows at all — its only writes are the V38 ledger row and
+ * any {@code review_schedules} inserts. A learner submitting evidence can no
+ * longer conflict with the decay pass; the optimistic-lock version on
+ * {@code skill_states} now guards submission-vs-submission races only. A lost run
+ * self-heals on the next tick because the pass recomputes everything from the
+ * stored anchors and the ledger's primary key rejects duplicate windows.</p>
  */
 @Component
 public class NightlyDecayJob {
@@ -131,25 +136,32 @@ public class NightlyDecayJob {
 
         int decayed = 0;
         int reviewsScheduled = 0;
-        // Stable sort is mandatory here: the batch mutates the rows it pages over
-        // (applyDecay rewrites mastery/updatedAt in the same transaction), and an
-        // unsorted LIMIT/OFFSET scan can revisit already-decayed rows (compounding
-        // the decay) or skip others once Postgres relocates the updated tuples.
-        // The sort key (lastPracticedAt, id) is itself left untouched by applyDecay,
-        // so the ordering is stable across pages.
+        // Stable sort (defensive since ADR-031): the pass no longer mutates the rows
+        // it pages over, so LIMIT/OFFSET cannot revisit or skip updated tuples — but
+        // a deterministic order keeps the telemetry stream and the paged query plan
+        // reproducible run over run, and becomes load-bearing again the moment any
+        // future change reintroduces a write inside this loop.
         Pageable page = PageRequest.of(0, 500,
                 Sort.by(Sort.Direction.ASC, "lastPracticedAt", "id"));
         var candidates = skillStates.findByLastPracticedAtBefore(idleSince, page);
         while (!candidates.isEmpty()) {
             for (SkillState state : candidates) {
+                // ADR-031 contract: state.mastery() is the post-practice BKT posterior
+                // (the decay anchor P₀). Every pass recomputes the effective mastery
+                // from (P₀, lastPracticedAt, now) and NEVER writes the decayed value
+                // back — persisting it would consume the anchor and compound across
+                // nights (the S1 bug: stored 0.5 → 0.321 → 0.206 on consecutive passes,
+                // reaching the 0.1 floor by the fifth pass). The read surfaces
+                // (LearnerStateController, LearnerKnowledgeGraphService,
+                // ClassKnowledgeGraphService, NextBestActionService, SmartLessonService)
+                // re-decay the stored value on read and must see the anchor, not a
+                // decayed copy of it. τ is evaluated on P₀ — the band is frozen at
+                // practice time, so the band-flip feedback loop cannot reappear.
                 double priorMastery = state.mastery();
                 double effective = decayService.decayed(
                         priorMastery, state.lastPracticedAt(), now, params);
-                // The review decision evaluates the effective (already decayed) mastery;
-                // re-running the decay formula on the stored value would double-count.
                 boolean reviewThresholdCrossed = effective < params.reviewBelow();
                 if (effective < priorMastery) {
-                    state.applyDecay(effective, now);
                     decayed++;
                     events.publishEvent(new DecayAppliedEvent(
                             state.learnerId(), state.nodeId(), priorMastery, effective,
@@ -169,7 +181,8 @@ public class NightlyDecayJob {
                             ReviewSchedule.Reason.DECAY_CROSSED_THRESHOLD.name(), now));
                 }
             }
-            skillStates.saveAll(candidates);
+            // No saveAll here, deliberately: the pass is read-only over skill_states
+            // (ADR-031). Persisting the decayed value was the compounding bug.
             page = page.next();
             candidates = skillStates.findByLastPracticedAtBefore(idleSince, page);
         }

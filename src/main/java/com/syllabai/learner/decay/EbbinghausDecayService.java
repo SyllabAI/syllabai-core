@@ -8,10 +8,15 @@ import java.time.Instant;
  *
  * <pre>P(t) = P₀ · e^(−t/τ)</pre>
  *
- * <p>τ depends on the proficiency band at decay time (30/90/365 days). Decay never
- * lowers mastery below the configured floor (= initial knowledge L₀), because the
- * learner has demonstrably been exposed to the skill — total erasure is not modelled.
- * Pure domain class; the nightly job and read models use it (§31 APPLY_FORGETTING_DECAY).</p>
+ * <p>τ depends on the proficiency band of the value passed in (30/90/365 days) —
+ * callers MUST pass the stored post-practice posterior P₀, which freezes the band
+ * at practice time (ADR-031). Decay never lowers mastery below the configured floor
+ * (= initial knowledge L₀), because the learner has demonstrably been exposed to
+ * the skill — total erasure is not modelled. Pure domain class; the nightly job and
+ * read models use it (§31 APPLY_FORGETTING_DECAY). The result is recomputed from
+ * the anchor on every call and is never persisted (ADR-031): with a stable anchor,
+ * the exponential semigroup (e^(−(t₁+t₂)/τ) = e^(−t₁/τ)·e^(−t₂/τ)) guarantees that
+ * any number of passes compose into the exact single-pass curve.</p>
  */
 public class EbbinghausDecayService {
 
