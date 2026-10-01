@@ -1,5 +1,6 @@
 package com.syllabai.tutor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -50,6 +51,11 @@ final class StreamSanitizer {
     private final String fenceOpen;
     private final String fenceClose;
     private final StringBuilder pending = new StringBuilder();
+    /** T-C40 ③b: every out-of-range citation marker this sanitizer has stripped,
+     *  in removal order — the stream-path counterpart of the blocking path's
+     *  per-answer stripping log. Read after {@link #flush()} via
+     *  {@link #strippedCitations()}. */
+    private final List<Integer> strippedCitations = new ArrayList<>();
 
     StreamSanitizer(int evidenceCount, String fenceOpen, String fenceClose) {
         this.evidenceCount = evidenceCount;
@@ -87,9 +93,15 @@ final class StreamSanitizer {
     /** End of stream: flush the held tail through the exact blocking-path sanitizer. */
     String flush() {
         String rest = GroundedTutorGenerator.sanitizeAnswer(
-                pending.toString(), evidenceCount, fenceOpen, fenceClose);
+                pending.toString(), evidenceCount, fenceOpen, fenceClose,
+                strippedCitations::add);
         pending.setLength(0);
         return rest == null ? "" : rest;
+    }
+
+    /** Every out-of-range citation marker stripped so far, in removal order. */
+    List<Integer> strippedCitations() {
+        return List.copyOf(strippedCitations);
     }
 
     private int lastWhitespace() {
@@ -114,7 +126,7 @@ final class StreamSanitizer {
         String prefix = pending.substring(0, cut);
         pending.delete(0, cut);
         return GroundedTutorGenerator.sanitizeAnswer(
-                prefix, evidenceCount, fenceOpen, fenceClose);
+                prefix, evidenceCount, fenceOpen, fenceClose, strippedCitations::add);
     }
 
     /** longest marker we may need to avoid splitting = the fence marker

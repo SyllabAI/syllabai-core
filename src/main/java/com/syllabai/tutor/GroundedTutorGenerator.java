@@ -7,6 +7,7 @@ import com.syllabai.infrastructure.llm.LlmResponse;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -103,11 +104,25 @@ public class GroundedTutorGenerator implements TutorGenerator {
             // the prompt's scaffolding into the learner-visible answer. Both are
             // stripped here — the last step before the answer leaves the
             // pipeline — so the served text can only cite REAL evidence slots.
-            String sanitized = sanitizeAnswer(response.text(), context.evidence().size(),
-                    fenceOpen(nonce), fenceClose(nonce));
-            if (!sanitized.equals(response.text())) {
-                log.info("tutor answer sanitized: out-of-range citation marker(s) "
-                        + "or echoed fence marker(s) removed");
+            // T-C40 ③b: the stripping is OBSERVED, not silent — the exact marker
+            // numbers reach the log so a citation-forgery pattern (repeated
+            // out-of-range markers against one session/learner) is visible in
+            // server-side records instead of degrading into a bare boolean.
+            String raw = response.text();
+            String open = fenceOpen(nonce);
+            String close = fenceClose(nonce);
+            List<Integer> strippedMarkers = new ArrayList<>();
+            String sanitized = sanitizeAnswer(raw, context.evidence().size(), open, close,
+                    strippedMarkers::add);
+            int fenceEchoes = countOccurrences(raw, open) + countOccurrences(raw, close);
+            if (!strippedMarkers.isEmpty()) {
+                log.info("tutor answer sanitized: {} out-of-range citation marker(s) removed {} "
+                                + "(evidence slots = {}) — markers must index a real source slot",
+                        strippedMarkers.size(), strippedMarkers, context.evidence().size());
+            }
+            if (fenceEchoes > 0) {
+                log.info("tutor answer sanitized: {} echoed fence marker occurrence(s) removed",
+                        fenceEchoes);
             }
             return new GeneratedAnswer(sanitized, response.model(), response.providerName());
         } catch (LlmProviderException e) {
@@ -163,6 +178,17 @@ public class GroundedTutorGenerator implements TutorGenerator {
                     // null (consumers take provider/model from the FIRST delta)
                     .concatWith(Flux.defer(() -> {
                         String tail = sanitizer.flush();
+                        // T-C40 ③b: stream-path stripping is observed too — the
+                        // sanitizer accumulates every out-of-range marker it removes
+                        // across deltas, and the exact numbers are logged once at end
+                        // of stream (the same record the blocking path writes).
+                        List<Integer> stripped = sanitizer.strippedCitations();
+                        if (!stripped.isEmpty()) {
+                            log.info("tutor stream sanitized: {} out-of-range citation marker(s) "
+                                            + "removed {} (evidence slots = {}) — markers must index a "
+                                            + "real source slot",
+                                    stripped.size(), stripped, context.evidence().size());
+                        }
                         return tail.isEmpty() ? Flux.empty()
                                 : Flux.just(new GeneratedDelta(tail, null, null));
                     }))
@@ -370,6 +396,18 @@ public class GroundedTutorGenerator implements TutorGenerator {
      */
     static String sanitizeAnswer(String text, int evidenceCount,
                                  String fenceOpen, String fenceClose) {
+        return sanitizeAnswer(text, evidenceCount, fenceOpen, fenceClose, null);
+    }
+
+    /**
+     * Sink-carrying variant (T-C40 ③b): every stripped marker number is
+     * reported to {@code strippedCitationSink} (null = silent, the historical
+     * behavior). The OUTPUT is byte-identical to the 4-arg form — only the
+     * observation is new, so the anchor-matrix hygiene contract is untouched.
+     */
+    static String sanitizeAnswer(String text, int evidenceCount,
+                                 String fenceOpen, String fenceClose,
+                                 IntConsumer strippedCitationSink) {
         if (text == null || text.isEmpty()) {
             return text;
         }
@@ -382,9 +420,26 @@ public class GroundedTutorGenerator implements TutorGenerator {
         while (m.find()) {
             int n = Integer.parseInt(m.group(1));
             boolean inRange = n >= 1 && n <= evidenceCount;
+            if (!inRange && strippedCitationSink != null) {
+                strippedCitationSink.accept(n);
+            }
             m.appendReplacement(sb, inRange ? Matcher.quoteReplacement(m.group()) : "");
         }
         return m.appendTail(sb).toString();
+    }
+
+    /** Occurrences of one literal marker in the raw answer (fence-echo count). */
+    private static int countOccurrences(String text, String marker) {
+        if (text == null || marker.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(marker, idx)) >= 0) {
+            count++;
+            idx += marker.length();
+        }
+        return count;
     }
 
     /** registered prompt identity, e.g. "tutor-grounded/v3" — public since V24:
