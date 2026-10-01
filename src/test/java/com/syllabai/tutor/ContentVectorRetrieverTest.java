@@ -65,12 +65,14 @@ class ContentVectorRetrieverTest {
     @Test
     @DisplayName("sub-threshold similarity is dropped — zero-relevance chunks are not evidence")
     void dropsSubThreshold() {
+        // boundary fixtures pinned to the CALIBRATED floor (T-C42: MIN_COSINE 0.50):
+        // 0.81 keeps, the inclusive boundary 0.50 keeps, 0.49 and below drop.
         when(retrieval.search(any(), isNull(), org.mockito.ArgumentMatchers.eq(SCOPE), anyInt())).thenReturn(List.of(
-                hit(0.81), hit(0.15), hit(0.14), hit(0.0), hit(-0.2)));
+                hit(0.81), hit(0.50), hit(0.49), hit(0.0), hit(-0.2)));
 
         List<EvidenceItem> evidence = adapter.retrieve("query", 10, SCOPE);
 
-        assertThat(evidence).hasSize(2);   // 0.81 and the boundary 0.15 survive
+        assertThat(evidence).hasSize(2);   // 0.81 and the boundary 0.50 survive
     }
 
     @Test
