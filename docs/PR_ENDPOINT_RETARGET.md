@@ -80,11 +80,17 @@ saturation concept", which is exactly what the operator validated.
    content, already pinned via `practicals.yaml` — no new resource). Without this,
    `ConceptDependencyGraph.of`'s fail-closed endpoint check would refuse startup.
    `ConceptDependencyGraph.requireKnown`'s message gloss updated in lockstep.
-4. **Data migration** `V54__retarget_practical_edge_endpoints.sql` (first drafted
-   as V47 against the batch-4 store; renumbered after origin consumed V47..V53):
-   for databases the seed has already run on (prod), moves the 12 batch-4-era rows
-   IN PLACE — the 7 batch-5/6/7/11 edges were never seeded and enter the KG through
-   re-activation, already at their real spec statements — only
+4. **Data migrations** `V54__retarget_practical_edge_endpoints.sql` (first drafted
+   as V47 against the batch-4 store; renumbered after origin consumed V47..V53) +
+   `V55__retarget_batch11_practical_edges.sql`. The live sequence on prod exposed a
+   scope split the batch-11 sync created: prod had been re-activated with the
+   batch-11 snapshot BEFORE the retarget deploy, so the 7 batch-5/6/7/11 edges were
+   already seeded (PR-sourced). V54 moved exactly the 12 batch-4-era rows (guard
+   green on prod); V55 completes the retarget for the 7 new mappings (PR-05→2.14,
+   PR-06→2.21, PR-07→2.42, PR-08→2.43C, PR-12→4.43C) with a 0-or-7 guard. Both move
+   rows IN PLACE — only source_node_id; provenance/rationale/status/created_by
+   byte-preserved so re-activation reuses every migrated row under the identity +
+   provenance contract. Practical nodes and their PART_OF anchors untouched. — only
    `source_node_id` changes; provenance/rationale/status/created_by are
    byte-preserved, so re-activation resolves every migrated row as reused under
    the seed's identity + provenance contract (no duplicates, no conflict).
