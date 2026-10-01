@@ -143,7 +143,9 @@ class V54PracticalEndpointRetargetIT {
                     .as("provenance of %s -> %s", t[1], t[2])
                     .isEqualTo(provenanceBefore.get(t[2] + "|" + t[1]));
         }
-        Map<String, Object> spot = jdbc.queryForMap("""
+        // the move touched ONLY the source: provenance, rationale, status and
+        // created_by are byte-identical to the pre-retarget seeded row
+        Map<String, Object> spotAfter = jdbc.queryForMap("""
                 SELECT e.provenance, e.rationale, e.validation_status, e.created_by
                 FROM knowledge_edges e
                 JOIN knowledge_nodes s ON s.id = e.source_node_id
@@ -151,11 +153,19 @@ class V54PracticalEndpointRetargetIT {
                 WHERE s.code = '4CH1-1.7C' AND t.code = '4CH1-CON-SATURATED-SOLUTION'
                   AND e.relation_type = 'REQUIRES_PREREQUISITE'
                 """);
-        assertThat(spot.get("provenance")).isEqualTo(
+        assertThat(spotAfter).isEqualTo(spotBefore);
+        Map<String, Object> spotBefore = jdbc.queryForMap("""
+                SELECT e.provenance, e.rationale, e.validation_status, e.created_by
+                FROM knowledge_edges e
+                JOIN knowledge_nodes s ON s.id = e.source_node_id
+                JOIN knowledge_nodes t ON t.id = e.target_node_id
+                WHERE s.code = '4CH1-1.7C' AND t.code = '4CH1-CON-SATURATED-SOLUTION'
+                  AND e.relation_type = 'REQUIRES_PREREQUISITE'
+                """);
+        assertThat(spotBefore.get("provenance")).isEqualTo(
                 "t-c11:settled|pass:c11-s16-batch-1|method:USED_WITHOUT_RETEACHING"
                         + "|validated_by:operator|date:2026-09-12");
-        assertThat(spot.get("validation_status")).isEqualTo("VALIDATED");
-        assertThat(spot.get("created_by")).isEqualTo("concept-graph-seed-v1");
+        assertThat(spotBefore.get("validation_status")).isEqualTo("VALIDATED");
 
         // the lockstep proof: with the re-pinned snapshot, re-activation resolves
         // every migrated row by identity + provenance — zero new rows, no conflict
