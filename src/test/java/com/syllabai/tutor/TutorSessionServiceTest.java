@@ -370,7 +370,7 @@ class TutorSessionServiceTest {
         scoped.attachCourse("4CH1-2017");
         TutorSession legacy = ownedSession(courseless, learner);
         when(sessions.findByIdAndLearnerId(withCourse, learner)).thenReturn(Optional.of(scoped));
-        when(turns.findBySessionIdOrderBySeqDesc(withCourse)).thenReturn(List.of());
+        when(turns.findBySessionIdOrderBySeq(withCourse)).thenReturn(List.of());
 
         TutorSessionService.SessionView view = service.view(learner, withCourse);
         assertThat(view.courseRef()).isEqualTo("4CH1-2017");
