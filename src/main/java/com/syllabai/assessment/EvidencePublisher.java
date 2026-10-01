@@ -1,6 +1,8 @@
 package com.syllabai.assessment;
 
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
+import com.syllabai.sme.QuestionSpecPoint;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,9 +21,12 @@ import org.springframework.stereotype.Component;
 public class EvidencePublisher {
 
     private final ApplicationEventPublisher events;
+    private final SmeQuestionSpecPointRepository specPoints;
 
-    public EvidencePublisher(ApplicationEventPublisher events) {
+    public EvidencePublisher(ApplicationEventPublisher events,
+                             SmeQuestionSpecPointRepository specPoints) {
         this.events = events;
+        this.specPoints = specPoints;
     }
 
     /** MCQ path: publishes immediately at submit (correctness already known). */
@@ -63,11 +68,32 @@ public class EvidencePublisher {
         events.publishEvent(new AssessmentEvidenceRecordedEvent(
                 attempt.id(), attempt.learnerId(), question.id(),
                 topicNodeIds(question, secondaryTopics),
+                specPointNodeIds(question),
                 correct, question.marks(), marksAwarded,
                 attempt.responseTimeMs(), attempt.confidenceLevel(),
                 attempt.selfDoubtFlag(), attempt.timedCondition(),
                 expressedIds, observedIds,
                 attempt.provenance(), Instant.now()));
+    }
+
+    /**
+     * The question's mapped spec-point nodes (T-C18 mapping, ADR-026/V30) —
+     * the same marked-attempt evidence carried at spec-point granularity so the
+     * learner model maintains skills on the SUBTOPIC nodes the hub's KG paints.
+     * Empty on unmapped questions (legacy/teacher-authored): those keep the
+     * topic-only firing shape. Deduped; role (PRIMARY/SECONDARY) is content
+     * metadata and does not change evidence strength — one marked attempt is
+     * one update per node it honestly tests.
+     */
+    private List<UUID> specPointNodeIds(Question question) {
+        List<UUID> ids = new ArrayList<>();
+        for (QuestionSpecPoint qsp : specPoints.findByQuestionId(question.id())) {
+            UUID nodeId = qsp.specPointNodeId();
+            if (nodeId != null && !ids.contains(nodeId)) {
+                ids.add(nodeId);
+            }
+        }
+        return ids;
     }
 
     static List<UUID> topicNodeIds(Question question, List<QuestionTopic> secondaryTopics) {

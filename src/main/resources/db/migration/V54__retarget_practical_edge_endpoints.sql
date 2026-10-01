@@ -1,9 +1,12 @@
--- V47: retarget the 12 validated practical REQUIRES_PREREQUISITE edges from the
--- ad-hoc practical-node codes (4CH1-PR-01/02/03/04/09/10/11) to their real
--- core-practical spec statements (4CH1-1.7C, 4CH1-1.13, 4CH1-1.36, 4CH1-1.60C,
--- 4CH1-3.8, 4CH1-3.15, 4CH1-3.16) — the upstream lockstep of the syllabai-hub
--- mirror retarget (fix_pr_edges.py fd05d75 + fix_pr_mirror.py; hub manifest
+-- V54: retarget the validated practical REQUIRES_PREREQUISITE edges from the
+-- ad-hoc practical-node codes (4CH1-PR-01..12) to their real core-practical
+-- spec statements — the upstream lockstep of the syllabai-hub mirror retarget
+-- (fix_pr_edges.py fd05d75 + fix_pr_mirror.py; hub manifest
 -- docs/TC11_BATCH5_MANIFEST.md follow-up 1, operator trace 1a0f5be571fa8f21).
+-- First applied as V47 against the batch-4 store (12 edges); renumbered and
+-- re-scoped after the batch-11 core sync (96e7bec) landed the operator's
+-- 7-edge package (PR-05/06/07/08 x1 + PR-12 x3, sourced at their real spec
+-- statements by scripts/retarget_pr_endpoints.py alongside the original 12).
 --
 -- WHY A DATA MIGRATION: the concept-graph seed (V15 ConceptGraphSeedService) is
 -- idempotent-by-identity and never deletes or updates — a snapshot-only
@@ -19,8 +22,11 @@
 -- NO-OP CONTRACT: on a database where the 4CH1 concept-graph seed has not run
 -- (fresh environments, CI, any pre-V15 database) there is nothing to retarget
 -- and this migration is a structural no-op. On a seeded database the update
--- must move EXACTLY 12 rows — any other count is store drift and fails the
--- boot loudly (fail-closed; resolve manually, never guess).
+-- must move EXACTLY 12 rows — the batch-4-era store seeded exactly that many
+-- ad-hoc-sourced rows, and the 7 batch-5/6/7/11 edges were never seeded
+-- anywhere (they enter the KG through re-activation with the new snapshot,
+-- already at their real spec statements). Any other count is store drift and
+-- fails the boot loudly (fail-closed; resolve manually, never guess).
 --
 -- DELIBERATELY UNTOUCHED: the practical NODES (4CH1-PR-xx, official spec
 -- content) and their PART_OF anchor edges to their spec points remain — the
@@ -46,7 +52,7 @@ BEGIN
     IF (SELECT COUNT(*) FROM knowledge_nodes WHERE code IN
             ('4CH1-1.7C', '4CH1-1.13', '4CH1-1.36', '4CH1-1.60C',
              '4CH1-3.8', '4CH1-3.15', '4CH1-3.16')) <> 7 THEN
-        RAISE EXCEPTION 'V47 retarget: target spec-statement node(s) missing — seed drift, resolve manually';
+        RAISE EXCEPTION 'V54 retarget: target spec-statement node(s) missing — seed drift, resolve manually';
     END IF;
 
     WITH mapping(pr_code, sp_code) AS (VALUES
@@ -73,7 +79,7 @@ BEGIN
     GET DIAGNOSTICS updated = ROW_COUNT;
 
     IF updated <> 12 THEN
-        RAISE EXCEPTION 'V47 retarget: expected to move exactly 12 validated practical prerequisite edges, moved % — store drift, resolve manually', updated;
+        RAISE EXCEPTION 'V54 retarget: expected to move exactly 12 validated practical prerequisite edges, moved % — store drift, resolve manually', updated;
     END IF;
 
     IF EXISTS (
@@ -83,7 +89,7 @@ BEGIN
           AND s.code IN ('4CH1-PR-01', '4CH1-PR-02', '4CH1-PR-03', '4CH1-PR-04',
                          '4CH1-PR-09', '4CH1-PR-10', '4CH1-PR-11')
     ) THEN
-        RAISE EXCEPTION 'V47 retarget: ad-hoc practical prerequisite edges remain after update — destination collision, resolve manually';
+        RAISE EXCEPTION 'V54 retarget: ad-hoc practical prerequisite edges remain after update — destination collision, resolve manually';
     END IF;
 END
 $$;

@@ -47,6 +47,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "conflict", ex.getMessage());
     }
 
+    // Privilege-gated self-service (teacher join-code signup): 403 whether
+    // the presented secret is wrong or the gate is not configured at all —
+    // one status, no configuration oracle.
+    @ExceptionHandler(ForbiddenException.class)
+    ResponseEntity<ApiError> forbidden(ForbiddenException ex) {
+        return build(HttpStatus.FORBIDDEN, "forbidden", ex.getMessage());
+    }
+
     // CLA answer-leakage gate (contract §7.3/§7.4): CHECK without attempt
     // evidence is a deterministic 409 BEFORE any retrieval or generation.
     @ExceptionHandler(com.syllabai.cla.AttemptRequiredException.class)
@@ -105,6 +113,46 @@ public class GlobalExceptionHandler {
                 ex.getMessage());
         return build(HttpStatus.SERVICE_UNAVAILABLE, "smart_feedback_unavailable",
                 "the marking feedback engine is temporarily unavailable — try again shortly");
+    }
+
+    // ── answer-input transcription (HUB-ANSWER-BOX wave 3) ──────────────────
+    // 400/413 carry the input-validation reason (client-input specific, no
+    // internal detail); 422/503 follow the tutor/smart-mark posture — fixed
+    // served message, exception text only reaches the log.
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.BadRequestException.class)
+    ResponseEntity<ApiError> transcriptionBadRequest(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.BadRequestException ex) {
+        return build(HttpStatus.BAD_REQUEST, "transcription_bad_request", ex.getMessage());
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.ImageTooLargeException.class)
+    ResponseEntity<ApiError> transcriptionTooLarge(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.ImageTooLargeException ex) {
+        log.warn("transcription image too large 413 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "transcription_image_too_large",
+                "that image is too large — the drawing pad and photo upload downscale "
+                        + "automatically, so this usually means a stale tab");
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.NothingReadableException.class)
+    ResponseEntity<ApiError> transcriptionNothingReadable(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.NothingReadableException ex) {
+        log.warn("transcription nothing-readable 422 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "transcription_nothing_readable",
+                "we couldn't read any handwriting in that image — write clearly and "
+                        + "try again");
+    }
+
+    @ExceptionHandler(com.syllabai.answerinput.AnswerInputTranscriptionService.TranscriptionUnavailableException.class)
+    ResponseEntity<ApiError> transcriptionUnavailable(
+            com.syllabai.answerinput.AnswerInputTranscriptionService.TranscriptionUnavailableException ex) {
+        log.warn("transcription unavailable 503 served (detail suppressed from body): {}",
+                ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "transcription_unavailable",
+                "transcription is temporarily unavailable — try again shortly");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

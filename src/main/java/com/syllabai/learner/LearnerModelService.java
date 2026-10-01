@@ -78,8 +78,18 @@ public class LearnerModelService {
     private void updateMastery(AssessmentEvidenceRecordedEvent event) {
         var bktParams = properties.bkt().toParams();
         Instant when = event.occurredAt();
+        // spec points (T-C18 mapping) ride the SAME evidence class as topics:
+        // one marked attempt is one BKT update per node it honestly tests —
+        // the point nodes the hub's KG paints get real skills, review
+        // scheduling and decay exactly like the topic nodes always did.
+        List<UUID> evidenceNodes = new ArrayList<>(event.topicNodeIds());
+        for (UUID sp : event.specPointNodeIds()) {
+            if (!evidenceNodes.contains(sp)) {
+                evidenceNodes.add(sp);
+            }
+        }
         List<SkillState> toSave = new ArrayList<>();
-        for (UUID node : event.topicNodeIds()) {
+        for (UUID node : evidenceNodes) {
             SkillState state = skillStates
                     .findByLearnerIdAndNodeId(event.learnerId(), node)
                     .orElseGet(() -> new SkillState(event.learnerId(), node, bktParams.l0(), when));
@@ -93,8 +103,8 @@ public class LearnerModelService {
                     state.attempts(), state.correctCount(), when));
         }
         skillStates.saveAll(toSave);
-        log.debug("BKT updated for learner {} on {} node(s): correct={}",
-                event.learnerId(), event.topicNodeIds().size(), event.correctness());
+        log.debug("BKT updated for learner {} on {} node(s) (topics + spec points): correct={}",
+                event.learnerId(), evidenceNodes.size(), event.correctness());
     }
 
     private void updateMisconceptions(AssessmentEvidenceRecordedEvent event) {
@@ -132,6 +142,12 @@ public class LearnerModelService {
      * Paper B §16 procedural fluency gap per affected node: untimed accuracy −
      * timed accuracy over <em>graded</em> attempts; null until both conditions
      * are observed. Derived metric — BKT mastery stays condition-agnostic.
+     *
+     * <p>Deliberately TOPIC-scoped even when the event carries spec points: the
+     * fluency aggregate attributes attempts via the question's primary topic,
+     * so per-point condition splits would always aggregate empty here. Point
+     * skills carry mastery, decay and review scheduling; fluency stays a
+     * topic-level read until an attempt-attributed per-point query exists.</p>
      */
     private void updateFluencyGaps(AssessmentEvidenceRecordedEvent event) {
         for (UUID node : event.topicNodeIds()) {

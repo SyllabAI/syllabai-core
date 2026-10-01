@@ -8,6 +8,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -69,7 +71,19 @@ public class TelemetryEvent {
     public TelemetryEvent(UUID learnerId, Type type, Map<String, Object> payload, Instant occurredAt) {
         this.learnerId = learnerId;
         this.type = type;
-        this.payload = Map.copyOf(payload);
+        // Null VALUES are contract-legal here: the attempt contract makes
+        // confidence optional (SubmitAnswerRequest.confidence is nullable),
+        // and TelemetryService puts it in the payload verbatim. Map.copyOf
+        // rejects null values with a bare NPE — which 500s the whole attempt
+        // submission for a perfectly legal request (found live from the
+        // syllabai-hub bridge, 2026-09-28: a submission with confidence
+        // absent crashed POST /api/v1/attempts after the attempt row was
+        // already saved). Copy into an unmodifiable LinkedHashMap instead:
+        // same immutability guarantee for callers, null values serialize to
+        // JSON null in the jsonb column exactly as the schema intends.
+        this.payload = payload == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(payload));
         this.occurredAt = occurredAt;
     }
 

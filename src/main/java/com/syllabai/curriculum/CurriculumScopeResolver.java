@@ -41,6 +41,17 @@ import com.syllabai.knowledge.KnowledgeNodeRepository;
  * owns surface (226 VALIDATED structure nodes under its subject root; 91 papers
  * carrying all 2,333 chunks), so the resolver yields exactly the 4CH1 scope and
  * every serving path narrows to it.</p>
+ *
+ * <p>V53 per-course resolution (ADR-030): {@link #resolveForCourse(String)}
+ * resolves an explicitly course-tagged ask against core's OWN registry —
+ * exact {@code curriculum_versions.code} match, ACTIVE only, the SAME
+ * ownsSurface test. Exactly one owner serves; zero or ambiguous refuse.
+ * The ref itself is opaque hub-owned data stored verbatim on the session
+ * (the V47/V48/V49/V51 ruling) — this method is a core-native lookup
+ * against {@code curriculum_versions}, never a hub-registry parse. The
+ * global {@link #resolveActive} path is untouched: an ask WITHOUT a course
+ * ref resolves exactly as before (pilot compatibility is a design decision,
+ * not a fallback), and the per-learner selector hook stays reserved.</p>
  */
 @Service
 public class CurriculumScopeResolver {
@@ -75,15 +86,51 @@ public class CurriculumScopeResolver {
     public Optional<CurriculumScope> resolveActive(UUID learnerId) {
         List<CurriculumVersion> active = curriculumVersions
                 .findByStatusOrderByCreatedAtDesc(CurriculumVersion.Status.ACTIVE);
-        List<CurriculumVersion> owners = active.stream().filter(this::ownsSurface).toList();
+        return singleOwnerScope(active,
+                "the ACTIVE set (" + active.size() + " candidate(s))");
+    }
+
+    /**
+     * V53 per-course resolution (ADR-030): resolves a hub-supplied course
+     * reference to the ONE curriculum it names. Exact {@code code} match
+     * among ACTIVE versions (a ref that does not exactly name a core
+     * curriculum is unresolved — no prefix, no normalization, no fuzzy
+     * variants: the two code namespaces have no derivable rule between
+     * them, so matching beyond exact equality would be a hidden registry),
+     * then the SAME {@code ownsSurface} test the global path applies.
+     *
+     * @param courseRef the opaque hub-supplied course reference (never
+     *                  parsed by core beyond this exact-code lookup)
+     * @return exactly one owner's scope; empty when the ref is blank, names
+     *         no ACTIVE curriculum, or names an ambiguous/non-serving one —
+     *         callers must refuse deterministically, never fall back to the
+     *         global scope (a wrong-corpus answer is worse than a refusal)
+     */
+    public Optional<CurriculumScope> resolveForCourse(String courseRef) {
+        if (courseRef == null || courseRef.isBlank()) {
+            return Optional.empty();
+        }
+        String ref = courseRef.strip();
+        List<CurriculumVersion> candidates =
+                curriculumVersions.findByCodeAndStatus(ref, CurriculumVersion.Status.ACTIVE);
+        return singleOwnerScope(candidates, "course ref [" + ref + "]");
+    }
+
+    /** Shared fail-closed tail of both resolution paths: exactly one
+     *  surface-owning candidate serves; anything else refuses. */
+    private Optional<CurriculumScope> singleOwnerScope(List<CurriculumVersion> candidates,
+                                                       String describe) {
+        List<CurriculumVersion> owners = candidates.stream().filter(this::ownsSurface).toList();
         if (owners.size() != 1) {
-            log.info("curriculum scope unresolved: {} ACTIVE candidate(s), {} owner(s) — refusing over serving",
-                    active.size(), owners.size());
+            log.info("curriculum scope unresolved for {}: {} candidate(s), {} owner(s)"
+                            + " — refusing over serving",
+                    describe, candidates.size(), owners.size());
             return Optional.empty();
         }
         CurriculumVersion version = owners.getFirst();
         Set<UUID> surface = intentSurface(version);
-        log.debug("curriculum scope resolved: {} ({} surface node(s))", version.code(), surface.size());
+        log.debug("curriculum scope resolved for {}: {} ({} surface node(s))",
+                describe, version.code(), surface.size());
         return Optional.of(new CurriculumScope(version.id(), version.code(), surface));
     }
 

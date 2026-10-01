@@ -120,6 +120,25 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
             """)
     List<KnowledgeEdge> findSemanticEdgesWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
 
+    /**
+     * The settled T-C11 concept layer's anchor edges with BOTH endpoints inside
+     * the given node set: PART_OF edges sourced at CONCEPT nodes (concept →
+     * anchored SpecificationPoint). The projection basis for structure-keyed
+     * read models — the settled store carries prerequisite relations at concept
+     * level while class-level surfaces aggregate at curriculum-structure level,
+     * and these validated anchors carry each concept's official placement.
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            join fetch e.target
+            where e.relationType = com.syllabai.knowledge.RelationType.PART_OF
+              and e.source.nodeType = com.syllabai.knowledge.NodeType.CONCEPT
+              and e.source.id in :nodeIds
+              and e.target.id in :nodeIds
+            """)
+    List<KnowledgeEdge> findConceptAnchorEdgesWithin(@Param("nodeIds") java.util.Collection<UUID> nodeIds);
+
     /** All PART_OF edges inside a subtree — bulk validation (version gate). */
     @Query("""
             select e from KnowledgeEdge e

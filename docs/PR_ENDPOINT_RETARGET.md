@@ -9,7 +9,7 @@
   verified 1:1 mapping. The mirror's in-file `practicalEndpointRetarget` note recorded
   the divergence from this store; this change closes it.
 
-## 1. The mapping (unchanged from the reviewed mirror fix)
+## 1. The mapping (12 practicals; PR-01..11 identical to the reviewed mirror fix)
 
 | Ad-hoc code | Real spec statement | Practical |
 |---|---|---|
@@ -17,13 +17,26 @@
 | 4CH1-PR-02 | 4CH1-1.13 | paper chromatography (inks / food colourings) |
 | 4CH1-PR-03 | 4CH1-1.36 | formula of a metal oxide by combustion |
 | 4CH1-PR-04 | 4CH1-1.60C | electrolysis of aqueous solutions |
+| 4CH1-PR-05 | 4CH1-2.14 | oxygen percentage in air determination |
+| 4CH1-PR-06 | 4CH1-2.21 | reactivity/arrangement (metals and acids) |
+| 4CH1-PR-07 | 4CH1-2.42 | preparing a soluble salt |
+| 4CH1-PR-08 | 4CH1-2.43C | preparing an insoluble salt |
 | 4CH1-PR-09 | 4CH1-3.8 | temperature changes: HCl + NaOH calorimetry |
 | 4CH1-PR-10 | 4CH1-3.15 | marble chips: surface area / concentration rate |
 | 4CH1-PR-11 | 4CH1-3.16 | catalytic decomposition of hydrogen peroxide |
+| 4CH1-PR-12 | 4CH1-4.43C | tests for ions and gases (core set) |
 
-12 validated edges move (PR-01, 02, 04, 10, 11 source 2 edges each; PR-03, 09 source 1).
-PR-05..08 and PR-12 have no edges — nothing to do for them. The mapping is verified 1:1
-in spec order against the store's own `practicals.yaml` (`spec_point` links).
+**19 validated edges move.** The retarget was first applied at the batch-4 close
+(12 edges: PR-01/02/04/10/11 ×2, PR-03/09 ×1). Mid-lane, origin/main moved: the
+operator's 7-edge package (PR-05/06/07/08 ×1 + PR-12 ×3) was authored and
+operator-promoted in syllabai-resources batches 5/6/7/11 and core-synced in
+`96e7bec` ("the operator's 7-edge-package GO", trace `1a0f3e20d4f963e9`) — superseding
+the hub manifest's class-5 NO-GO disposition upstream, with the standing promotion
+boundary intact (no #4–#8 anchor work; the 132 concept-backed SP pairs stay derived).
+The retarget was then re-applied on top of the batch-11 store (19 edges). Every pair
+is verified 1:1 against the store's own `practicals.yaml` (`spec_point` links); the
+original 12 edges' provenance fields are byte-identical between the batch-4 and
+batch-11 stores (verified programmatically at merge time).
 
 ## 2. Why the store carries this change at all
 
@@ -39,7 +52,7 @@ saturation concept", which is exactly what the operator validated.
 
 ## 3. What changed (the full lockstep set)
 
-1. **Store** `src/main/resources/concept-graph/concept_edges.yaml`: the 12
+1. **Store** `src/main/resources/concept-graph/concept_edges.yaml`: the 19
    `- source:` lines retargeted; a header comment and a machine-readable
    `meta.practical_endpoint_retarget` record added. **Everything else is
    byte-identical** — evidence, provenance fields (tier, extraction_pass,
@@ -54,7 +67,9 @@ saturation concept", which is exactly what the operator validated.
    history), so this governed script is the surgical path — a future generator
    re-run would re-emit the ad-hoc codes and MUST be followed by this script
    (stated in both the header comment and the meta note).
-   New SHA-256: `87af6866a53babbbb5ee77415ff91287d68a71808868713e44756dfa81dc16e9`.
+   New SHA-256 (batch-11 store, post-retarget):
+   `8a651dd9e60bfefa7a164102db23b10b700672daebc6449c126332180db24aad`
+   (intermediate batch-4 pin before the sync: `87af6866…dc16e9`).
 2. **Teacher seed** `ConceptGraphSnapshotLoader`: CONCEPT_EDGES pin updated
    deliberately (the pin error message's own contract); the validated
    semantic-edge endpoint check widened to admit spec-statement codes (the seed
@@ -65,8 +80,11 @@ saturation concept", which is exactly what the operator validated.
    content, already pinned via `practicals.yaml` — no new resource). Without this,
    `ConceptDependencyGraph.of`'s fail-closed endpoint check would refuse startup.
    `ConceptDependencyGraph.requireKnown`'s message gloss updated in lockstep.
-4. **Data migration** `V47__retarget_practical_edge_endpoints.sql`: for databases
-   the seed has already run on (prod), moves the 12 rows IN PLACE — only
+4. **Data migration** `V54__retarget_practical_edge_endpoints.sql` (first drafted
+   as V47 against the batch-4 store; renumbered after origin consumed V47..V53):
+   for databases the seed has already run on (prod), moves the 12 batch-4-era rows
+   IN PLACE — the 7 batch-5/6/7/11 edges were never seeded and enter the KG through
+   re-activation, already at their real spec statements — only
    `source_node_id` changes; provenance/rationale/status/created_by are
    byte-preserved, so re-activation resolves every migrated row as reused under
    the seed's identity + provenance contract (no duplicates, no conflict).
@@ -94,11 +112,14 @@ saturation concept", which is exactly what the operator validated.
 
 ## 5. Verification chain
 
-- Store: post-conditions green (12 substitutions; counts stable; the 12 edges'
-  provenance/evidence fields byte-identical; 9 legitimate residual PR references =
-  7 meta.practicals registry + this file's own meta note + 1 historical upstream note).
+- Store: post-conditions green (19 substitutions; counts stable at 488/389/211;
+  the 19 edges' provenance/evidence fields byte-identical; residual PR references
+  all legitimate — meta.practicals registry, historical provenance.upstream notes,
+  this file's own meta note — none on an endpoint line).
 - Local: unit suite green (see commit message for the exact run).
 - CI: full unit + IT suite on the pushed commit.
-- Prod (after deploy): Flyway V47 applied; 0 REQUIRES_PREREQUISITE edges sourced at
-  `4CH1-PR-%`; 12 sourced at the 7 spec statements with seed provenance intact;
-  re-activation remains a structural no-op.
+- Prod (after deploy): Flyway V54 applied; 0 REQUIRES_PREREQUISITE edges sourced at
+  `4CH1-PR-%`; 12 batch-4-era rows moved to their spec statements with seed
+  provenance intact; operator re-activation with the batch-11 snapshot then brings
+  the full 272-edge validated layer (all 19 practical edges SP-sourced) as a
+  structural no-op for every pre-existing row.

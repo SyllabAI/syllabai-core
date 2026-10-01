@@ -15,45 +15,53 @@ import org.springframework.stereotype.Repository;
  * posture the knowledge-graph recursive CTEs use.
  *
  * <p>Embed-revision read filter (V33, plan §6): {@link #CURRENT_EMBED_REV} is the
- * single constant deciding which corpus generation serves. rev1 rows (the 2,333
- * legacy glmocr chunks) carry embed_rev = 1 and remain in place untouched; the
- * corpus-v2 ingest writes embed_rev = 2 rows and the cut-over is THIS constant
- * flipping to 2 — rollback is flipping it back. rev1 rows are never mutated in
- * place; they are deleted at the R5 cut-over once the eval gate passes.</p>
+ * single constant deciding which corpus generation serves. Stamps are written at
+ * ingest time with this constant's then-value; the cut-over is THIS constant
+ * flipping — rollback is flipping it back. One recorded exception to "rows are
+ * never mutated in place": the 2026-09-28 paired cut-over re-stamped the
+ * entire VALIDATED serving pool (965 chunks, kind census EQ 309 + QP 145 +
+ * MS 161 + EN 350) 1→2 in the same window as the flip below, so the served set
+ * is provably identical across the boundary (same model both revs,
+ * gemini-embedding-001 @ 768-d — the rev stamp is a corpus-content-generation
+ * marker, not a model marker). Evidence: syllabai records repo
+ * {@code evidence/serving-rev2-restamp-cutover-2026-09-28/}.</p>
  */
 @Repository
 public class ChunkVectorRepository {
 
     /**
-     * The corpus generation that serves (plan §6). FLIPPED BACK TO 1 on
-     * 2026-09-25 — the designed rollback posture this constant exists for —
-     * after the 0-hit serving anomaly investigation (TODO T-C23, evidence:
-     * syllabai repo {@code evidence/serving-0hit-anomaly-2026-09-25/REPORT.md}):
-     * the serving-eligible intersection went EMPTY at T-C20 closure (09-24)
-     * because the only VALIDATED papers point at rev1 documents (excluded by
-     * rev=2) while the entire rev2 corpus is born SUGGESTED (excluded by the
-     * T-C20 VALIDATED-only gate). The operator chose availability-now without
-     * manual paper review ("I dont want to manually sit and review papers. We
-     * have very less time"), so this rollback re-serves the VALIDATED rev1
-     * corpus. Honest trade-off, stated on the record: rev1 retrieval measured
-     * 0/9 hit@10 vs rev2 9/9 on the frozen gold subset (the eval gates in the
-     * history below) — this knowingly serves the weaker corpus and is INTERIM
-     * until rev2-era papers are teacher-validated, at which point this flips
-     * back to 2 (rev1 retirement stays gated at R5). Purely additive: the
-     * rev=2 serving set was empty, so no content loses visibility.
+     * The corpus generation that serves (plan §6). FLIPPED 1→2 on 2026-09-28
+     * as the PAIRED cut-over of standing-menu item (2) (operator-gated:
+     * IM trace 1a0e8efc1773852d; eval-gated: the r7 serving-set generation,
+     * traces 1a0e88bb060ed3b5 / 1a0e8a8180a3f8cd, which handed the menu item
+     * its eval input — §8(d) 0.5618 full / 0.9167 micro, chunk-axis numbers
+     * unchanged by a re-stamp, same model both revs). The flip is ADDITIVE
+     * because the entire VALIDATED serving pool (965 chunks — exactly what the
+     * gate served at rev=1) was re-stamped 1→2 in the same window; rev2
+     * gate-eligible supply was 0 immediately before, so nothing that served at
+     * rev=1 stops serving at rev=2 and no SUGGESTED content becomes servable
+     * (the VALIDATED-only gate is untouched). The d523f57 revert condition
+     * ("interim until rev2-era papers are teacher-validated") was REFUTED as
+     * written — the teacher waves validated rev1-STAMPED content; corrected
+     * standing menu: syllabai records repo
+     * {@code evidence/serving-rev2-flipback-refutation-2026-09-28/REPORT.md};
+     * execution evidence: {@code evidence/serving-rev2-restamp-cutover-2026-09-28/}.
      *
-     * <p>History: 2 = corpus-v2 (atom-aligned, header-stamped,
-     * metadata-complete bridge ingest — the R3 corpus-v2 leg). FLIPPED
-     * 2026-09-20 (Task 32) after the offline eval gates passed on the frozen
-     * embed-bridge-v2 substrate: (G1) rev2 hit@10 9/9 vs rev1 0/9 on the
-     * rev2-covered gold subset, offline rev1 recomputation reconciled EXACTLY
-     * with CI run-004-a-r3 (FETCH 0/40; only the 4 enumerate_paper queries hit);
-     * (G2) 10/10 topical probes keyword-matched in rev2 top-10; (G3) 300/300
-     * chunks header+group-key complete. rev1 rows (2,333 legacy chunks) are
-     * never mutated in place — rollback is flipping this constant; rev1
+     * <p>History: 1 = V33 default (2,333 legacy glmocr chunks) → 2 on 09-20
+     * (Task 32, offline eval gates G1–G3 on the embed-bridge-v2 substrate:
+     * rev2 hit@10 9/9 vs rev1 0/9, 10/10 topical probes, 300/300
+     * header+group-key complete) → back to 1 on 09-25 (d523f57, the designed
+     * rollback posture, after the T-C23 0-hit anomaly: the serving-eligible
+     * intersection went EMPTY because the only VALIDATED papers pointed at
+     * rev1 documents while the entire rev2 corpus is born SUGGESTED;
+     * evidence: {@code evidence/serving-0hit-anomaly-2026-09-25/REPORT.md})
+     * → 2 on 09-28 (this flip, the paired re-stamp cut-over). Rollback =
+     * flip this constant back to 1 AND re-stamp the 965-chunk VALIDATED pool
+     * 2→1 (kind-scoped UPDATE recorded in the evidence pack) — the same pair
+     * in reverse. Ingests after this point stamp embed_rev = 2. rev1
      * retirement (deletion) stays gated at R5.</p>
      */
-    public static final int CURRENT_EMBED_REV = 1;
+    public static final int CURRENT_EMBED_REV = 2;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 

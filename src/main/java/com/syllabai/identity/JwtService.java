@@ -28,7 +28,13 @@ public class JwtService {
     private final Duration ttl;
 
     public JwtService(@Value("${syllabai.security.jwt-secret:}") String secret,
-                      @Value("${syllabai.security.jwt-ttl:PT12H}") Duration ttl) {
+                      // PT2H (audit re-derivation residual promoted 09-28): revocation
+                      // via token_version (R1) already kills a stolen token at its next
+                      // API call, but the TTL still bounds the copied-token window for
+                      // credentials lifted from client storage and never reused. 2h
+                      // keeps a full study session intact (the web client's 401 flow
+                      // is a graceful re-login) while cutting the 12h window 6x.
+                      @Value("${syllabai.security.jwt-ttl:PT2H}") Duration ttl) {
         if (secret == null || secret.isBlank() || secret.getBytes().length < 32) {
             throw new IllegalStateException(
                     "syllabai.security.jwt-secret must be set to at least 32 bytes (env SYLLABAI_JWT_SECRET)");

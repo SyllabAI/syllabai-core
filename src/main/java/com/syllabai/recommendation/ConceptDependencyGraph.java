@@ -15,8 +15,8 @@ import java.util.Set;
  *
  * <p><strong>What this object is:</strong> an immutable, read-only view of the
  * HUMAN_VALIDATED <em>semantic</em> relationships of the settled 4CH1 concept
- * graph (113 nodes / 275 edges / 153 HUMAN_VALIDATED at close of Batch 4,
- * 2026-09-13). It joins the runtime knowledge graph by <em>node code</em> — the
+ * graph (193 nodes / 488 edges / 272 HUMAN_VALIDATED at close of Batch 11,
+ * 2026-09-25). It joins the runtime knowledge graph by <em>node code</em> — the
  * stable identity both stores guarantee (the runtime KG's
  * {@code uq_knowledge_node_code} and the T-C11 store's concept codes).</p>
  *

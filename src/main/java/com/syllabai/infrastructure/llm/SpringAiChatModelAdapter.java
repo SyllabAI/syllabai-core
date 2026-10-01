@@ -3,20 +3,27 @@ package com.syllabai.infrastructure.llm;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.content.Media;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
+import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.time.Duration;
+import org.springframework.core.io.ByteArrayResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Adapts a Spring AI {@link ChatModel} to the {@link LlmProvider} port (Master Spec
@@ -47,6 +54,7 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final String providerName;
     private final ChatModel chatModel;
     private final boolean configured;
+    private final boolean mediaCapable;
     private final LlmProviderHealth health;
     private final int timeoutSeconds;
     /**
@@ -59,13 +67,13 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     private final Function<LlmRequest, ChatOptions> runtimeOptionsFactory;
 
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured) {
-        this(providerName, chatModel, configured, 3, 60, 30, null);
+        this(providerName, chatModel, configured, 3, 60);
     }
 
     /** Threshold/cooldown come from {@code syllabai.llm.chain.*} via LlmChainConfig. */
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds) {
-        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30, null);
+        this(providerName, chatModel, configured, failureThreshold, cooldownSeconds, 30);
     }
 
     /** Legacy wiring without a runtime-options factory (generic ChatOptions fallback). */
@@ -78,7 +86,7 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean configured,
                                     int failureThreshold, int cooldownSeconds, int timeoutSeconds,
                                     Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
-        this(providerName, chatModel, configured, configured, failureThreshold, cooldownSeconds,
+        this(providerName, chatModel, configured, false, configured, failureThreshold, cooldownSeconds,
                 timeoutSeconds, 0, null, runtimeOptionsFactory);
     }
 
@@ -92,9 +100,24 @@ public class SpringAiChatModelAdapter implements LlmProvider {
                                     boolean configured, int failureThreshold, int cooldownSeconds,
                                     int timeoutSeconds, int dailyBudget, String effectiveModel,
                                     Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
+        this(providerName, chatModel, enabled, configured, false, failureThreshold, cooldownSeconds,
+                timeoutSeconds, dailyBudget, effectiveModel, runtimeOptionsFactory);
+    }
+
+    /**
+     * Full wiring incl. the media-capability flag (HUB-ANSWER-BOX wave 3): a
+     * provider built with {@code mediaCapable=true} may receive requests carrying
+     * {@link LlmMedia}; the chain never routes media to a provider built false.
+     */
+    public SpringAiChatModelAdapter(String providerName, ChatModel chatModel, boolean enabled,
+                                    boolean configured, boolean mediaCapable, int failureThreshold,
+                                    int cooldownSeconds, int timeoutSeconds, int dailyBudget,
+                                    String effectiveModel,
+                                    Function<LlmRequest, ChatOptions> runtimeOptionsFactory) {
         this.providerName = providerName;
         this.chatModel = chatModel;
         this.configured = configured;
+        this.mediaCapable = mediaCapable;
         this.health = new LlmProviderHealth(enabled, configured, failureThreshold, cooldownSeconds,
                 dailyBudget, effectiveModel);
         this.timeoutSeconds = Math.max(1, timeoutSeconds);
@@ -111,6 +134,11 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         // ADR-023: a provider that consumed its configured LOCAL daily budget is
         // ineligible until the UTC day rolls over — same treatment as cooldown.
         return configured && !health.inCooldown() && !health.budgetExhausted();
+    }
+
+    @Override
+    public boolean supportsMedia() {
+        return mediaCapable;
     }
 
     @Override
@@ -173,6 +201,92 @@ public class SpringAiChatModelAdapter implements LlmProvider {
     }
 
     /**
+     * Idle timeout between streamed chunks: a provider that emits its first
+     * tokens and then stalls (connection drop without FIN, provider-side
+     * hang) must degrade into a counted failure instead of an open stream.
+     * Generous — tokens trickle at sentence granularity on the free tier —
+     * but bounded (the blocking path's {@code timeout-seconds} semantics,
+     * applied per-gap).
+     */
+    private static final long STREAM_IDLE_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Token streaming through Spring AI's {@code StreamingChatModel} port
+     * (Spring AI 2.x: {@code ChatModel extends StreamingChatModel}, and all
+     * three wired models — OpenAI-compatible Groq/OpenRouter and Google
+     * GenAI — implement real HTTP streaming). Health semantics mirror
+     * {@link #generate}: success on completion, classified failure on error,
+     * so cooldowns and budgets see streams exactly as they see calls.
+     *
+     * <p>Failover is NOT this method's concern: once the first delta has been
+     * emitted upstream the stream is committed to this provider — the chain
+     * ({@link FailoverLlmChain#stream}) only fails over before that point.</p>
+     */
+    @Override
+    public Flux<LlmDelta> stream(LlmRequest request) {
+        if (!configured || chatModel == null) {
+            return Flux.error(new LlmProviderException(providerName, "provider not configured", null));
+        }
+        return Flux.defer(() -> {
+            ChatOptions runtimeOptions = options(request);
+            Prompt prompt = runtimeOptions == null
+                    ? new Prompt(messages(request))
+                    : new Prompt(messages(request), runtimeOptions);
+            String effectiveModel = (request.model() != null && !request.model().isBlank())
+                    ? request.model()
+                    : (chatModel.getDefaultOptions() == null ? null
+                            : chatModel.getDefaultOptions().getModel());
+            try {
+                return chatModel.stream(prompt)
+                        // chunk → delta; drop the empty bookkeeping chunks some
+                        // SDK paths emit (role-only first chunk, usage-only last)
+                        .map(response -> new LlmDelta(extractText(response), providerName, effectiveModel))
+                        .filter(delta -> delta.text() != null && !delta.text().isEmpty())
+                        // per-GAP timeout: errors when no chunk arrives within the
+                        // window since the previous one (or since subscription)
+                        .timeout(Duration.ofSeconds(STREAM_IDLE_TIMEOUT_SECONDS))
+                        // SSE servlet writes must never run on a provider event-loop
+                        // thread — hand emissions to reactor's blocking-friendly pool
+                        .publishOn(Schedulers.boundedElastic())
+                        .doOnComplete(this::recordStreamSuccess)
+                        .doOnError(this::recordStreamFailure)
+                        // ADR-023: classify ONCE at the adapter boundary; the chain
+                        // receives the same LlmProviderException contract as generate()
+                        .onErrorMap(e -> e instanceof LlmProviderException pe ? pe
+                                : new LlmProviderException(providerName, streamFailureSummary(e), e,
+                                        LlmProviderFailureClassifier.classify(e)));
+            } catch (RuntimeException e) {
+                // eager options/request construction failure (the 2026-09-14
+                // ClassCastException class) — same health + classification path
+                recordStreamFailure(e);
+                return Flux.error(new LlmProviderException(providerName, streamFailureSummary(e), e,
+                        LlmProviderFailureClassifier.classify(e)));
+            }
+        });
+    }
+
+    private void recordStreamSuccess() {
+        health.recordSuccess();
+        log.debug("LLM provider {} stream completed", providerName);
+    }
+
+    private void recordStreamFailure(Throwable e) {
+        // runs BEFORE onErrorMap (declaration order), so e is always the RAW
+        // error here — timeout exceptions, SDK runtime exceptions — never the
+        // wrapped LlmProviderException the chain sees. Recorded exactly once.
+        LlmFailureClass failureClass = LlmProviderFailureClassifier.classify(e);
+        String causeSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
+        log.warn("LLM provider {} stream failed ({}): {}", providerName, failureClass,
+                causeSummary.length() > 300 ? causeSummary.substring(0, 300) : causeSummary);
+        health.recordFailure(causeSummary, failureClass);
+    }
+
+    private static String streamFailureSummary(Throwable e) {
+        String summary = e.getClass().getSimpleName() + ": " + e.getMessage();
+        return "stream failed (" + (summary.length() > 200 ? summary.substring(0, 200) : summary) + ")";
+    }
+
+    /**
      * Runs the blocking provider call on the shared daemon pool and gives up
      * after {@code syllabai.llm.chain.timeout-seconds} (default 30s), so a hung
      * Groq/Gemini/OpenRouter call degrades into a counted failure + cooldown
@@ -206,8 +320,35 @@ public class SpringAiChatModelAdapter implements LlmProvider {
         if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
             messages.add(new SystemMessage(request.systemPrompt()));
         }
-        messages.add(new UserMessage(request.userPrompt()));
+        if (request.hasMedia()) {
+            messages.add(UserMessage.builder()
+                    .text(request.userPrompt() == null ? "" : request.userPrompt())
+                    .media(java.util.List.of(toSpringMedia(request.media())))
+                    .build());
+        } else {
+            messages.add(new UserMessage(request.userPrompt()));
+        }
         return messages;
+    }
+
+    /**
+     * Maps the port-level {@link LlmMedia} onto Spring AI's {@link Media} part
+     * (inline image bytes). Provider-specific part building stays here (§26) —
+     * callers only ever handled base64 + mime. Shared by the blocking and
+     * streaming paths (messages() feeds both).
+     */
+    private Media toSpringMedia(LlmMedia media) {
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(media.base64Data());
+        } catch (IllegalArgumentException e) {
+            throw new LlmProviderException(providerName,
+                    "invalid media payload: base64 data could not be decoded", null);
+        }
+        return Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType(media.mimeType()))
+                .data(new ByteArrayResource(bytes))
+                .build();
     }
 
     private ChatOptions options(LlmRequest request) {

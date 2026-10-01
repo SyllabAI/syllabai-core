@@ -23,12 +23,12 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * Loads the settled T-C11 concept graph snapshot into a
  * {@link ConceptDependencyGraph} at startup.
  *
- * <p><strong>Snapshot contract (2026-09-13, close of T-C11 Batch 4; re-pinned
- * 2026-10-01 on the practical-endpoint retarget):</strong>
+ * <p><strong>Snapshot contract (2026-09-25, close of T-C11 Batch 11; core-sync
+ * GO 2026-10-01):</strong>
  * {@code classpath:concept-graph/concept_edges.yaml}, {@code concept-graph/concepts.yaml}
  * and {@code concept-graph/practicals.yaml} are byte-verbatim copies of the
- * settled store in the syllabai-resources repo (113 concept nodes + 12 practical
- * nodes / 275 edges / 158 semantic edges, of which 153 HUMAN_VALIDATED; the only
+ * settled store in the syllabai-resources repo (193 concept nodes + 12 practical
+ * nodes / 488 edges / 277 semantic edges, of which 272 HUMAN_VALIDATED; the only
  * non-validated semantic edges are the 3 frozen pilot operator HOLDs and the 2
  * REVIEW_REQUIRED edges). All files are pinned by SHA-256 below: any drift — an
  * edited file, a re-synced store from a later batch — fails startup loudly
@@ -36,13 +36,13 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * is therefore always a conscious, reviewable change: copy the new settled
  * bytes, update the three hashes, and update this comment. (The store files
  * are generated deterministically by the resources repo, so byte-identity is
- * meaningful.) The 12 validated REQUIRES_PREREQUISITE edges originating at the
- * required practicals — a real pedagogical dependency the settled store carries
- * (the practical requires its underlying concepts) — have sourced at the
- * practicals' REAL spec statements since the 2026-10-01 endpoint retarget
- * (previously the ad-hoc 4CH1-PR-xx codes): the loader therefore admits each
- * practical's {@code spec_point} code as a known endpoint. Those spec
- * statements are official store content pinned via practicals.yaml; no
+ * meaningful.) Practical nodes participate because 19 validated
+ * REQUIRES_PREREQUISITE edges name them — a real pedagogical dependency the
+ * settled store carries (the practical requires its underlying concepts).
+ * Since the 2026-10-01 practical-endpoint retarget those edges SOURCE at the
+ * practicals' real spec statements (previously the ad-hoc 4CH1-PR-xx codes):
+ * the loader therefore admits each practical's {@code spec_point} code as a
+ * known endpoint — official store content, pinned via practicals.yaml; no
  * additional resource or pin is needed.</p>
  *
  * <p>Parsing is safe (SnakeYAML {@link SafeConstructor} — plain data only, the
@@ -62,14 +62,13 @@ public class ConceptDependencyGraphLoader {
     static final String NODES_RESOURCE = "concept-graph/concepts.yaml";
     static final String PRACTICALS_RESOURCE = "concept-graph/practicals.yaml";
 
-    /** SHA-256 of the settled concept_edges.yaml snapshot (Batch-4 close 2026-09-13;
-     * re-pinned on the 2026-10-01 practical-endpoint retarget). */
+    /** SHA-256 of the settled concept_edges.yaml snapshot (Batch-11 close, 2026-09-25). */
     static final String EDGES_SHA256 =
-            "87af6866a53babbbb5ee77415ff91287d68a71808868713e44756dfa81dc16e9";
-    /** SHA-256 of the settled concepts.yaml snapshot (Batch-4 close, 2026-09-13). */
+            "8a651dd9e60bfefa7a164102db23b10b700672daebc6449c126332180db24aad";
+    /** SHA-256 of the settled concepts.yaml snapshot (Batch-11 close, 2026-09-25). */
     static final String NODES_SHA256 =
-            "69cc554c04135188d6c7c44fddd9831f6c86bd7016684f3a15a2c7e1374d5613";
-    /** SHA-256 of the settled practicals.yaml snapshot (Batch-4 close, 2026-09-13). */
+            "24fa91ac7149682b1083ff47112362a11180bcfb7899c1343c6f536682447e3f";
+    /** SHA-256 of the settled practicals.yaml snapshot (c09 substrate, unchanged since Batch-4). */
     static final String PRACTICALS_SHA256 =
             "e53e5f87606a2b5a5b7e534f0375d970498ea85a5655ca32e5bd4526dc9fa528";
 
@@ -101,7 +100,7 @@ public class ConceptDependencyGraphLoader {
         Set<String> nodeCodes = readNodeCodes(nodesDoc, "nodes", NODES_RESOURCE);
         nodeCodes.addAll(readNodeCodes(practicalsDoc, "practicals", PRACTICALS_RESOURCE));
         // the practicals' real spec statements are legal edge endpoints since the
-        // 2026-10-01 endpoint retarget (the 12 validated practical prerequisite
+        // 2026-10-01 endpoint retarget (the 19 validated practical prerequisite
         // edges source at them) — official store content, pinned via practicals.yaml
         nodeCodes.addAll(readPracticalSpecPointCodes(practicalsDoc));
         nodeCodes = java.util.Set.copyOf(nodeCodes);

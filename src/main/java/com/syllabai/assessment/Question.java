@@ -31,7 +31,7 @@ public class Question {
     private UUID id;
 
     /** external reference, e.g. WCH11-2022-01-03a */
-    @Column(name = "external_ref", length = 60)
+    @Column(name = "external_ref", length = 80)
     private String externalRef;
 
     @Enumerated(EnumType.STRING)

@@ -108,9 +108,20 @@ public class SecurityConfig {
         return registration;
     }
 
+    /**
+     * BCrypt cost 12 (audit re-derivation residual, accepted-with-rationale
+     * 09-28 → promoted by operator decision): OWASP's floor is 10, but the
+     * login path is now rate-budget-bound (M1 + R5), so the extra ~2x per
+     * encode/match is affordable and each cost step doubles offline-cracking
+     * work. Only budget-gated surfaces pay it (login/register/bootstrap/
+     * password change) — the JWT filter never touches BCrypt. Existing hashes
+     * carry their own embedded cost factor, so old credentials keep verifying
+     * without a migration; they re-hash at cost 12 only if a rotation flow
+     * re-encodes them.
+     */
     @Bean
     PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(12);
     }
 
     @Bean

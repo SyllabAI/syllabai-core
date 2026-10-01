@@ -76,6 +76,8 @@ class ClassAnalyticsServiceTest {
     private final UUID topicC = UUID.randomUUID();     // 4CH1-1.3 (never measured)
     private final UUID miscoA = UUID.randomUUID();     // misconception under topicA
     private final UUID outside = UUID.randomUUID();    // another subject's topic
+    private final UUID conceptX = UUID.randomUUID();   // T-C11 concept anchored on topicA
+    private final UUID practicalB = UUID.randomUUID(); // required practical under topicB
 
     private final UUID learner1 = UUID.randomUUID();
     private final UUID learner2 = UUID.randomUUID();
@@ -91,13 +93,17 @@ class ClassAnalyticsServiceTest {
                 children);
     }
 
-    /** the 4CH1-shaped tree: root → section → topics (+misconception under A) */
+    /** the 4CH1-shaped tree: root → section → topics (+misconception under A,
+     *  + T-C11 concept layer: concept anchored on A, required practical under B) */
     private NodeView subjectTree() {
         return node(root, "4CH1", "SUBJECT", "Edexcel IGCSE Chemistry 4CH1", List.of(
                 node(section, "4CH1-S1", "UNIT", "Section 1", List.of(
                         node(topicA, "4CH1-1.1", "TOPIC", "Atoms", List.of(
-                                node(miscoA, "MIS-A", "MISCONCEPTION", "Atoms are lost", List.of()))),
-                        node(topicB, "4CH1-1.2", "TOPIC", "Moles", List.of()),
+                                node(miscoA, "MIS-A", "MISCONCEPTION", "Atoms are lost", List.of()),
+                                node(conceptX, "4CH1-CON-SOLUBILITY", "CONCEPT", "Solubility", List.of()))),
+                        node(topicB, "4CH1-1.2", "TOPIC", "Moles", List.of(
+                                node(practicalB, "4CH1-PR-01", "SUBTOPIC",
+                                        "Required practical: solubility", List.of()))),
                         node(topicC, "4CH1-1.3", "TOPIC", "Bonding", List.of())))));
     }
 
@@ -138,6 +144,7 @@ class ClassAnalyticsServiceTest {
         when(answers.countByMarkingStateWithin(any(), anyCollection())).thenReturn(0L);
         when(users.findEnabledByRole(Role.STUDENT)).thenReturn(List.of());
         when(graph.prerequisiteRelations(root)).thenReturn(List.of());
+        when(graph.conceptAnchorsWithin(root)).thenReturn(List.of());
     }
 
     // ── honest empty state ──────────────────────────────────────────────
@@ -154,7 +161,7 @@ class ClassAnalyticsServiceTest {
         assertThat(overview.enrolledLearners()).isEqualTo(1);
         assertThat(overview.learnersWithEvidence()).isZero();
         assertThat(overview.learnersRecentlyActive()).isZero();
-        assertThat(overview.totalTopics()).isEqualTo(5);   // root+section+3 topics
+        assertThat(overview.totalTopics()).isEqualTo(7);   // root+section+3 topics +concept +practical
         assertThat(overview.measuredTopics()).isZero();
         assertThat(overview.weakPrerequisites()).isEmpty();
         assertThat(overview.policy()).isEqualTo("class-analytics/v1");
@@ -285,6 +292,89 @@ class ClassAnalyticsServiceTest {
         when(graph.prerequisiteRelations(root)).thenReturn(List.of(
                 new KnowledgeGraphService.PrerequisiteRelation(topicC, topicB)));
         assertThat(service.overview(root).weakPrerequisites()).isEmpty();
+    }
+
+    // ── T-C11 concept-layer projection (the "12 skipped required-practical
+    //    edges" fix) ──────────────────────────────────────────────────────
+
+    private com.syllabai.knowledge.KnowledgeEdge anchorEdge(UUID conceptId, String conceptCode,
+                                                             UUID spId) {
+        com.syllabai.knowledge.KnowledgeNode concept =
+                mock(com.syllabai.knowledge.KnowledgeNode.class);
+        when(concept.id()).thenReturn(conceptId);
+        when(concept.code()).thenReturn(conceptCode);
+        com.syllabai.knowledge.KnowledgeEdge edge =
+                mock(com.syllabai.knowledge.KnowledgeEdge.class);
+        when(edge.sourceId()).thenReturn(conceptId);
+        when(edge.targetId()).thenReturn(spId);
+        when(edge.source()).thenReturn(concept);
+        return edge;
+    }
+
+    @Test
+    @DisplayName("T-C11 projection: concept prerequisite reaches the class surface via its "
+            + "anchor SP, flagged derived with the concept codes; unmeasured anchor never claims")
+    void conceptPrerequisitesProjectThroughAnchors() {
+        givenTree();
+        givenNoEvidence();
+        // the settled-store shape: practical B requires CON-SOLUBILITY, whose
+        // validated anchor places the concept on topicA (SP 1.1). The class
+        // measures topicA weak — the projected pair (topicA → practicalB) must
+        // surface, marked derived, even though the concept itself is never
+        // measured.
+        var anchors = List.of(anchorEdge(conceptX, "4CH1-CON-SOLUBILITY", topicA));
+        when(graph.conceptAnchorsWithin(root)).thenReturn(anchors);
+        when(graph.prerequisiteRelations(root)).thenReturn(List.of(
+                new KnowledgeGraphService.PrerequisiteRelation(conceptX, practicalB)));
+        when(skillStates.findByNodeIdIn(anyCollection())).thenReturn(List.of(
+                skill(learner1, topicA, 0.1, 4),
+                skill(learner2, topicA, 0.3, 4),
+                skill(learner1, practicalB, 0.6, 2)));
+        when(users.findEnabledByRole(Role.STUDENT))
+                .thenReturn(List.of(user(learner1, "Alpha One"), user(learner2, "Beta Two")));
+
+        var weak = service.overview(root).weakPrerequisites();
+        assertThat(weak).hasSize(1);
+        var view = weak.get(0);
+        assertThat(view.prerequisiteNodeId()).isEqualTo(topicA);
+        assertThat(view.prerequisiteCode()).isEqualTo("4CH1-1.1");
+        assertThat(view.meanMastery()).isEqualTo(0.2);
+        assertThat(view.derived()).isTrue();
+        assertThat(view.derivedViaConceptCodes()).containsExactly("4CH1-CON-SOLUBILITY");
+        assertThat(view.dependents()).hasSize(1);
+        assertThat(view.dependents().get(0).nodeId()).isEqualTo(practicalB);
+        assertThat(view.dependents().get(0).code()).isEqualTo("4CH1-PR-01");
+        assertThat(view.dependents().get(0).meanMastery()).isEqualTo(0.6);
+    }
+
+    @Test
+    @DisplayName("T-C11 projection honesty: self-projection collapses; direct structure "
+            + "prerequisites pass through unflagged")
+    void projectionCollapsesSelfAndKeepsDirectPairs() {
+        givenTree();
+        givenNoEvidence();
+        // (1) the concept's prerequisite points at the very SP that anchors it
+        //     (topicA depends on CON-SOLUBILITY, anchored on topicA) — a node
+        //     is not its own prerequisite: nothing surfaces.
+        // (2) a direct structure-level prerequisite (topicA → topicB) passes
+        //     through WITHOUT the derived flag.
+        var anchors = List.of(anchorEdge(conceptX, "4CH1-CON-SOLUBILITY", topicA));
+        when(graph.conceptAnchorsWithin(root)).thenReturn(anchors);
+        when(graph.prerequisiteRelations(root)).thenReturn(List.of(
+                new KnowledgeGraphService.PrerequisiteRelation(conceptX, topicA),
+                new KnowledgeGraphService.PrerequisiteRelation(topicA, topicB)));
+        when(skillStates.findByNodeIdIn(anyCollection())).thenReturn(List.of(
+                skill(learner1, topicA, 0.2, 4),
+                skill(learner1, topicB, 0.7, 2)));
+        when(users.findEnabledByRole(Role.STUDENT)).thenReturn(List.of(user(learner1, "Alpha One")));
+
+        var weak = service.overview(root).weakPrerequisites();
+        assertThat(weak).hasSize(1);
+        assertThat(weak.get(0).prerequisiteNodeId()).isEqualTo(topicA);
+        assertThat(weak.get(0).derived()).isFalse();
+        assertThat(weak.get(0).derivedViaConceptCodes()).isEmpty();
+        assertThat(weak.get(0).dependents()).hasSize(1);
+        assertThat(weak.get(0).dependents().get(0).nodeId()).isEqualTo(topicB);
     }
 
     // ── drill-down ──────────────────────────────────────────────────────

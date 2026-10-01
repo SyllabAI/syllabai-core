@@ -6,6 +6,8 @@ import com.syllabai.learner.dto.LearnerKnowledgeGraphView;
 import com.syllabai.learner.dto.LearnerStateView;
 import com.syllabai.learner.dto.MisconceptionStateView;
 import com.syllabai.learner.dto.SkillStateView;
+import com.syllabai.learner.dto.FlashcardRatingView;
+import com.syllabai.learner.dto.NoteVoteView;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
@@ -17,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +41,14 @@ public class LearnerStateController {
     private final KnowledgeNodeRepository knowledgeNodes;
     private final TutorEngagementReader tutorEngagements;
     private final TutorTopicEngagementRepository engagements;
+    private final FlashcardRatingRepository flashcardRatings;
+    private final NoteVoteRepository noteVotes;
+
+    /** the learner-state rating window (same recency posture as tutor asks) */
+    private static final int FLASHCARD_RATING_LIMIT = 50;
+
+    /** the learner-state vote window — the same recency posture as ratings */
+    private static final int NOTE_VOTE_LIMIT = 50;
 
     public LearnerStateController(LearnerModelService learnerModel,
                                   LearnerKnowledgeGraphService graphs,
@@ -46,7 +57,9 @@ public class LearnerStateController {
                                   LearnerProperties properties,
                                   KnowledgeNodeRepository knowledgeNodes,
                                   TutorEngagementReader tutorEngagements,
-                                  TutorTopicEngagementRepository engagements) {
+                                  TutorTopicEngagementRepository engagements,
+                                  FlashcardRatingRepository flashcardRatings,
+                                  NoteVoteRepository noteVotes) {
         this.learnerModel = learnerModel;
         this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
@@ -55,6 +68,8 @@ public class LearnerStateController {
         this.knowledgeNodes = knowledgeNodes;
         this.tutorEngagements = tutorEngagements;
         this.engagements = engagements;
+        this.flashcardRatings = flashcardRatings;
+        this.noteVotes = noteVotes;
     }
 
     @GetMapping("/state")
@@ -117,8 +132,31 @@ public class LearnerStateController {
         List<LearnerStateView.TutorEngagementView> engagementViews = tutorEngagements
                 .groupEngagementSummary(recentAsks, 10, titles::get);
 
+        // V47 (tranche 4.4): flashcard rating events — the self-report evidence
+        // class (append-only trail, newest first). Exposure / history / stats
+        // ONLY: deliberately absent from skillStates, which stays the marked-
+        // attempt mastery record (honesty rule pinned by FlashcardRatingFlowIT).
+        List<FlashcardRatingView> flashcardViews = flashcardRatings
+                .findByLearnerIdOrderByOccurredAtDesc(learnerId,
+                        PageRequest.of(0, FLASHCARD_RATING_LIMIT))
+                .stream()
+                .map(r -> FlashcardRatingView.from(r, null))
+                .toList();
+
+        // V48 (tranche 4.9): note-vote events — the self-report evidence class
+        // (append-only trail, newest first). Exposure / history / stats ONLY,
+        // same honesty ruling as ratings: deliberately absent from skillStates,
+        // which stays the marked-attempt mastery record (pinned by
+        // NoteVoteFlowIT).
+        List<NoteVoteView> noteVoteViews = noteVotes
+                .findByLearnerIdOrderByOccurredAtDesc(learnerId,
+                        PageRequest.of(0, NOTE_VOTE_LIMIT))
+                .stream()
+                .map(v -> NoteVoteView.from(v, null))
+                .toList();
+
         return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews,
-                engagementViews);
+                engagementViews, flashcardViews, noteVoteViews);
     }
 
     /**

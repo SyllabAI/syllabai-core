@@ -5,11 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.TestIds;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
+import com.syllabai.sme.QuestionSpecPoint;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The evidence-contract's once-only guard (Master Spec §12), pinned at the
@@ -23,7 +29,9 @@ import org.junit.jupiter.api.Test;
 class EvidencePublisherTest {
 
     private final List<Object> published = new ArrayList<>();
-    private final EvidencePublisher publisher = new EvidencePublisher(published::add);
+    private final SmeQuestionSpecPointRepository specPoints =
+            mock(SmeQuestionSpecPointRepository.class);
+    private final EvidencePublisher publisher = new EvidencePublisher(published::add, specPoints);
 
     private final Question question;
     private final Attempt attempt;
@@ -54,6 +62,36 @@ class EvidencePublisherTest {
         assertThat(event.attemptId()).isEqualTo(attempt.id());
         assertThat(event.learnerId()).isEqualTo(attempt.learnerId());
         assertThat(event.questionId()).isEqualTo(question.id());
+    }
+
+    @Test
+    @DisplayName("the emitted event carries the question's mapped spec-point nodes at spec-point granularity")
+    void gradedEventCarriesMappedSpecPoints() {
+        UUID pointA = UUID.randomUUID();
+        UUID pointB = UUID.randomUUID();
+        when(specPoints.findByQuestionId(any())).thenReturn(List.of(
+                new QuestionSpecPoint(question, pointA, "PRIMARY", "AI_VALIDATED"),
+                new QuestionSpecPoint(question, pointB, "SECONDARY", "AI_VALIDATED")));
+        attempt.recordTotalMarks(6, 6);
+
+        assertThat(publisher.publishGraded(attempt, question, List.of())).isTrue();
+
+        AssessmentEvidenceRecordedEvent event = (AssessmentEvidenceRecordedEvent) published.get(0);
+        assertThat(event.specPointNodeIds()).containsExactly(pointA, pointB);
+        // topics unchanged — the event now carries BOTH granularities
+        assertThat(event.topicNodeIds()).containsExactly(question.primaryTopicNodeId());
+    }
+
+    @Test
+    @DisplayName("unmapped questions keep topic-only firing — the mapping list is empty, never null")
+    void unmappedQuestionKeepsTopicOnlyFiring() {
+        attempt.recordTotalMarks(6, 6);   // specPoints mock unstubbed → no rows
+
+        assertThat(publisher.publishGraded(attempt, question, List.of())).isTrue();
+
+        AssessmentEvidenceRecordedEvent event = (AssessmentEvidenceRecordedEvent) published.get(0);
+        assertThat(event.specPointNodeIds()).isEmpty();
+        assertThat(event.topicNodeIds()).containsExactly(question.primaryTopicNodeId());
     }
 
     @Test

@@ -26,8 +26,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li><strong>auth tier</strong> — pre-authentication identity endpoints,
  *       keyed by client IP, so credential brute force and account spam burn
  *       through a bounded budget per host;</li>
- *   <li><strong>LLM tier</strong> — {@code POST /api/v1/tutor/ask} and
- *       {@code POST /api/v1/learners/me/cla/ask}, keyed by learner (the JWT
+ *   <li><strong>LLM tier</strong> — {@code POST /api/v1/tutor/ask},
+ *       {@code POST /api/v1/tutor/ask/stream},
+ *       {@code POST /api/v1/learners/me/cla/ask},
+ *       {@code POST /api/v1/learners/me/answer-input/transcribe} and the
+ *       smart-mark surfaces, keyed by learner (the JWT
  *       user id the {@code JwtAuthenticationFilter} placed on the request —
  *       this filter runs AFTER it inside the chain), with an IP fallback.
  *       Every admitted ask pays for tokens; this caps the cost-amplification
@@ -136,7 +139,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return new Budget("auth:password", clientIp(request), properties.passwordPerIp());
         }
         if (post && ("/api/v1/tutor/ask".equals(path)
+                // the SSE twin spends the same tokens — one tier, same budget
+                || "/api/v1/tutor/ask/stream".equals(path)
                 || "/api/v1/learners/me/cla/ask".equals(path)
+                // answer-input transcription (HUB-ANSWER-BOX wave 3) shares the
+                // llm:ask budget: every admitted transcription pays vision-model
+                // tokens exactly like an ask does
+                || "/api/v1/learners/me/answer-input/transcribe".equals(path)
                 // Smart Mark surfaces drive the LLM chain too — smart-mark runs
                 // the marking pipeline ONCE PER PART, feedback-explanation and
                 // improvement-plan are one generation each (R8: the M1 cost

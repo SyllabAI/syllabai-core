@@ -313,4 +313,87 @@ class TutorSessionServiceTest {
         assertThat(captor.getAllValues().get(1).content().length())
                 .isLessThanOrEqualTo(TutorSessionTurn.MAX_CONTENT_CHARS + 1);
     }
+
+    @Test
+    @DisplayName("V53 write-once: the first ref-carrying append fixes the session's course; later ref-less appends never erase it")
+    void firstRefCarryingAppendWritesCourseRefOnce() {
+        UUID id = UUID.randomUUID();
+        TutorSession session = ownedSession(id, learner);
+        when(sessions.findByIdAndLearnerId(id, learner)).thenReturn(Optional.of(session));
+        when(turns.findTopBySessionIdOrderBySeqDesc(id)).thenReturn(Optional.empty());
+
+        service.append(learner, new TutorSessionService.AppendRequest(
+                id, "q", "a", 1, false, null, null, null, "4CH1-2017"));
+        assertThat(session.courseRef()).isEqualTo("4CH1-2017");
+
+        // a later ref-less (legacy) append neither erases nor rewrites the ref
+        service.append(learner, new TutorSessionService.AppendRequest(
+                id, "q2", "a2", 1, false, null, null, null));
+        assertThat(session.courseRef()).isEqualTo("4CH1-2017");
+
+        // the same ref again is a no-op, not a second write or a conflict
+        service.append(learner, new TutorSessionService.AppendRequest(
+                id, "q3", "a3", 1, false, null, null, null, "4CH1-2017"));
+        assertThat(session.courseRef()).isEqualTo("4CH1-2017");
+    }
+
+    @Test
+    @DisplayName("V53 integrity: an append naming a DIFFERENT course is a 409 conflict, never a silent scope switch")
+    void mismatchedCourseRefIsAConflict() {
+        UUID id = UUID.randomUUID();
+        TutorSession session = ownedSession(id, learner);
+        when(sessions.findByIdAndLearnerId(id, learner)).thenReturn(Optional.of(session));
+        when(turns.findTopBySessionIdOrderBySeqDesc(id)).thenReturn(Optional.empty());
+
+        service.append(learner, new TutorSessionService.AppendRequest(
+                id, "q", "a", 1, false, null, null, null, "4CH1-2017"));
+
+        assertThatThrownBy(() -> service.append(learner, new TutorSessionService.AppendRequest(
+                id, "physics question", "would-be answer", 1, false, null, null, null,
+                "4PH1-2017")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("4CH1-2017")
+                .hasMessageContaining("4PH1-2017");
+
+        // the refused append persisted NOTHING (only the first exchange's two
+        // turns) and the session kept its scope
+        verify(turns, org.mockito.Mockito.times(2)).save(any());
+        assertThat(session.courseRef()).isEqualTo("4CH1-2017");
+    }
+
+    @Test
+    @DisplayName("V53 views: SessionView and the list summaries expose courseRef so the hub shows what was actually served")
+    void viewsCarryCourseRef() {
+        UUID withCourse = UUID.randomUUID();
+        UUID courseless = UUID.randomUUID();
+        TutorSession scoped = ownedSession(withCourse, learner);
+        scoped.attachCourse("4CH1-2017");
+        TutorSession legacy = ownedSession(courseless, learner);
+        when(sessions.findByIdAndLearnerId(withCourse, learner)).thenReturn(Optional.of(scoped));
+        when(turns.findBySessionIdOrderBySeq(withCourse)).thenReturn(List.of());
+
+        TutorSessionService.SessionView view = service.view(learner, withCourse);
+        assertThat(view.courseRef()).isEqualTo("4CH1-2017");
+
+        when(sessions.findByLearnerIdOrderByLastActiveAtDesc(learner))
+                .thenReturn(List.of(scoped, legacy));
+        when(turns.countBySessionIdIn(any())).thenReturn(List.of());
+        when(turns.findBySessionIdInAndSeq(any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenReturn(List.of());
+
+        List<TutorSessionService.SessionSummaryView> list = service.list(learner);
+        assertThat(list).hasSize(2);
+        assertThat(list.get(0).courseRef()).isEqualTo("4CH1-2017");
+        // NULL is legitimate history: the pre-V53 chat shows honestly as course-less
+        assertThat(list.get(1).courseRef()).isNull();
+
+        // and the probe: a consistent ref passes silently, a different one conflicts
+        service.requireCourseConsistent(learner, withCourse, "4CH1-2017");
+        assertThatThrownBy(() -> service.requireCourseConsistent(learner, withCourse, "4PH1-2017"))
+                .isInstanceOf(ConflictException.class);
+        // a course-less session accepts any ref (the first one wins at append);
+        // the courseless session must be resolvable for the probe to reach the check
+        when(sessions.findByIdAndLearnerId(courseless, learner)).thenReturn(Optional.of(legacy));
+        service.requireCourseConsistent(learner, courseless, "4PH1-2017");
+    }
 }

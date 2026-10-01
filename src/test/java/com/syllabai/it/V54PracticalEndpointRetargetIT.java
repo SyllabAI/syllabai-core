@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Integration test: the 2026-10-01 practical-endpoint retarget (V47 + the
+ * Integration test: the 2026-10-01 practical-endpoint retarget (V54 + the
  * re-pinned store snapshot). The 12 HUMAN_VALIDATED practical
  * REQUIRES_PREREQUISITE edges previously sourced at the ad-hoc practical-node
  * codes (4CH1-PR-01..11); they now source at the practicals' real spec
@@ -39,17 +39,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Three pins against real Postgres with the full Flyway chain:</p>
  * <ol>
  *   <li>a FRESH database seeds directly into the retargeted shape: zero
- *       prerequisite edges sourced at practical nodes, exactly 12 sourced at
- *       the 7 spec statements, seed provenance lines byte-stable
+ *       prerequisite edges sourced at practical nodes, exactly 19 sourced at
+ *       the 12 spec statements, seed provenance lines byte-stable
  *       (the store's provenance fields were deliberately untouched);</li>
  *   <li>a PRE-RETARGET seeded database (simulated by moving the 12 rows back to
  *       their ad-hoc sources with their original provenance) is repaired IN
- *       PLACE by the V47 statement — provenance/rationale/status byte-preserved,
+ *       PLACE by the V54 statement — provenance/rationale/status byte-preserved,
  *       no duplicates — and a re-activation afterwards is a full structural
  *       no-op (the seed's identity + provenance contract holds across the
  *       migration, which is exactly why the store kept the provenance fields
  *       stable);</li>
- *   <li>the V47 guard is not decorative: a drifted database (a PR-sourced edge
+ *   <li>the V54 guard is not decorative: a drifted database (a PR-sourced edge
  *       whose destination identity already exists) fails the boot loudly
  *       instead of partially moving rows.</li>
  * </ol>
@@ -62,7 +62,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @ActiveProfiles("it")
 @Testcontainers(disabledWithoutDocker = true)
 @TestMethodOrder(OrderAnnotation.class)
-class V47PracticalEndpointRetargetIT {
+class V54PracticalEndpointRetargetIT {
 
     @Container
     @ServiceConnection
@@ -98,11 +98,11 @@ class V47PracticalEndpointRetargetIT {
     @DisplayName("a fresh database seeds directly into the retargeted shape with byte-stable provenance")
     void freshSeedCarriesSpecStatementSourcedPracticalEdges() {
         ConceptGraphSeedService.SeedSummary summary = seed.activate(UUID.randomUUID());
-        assertThat(summary.validatedSemanticEdges()).isEqualTo(153);
-        assertThat(summary.edgesCreated()).isEqualTo(4 + 28 + 182 + 12 + 117 + 153);
+        assertThat(summary.validatedSemanticEdges()).isEqualTo(272);
+        assertThat(summary.edgesCreated()).isEqualTo(4 + 28 + 182 + 12 + 211 + 272);
 
         assertThat(prSourcedPrerequisiteEdges()).isZero();
-        assertThat(specStatementSourcedPrerequisiteEdges()).isEqualTo(12);
+        assertThat(specStatementSourcedPrerequisiteEdges()).isEqualTo(19);
 
         // the seed-built provenance line is byte-identical to the pre-retarget
         // store's (the retarget deliberately did not touch provenance fields)
@@ -114,7 +114,7 @@ class V47PracticalEndpointRetargetIT {
 
     @Test
     @Order(2)
-    @DisplayName("V47 repairs a pre-retarget seeded database in place; re-activation is a full structural no-op")
+    @DisplayName("V54 repairs a pre-retarget seeded database in place; re-activation is a full structural no-op")
     void migrationRepairsAPreRetargetSeededDatabase() {
         // simulate the pre-retarget seeded state: move the 12 rows back to their
         // ad-hoc sources, keeping the exact rows (provenance, rationale, status)
@@ -137,7 +137,7 @@ class V47PracticalEndpointRetargetIT {
         // moved IN PLACE: no ad-hoc source remains, no duplicate was created,
         // and every row came back with its original provenance byte-for-byte
         assertThat(prSourcedPrerequisiteEdges()).isZero();
-        assertThat(specStatementSourcedPrerequisiteEdges()).isEqualTo(12);
+        assertThat(specStatementSourcedPrerequisiteEdges()).isEqualTo(19);
         for (String[] t : OLD_STATE) {
             assertThat(provenanceOf(t[1], t[2]))
                     .as("provenance of %s -> %s", t[1], t[2])
@@ -179,7 +179,7 @@ class V47PracticalEndpointRetargetIT {
                         relation_type, strength, rationale, validation_status,
                         provenance, created_by, version, created_at)
                 SELECT gen_random_uuid(), pr.id, t.id, 'REQUIRES_PREREQUISITE',
-                        NULL, 'drift simulation (V47 IT fixture)', 'VALIDATED',
+                        NULL, 'drift simulation (V54 IT fixture)', 'VALIDATED',
                         'drift:simulation', 'v47-it', 1, now()
                 FROM knowledge_nodes pr, knowledge_nodes t
                 WHERE pr.code = '4CH1-PR-01'
@@ -188,7 +188,7 @@ class V47PracticalEndpointRetargetIT {
 
         assertThatThrownBy(this::runMigration)
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("V47 retarget");
+                .hasMessageContaining("V54 retarget");
 
         // the aborted statement left no partial move; clean up and the database
         // is healthy again (the migration applies as a structural no-op)
@@ -239,18 +239,18 @@ class V47PracticalEndpointRetargetIT {
         jdbc.execute(migrationSql());
     }
 
-    /** The packaged V47 statement, comment lines stripped, exactly as Flyway runs it. */
+    /** The packaged V54 statement, comment lines stripped, exactly as Flyway runs it. */
     private static String migrationSql() {
         StringBuilder sb = new StringBuilder();
         try (InputStream in = new ClassPathResource(
-                "db/migration/V47__retarget_practical_edge_endpoints.sql").getInputStream()) {
+                "db/migration/V54__retarget_practical_edge_endpoints.sql").getInputStream()) {
             for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
                 if (!line.trim().startsWith("--")) {
                     sb.append(line).append('\n');
                 }
             }
         } catch (IOException e) {
-            throw new IllegalStateException("cannot read the packaged V47 statement", e);
+            throw new IllegalStateException("cannot read the packaged V54 statement", e);
         }
         return sb.toString();
     }

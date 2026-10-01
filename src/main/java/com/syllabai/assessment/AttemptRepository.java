@@ -65,6 +65,15 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     long countByLearnerId(UUID learnerId);
 
     /**
+     * Course-stats aggregate (ADR-029 tranche 4.10): distinct questions this
+     * learner has attempted — coverage, not volume (retries count once). The
+     * attempt history view is windowed, so this count cannot be derived
+     * client-side honestly.
+     */
+    @Query("select count(distinct a.question.id) from Attempt a where a.learnerId = :learnerId")
+    long countDistinctQuestionsByLearnerId(@Param("learnerId") UUID learnerId);
+
+    /**
      * Graded-attempt correctness aggregates per condition for one learner+node
      * (Paper B §16 fluency gap). Rows: [timed(boolean), total(bigint), correct(bigint)].
      * Counts primary-topic and question_topics mappings; only attempts whose
@@ -122,4 +131,25 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
             order by a.createdAt desc
             """)
     List<Attempt> findRecentByTopicNode(@Param("nodeId") UUID nodeId, Pageable pageable);
+
+    /**
+     * TFA-07 class-KG drill-down (§13.5): the most recent attempts on
+     * questions mapped to one topic node, restricted to an explicit learner
+     * roster — the class-KG independent-student rule carried onto the
+     * evidence leg (a student without a membership row never appears in the
+     * teacher's per-node evidence). Batched fetch plan (question included),
+     * page-limited by the caller; the caller passes the ENABLED member ids.
+     */
+    @EntityGraph(attributePaths = "question")
+    @Query("""
+            select a from Attempt a
+            where (a.question.primaryTopicNodeId = :nodeId or exists (
+                select 1 from QuestionTopic qt
+                where qt.question = a.question and qt.nodeId = :nodeId))
+              and a.learnerId in :roster
+            order by a.createdAt desc
+            """)
+    List<Attempt> findRecentByTopicNodeAndLearnerIdIn(@Param("nodeId") UUID nodeId,
+                                                      @Param("roster") Collection<UUID> roster,
+                                                      Pageable pageable);
 }

@@ -519,4 +519,109 @@ class KaRagServiceTest {
         assertThat(two.length())
                 .isLessThanOrEqualTo("why?".length() + 1 + ConversationTurn.MAX_TURN_CHARS + 1);
     }
+
+    @Test
+    @DisplayName("V53 per-course ask: a resolvable courseRef scopes BOTH retrieval surfaces and never touches resolveActive")
+    void perCourseResolutionReachesBothSurfaces() {
+        when(curriculumScopes.resolveForCourse("4CH1-2017")).thenReturn(Optional.of(SCOPE));
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
+        when(knowledgeRetriever.retrieve(anyString(), anyInt(), eq(SCOPE)))
+                .thenReturn(new KnowledgeContext(
+                        List.of(new MatchedTopic(topicId, "IALCHEM2018-U1-T3",
+                                "Bonding and Structure", 0.5)),
+                        List.of(), List.of()));
+        when(vectorRetriever.retrieve(anyString(), anyInt(), eq(SCOPE))).thenReturn(List.of());
+        when(contextAssembler.assemble(any(), any(), any())).thenReturn(
+                new ContextAssembler.TutorContext("learner brief", "knowledge brief", List.of()));
+        when(generator.generate(anyString(), any(), any())).thenReturn(
+                new TutorGenerator.GeneratedAnswer("Bonding is directional [1].", "model-x",
+                        "groq"));
+
+        TutorAnswerView answer = service.ask(learnerId, "bonding question", List.of(), null,
+                "4CH1-2017");
+
+        assertThat(answer.refused()).isFalse();
+        assertThat(answer.answer()).isEqualTo("Bonding is directional [1].");
+        // the per-course resolution scoped BOTH surfaces (T-C07 parity on the V53 path)
+        verify(knowledgeRetriever).retrieve(anyString(), anyInt(), eq(SCOPE));
+        verify(vectorRetriever).retrieve(anyString(), anyInt(), eq(SCOPE));
+        // D4: a course-tagged ask never consults the global resolver — no
+        // silent cross-corpus fallback can even be attempted
+        verify(curriculumScopes, never()).resolveActive(any());
+        verify(curriculumScopes).resolveForCourse("4CH1-2017");
+    }
+
+    @Test
+    @DisplayName("V53 fail-closed: a courseRef that resolves to nothing refuses deterministically NAMING the ref — no global fallback")
+    void unresolvedCourseRefRefusesNamingTheRef() {
+        when(curriculumScopes.resolveForCourse("4XPH1-9999")).thenReturn(Optional.empty());
+
+        TutorAnswerView answer = service.ask(learnerId, "what is momentum?", List.of(), null,
+                "4XPH1-9999");
+
+        assertThat(answer.refused()).isTrue();
+        // the echoed ref makes the refusal verifiable on the surface
+        assertThat(answer.answer()).contains("4XPH1-9999");
+        assertThat(answer.citations()).isEmpty();
+        assertThat(answer.evidenceCount()).isZero();
+        assertThat(answer.provider()).isEqualTo("deterministic-course-refusal");
+        // fail-closed end to end: no retrieval, no generation, and the global
+        // resolver is never consulted as a fallback (the wrong-corpus answer
+        // this rule exists to prevent)
+        verify(knowledgeRetriever, never()).retrieve(anyString(), anyInt(), any());
+        verify(vectorRetriever, never()).retrieve(anyString(), anyInt(), any());
+        verify(generator, never()).generate(anyString(), any(), any());
+        verify(curriculumScopes, never()).resolveActive(any());
+
+        // honest telemetry: the refusal publishes its research event
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(eventCaptor.capture());
+        assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).refused()).isTrue();
+        assertThat(((TutorAnsweredEvent) eventCaptor.getValue()).answerProvider())
+                .isEqualTo("deterministic-course-refusal");
+    }
+
+    @Test
+    @DisplayName("V53 stream parity: the unresolved-course refusal streams byte-identical text with the course provider tag")
+    void courseRefusalStreamParity() {
+        when(curriculumScopes.resolveForCourse("4XPH1-9999")).thenReturn(Optional.empty());
+
+        List<TutorStreamEvent> eventsOut = service
+                .askStream(learnerId, "what is momentum?", List.of(), null, "4XPH1-9999")
+                .collectList()
+                .block(java.time.Duration.ofSeconds(5));
+
+        assertThat(eventsOut).isNotNull();
+        // citations → meta → single delta → completed, the refusal wire shape
+        assertThat(eventsOut).hasSize(4);
+        TutorStreamEvent.Meta meta = (TutorStreamEvent.Meta) eventsOut.get(1);
+        assertThat(meta.provider()).isEqualTo("deterministic-course-refusal");
+        assertThat(meta.refused()).isTrue();
+        String text = ((TutorStreamEvent.Delta) eventsOut.get(2)).text();
+        assertThat(text).isEqualTo(KaRagService.COURSE_SCOPE_REFUSAL.formatted("4XPH1-9999"));
+        TutorStreamEvent.Completed done = (TutorStreamEvent.Completed) eventsOut.get(3);
+        assertThat(done.refused()).isTrue();
+        assertThat(done.fullAnswer()).isEqualTo(text);
+        verify(generator, never()).streamGenerate(anyString(), any(), any());
+    }
+
+    @Test
+    @DisplayName("V53 D4 legacy parity: a null or blank courseRef keeps the global resolution path byte-identical")
+    void nullOrBlankCourseRefKeepsLegacyResolution() {
+        when(curriculumScopes.resolveActive(learnerId)).thenReturn(Optional.empty());
+        resolverReturns(PaperQuestionResolver.Resolution.notPaperAsk());
+
+        TutorAnswerView nullRef = service.ask(learnerId, "bonding question", List.of(), null, null);
+        TutorAnswerView blankRef = service.ask(learnerId, "bonding question", List.of(), null, "   ");
+
+        // both are the LEGACY unresolved-scope refusal, not the course refusal
+        assertThat(nullRef.refused()).isTrue();
+        assertThat(blankRef.refused()).isTrue();
+        assertThat(nullRef.provider()).isEqualTo("deterministic-refusal");
+        assertThat(blankRef.provider()).isEqualTo("deterministic-refusal");
+        assertThat(nullRef.answer()).doesNotContain("scoped to the course");
+        // the global resolver was consulted twice, the per-course one never
+        verify(curriculumScopes, org.mockito.Mockito.times(2)).resolveActive(learnerId);
+        verify(curriculumScopes, never()).resolveForCourse(org.mockito.ArgumentMatchers.anyString());
+    }
 }

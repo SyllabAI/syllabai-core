@@ -129,10 +129,10 @@ class ConceptGraphSeedServiceTest {
         assertThat(summary.subsections()).isEqualTo(28);
         assertThat(summary.specPoints()).isEqualTo(182);
         assertThat(summary.practicals()).isEqualTo(12);
-        assertThat(summary.conceptNodes()).isEqualTo(113);
-        assertThat(summary.validatedSemanticEdges()).isEqualTo(153);
-        assertThat(nodeByCode).hasSize(1 + 4 + 28 + 182 + 12 + 113);
-        assertThat(everSavedEdgeIds).hasSize(4 + 28 + 182 + 12 + 117 + 153);
+        assertThat(summary.conceptNodes()).isEqualTo(193);
+        assertThat(summary.validatedSemanticEdges()).isEqualTo(272);
+        assertThat(nodeByCode).hasSize(1 + 4 + 28 + 182 + 12 + 193);
+        assertThat(everSavedEdgeIds).hasSize(4 + 28 + 182 + 12 + 211 + 272);
 
         // the real settled chain: SP 4CH1-3.7C carries CON-BOND-ENERGY-CALC,
         // which REQUIRES_PREREQUISITE CON-COVALENT-BOND; MIS-BOND-ENERGY-COUNT
@@ -163,7 +163,7 @@ class ConceptGraphSeedServiceTest {
         assertThat(nodeByCode.get("4CH1-PR-01").nodeType()).isEqualTo(NodeType.SUBTOPIC);
         assertThat(findEdge("4CH1-PR-01", "4CH1-1.7C", RelationType.PART_OF)).isNotNull();
 
-        // 2026-10-01 practical-endpoint retarget: the 12 validated practical
+        // 2026-10-01 practical-endpoint retarget: the 19 validated practical
         // prerequisite edges source at their REAL spec statements, not the
         // ad-hoc practical nodes — the practicals keep only their PART_OF anchor
         assertThat(findEdge("4CH1-1.7C", "4CH1-CON-SATURATED-SOLUTION",
@@ -176,19 +176,22 @@ class ConceptGraphSeedServiceTest {
                 .findAny()).isEmpty();
     }
 
-    // ── B: unsettled specification point ───────────────────────────
+    // ── B: no fabrication onto a practical spec point ──────────────
 
     @Test
-    @DisplayName("Case B: a valid unsettled 4CH1 SP lands as official structure with NO fabricated graph data")
+    @DisplayName("Case B: a practical SP lands as official structure; its authored dependency stays on the PR node, nothing fabricated onto the SP")
     void unsettledSpecPointFabricatesNothing() {
         service.activate(UUID.randomUUID());
 
-        // 4CH1-2.1 is a real S2 spec point: the official anchor exists…
-        KnowledgeNode sp = nodeByCode.get("4CH1-2.1");
+        // 4CH1-2.14 (PR-05's spec point) is a real S2 row: the official anchor
+        // exists and the practical node attaches to it…
+        KnowledgeNode sp = nodeByCode.get("4CH1-2.14");
         assertThat(sp).isNotNull();
         assertThat(sp.validationStatus()).isEqualTo(KnowledgeNode.ValidationStatus.VALIDATED);
-        assertThat(findEdge("4CH1-2.1", "4CH1-S2-a", RelationType.PART_OF)).isNotNull();
-        // …but nothing graph-derived hangs under it and no semantic edge touches it
+        assertThat(findEdge("4CH1-PR-05", "4CH1-2.14", RelationType.PART_OF)).isNotNull();
+        // …nothing graph-derived hangs on the SP ITSELF: concept anchors stay on
+        // the concept SPs and the practical's dependency edges live on the
+        // PR-05 node (batch-5 close), never fabricated onto the practical SP
         assertThat(edgeByKey.values().stream()
                 .filter(e -> e.relationType() != RelationType.PART_OF
                         && (e.sourceId().equals(sp.id()) || e.targetId().equals(sp.id())))
@@ -196,8 +199,11 @@ class ConceptGraphSeedServiceTest {
         assertThat(nodeByCode.keySet().stream()
                 .filter(code -> code.startsWith("4CH1-CON-") || code.startsWith("4CH1-MIS-"))
                 .map(nodeByCode::get)
-                .filter(n -> findEdge(n.code(), "4CH1-2.1", RelationType.PART_OF) != null))
+                .filter(n -> findEdge(n.code(), "4CH1-2.14", RelationType.PART_OF) != null))
                 .isEmpty();
+        // the batch-5 authored dependency is present where it belongs — on the practical
+        assertThat(findEdge("4CH1-PR-05", "4CH1-CON-O2-PERCENT-DETERMINATION",
+                RelationType.REQUIRES_PREREQUISITE)).isNotNull();
     }
 
     // ── C + E: canonical identity + idempotency ────────────────────
@@ -242,7 +248,7 @@ class ConceptGraphSeedServiceTest {
         assertThat(nodeByCode.get("4CH1").applicability()).isNull();
         assertThat(nodeByCode.get("4CH1-CON-COVALENT-BOND").applicability()).isNull();
         // the create path sets the field BEFORE the single save: one saved id per node, not two
-        assertThat(everSavedNodeIds).hasSize(1 + 4 + 28 + 182 + 12 + 113);
+        assertThat(everSavedNodeIds).hasSize(1 + 4 + 28 + 182 + 12 + 193);
     }
 
     @Test
@@ -311,10 +317,10 @@ class ConceptGraphSeedServiceTest {
     void heldAndReviewRequiredEdgesExcluded() {
         service.activate(UUID.randomUUID());
 
-        // exactly 153 semantic edges landed (store fact), none of the frozen five
+        // exactly 272 semantic edges landed (store fact), none of the frozen five
         assertThat(edgeByKey.values().stream()
                 .filter(e -> e.relationType() != RelationType.PART_OF)
-                .count()).isEqualTo(153);
+                .count()).isEqualTo(272);
         assertThat(findEdge("4CH1-CON-CRYSTALLISATION", "4CH1-CON-SOLUTION",
                 RelationType.REQUIRES_PREREQUISITE)).isNull();          // REVIEW_REQUIRED
         assertThat(findEdge("4CH1-CON-GAS-VOL-CALC", "4CH1-CON-AVOGADRO-LAW",

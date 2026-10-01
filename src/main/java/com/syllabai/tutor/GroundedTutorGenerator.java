@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 /** Grounded generation with the T-026 intervention plan injected into the prompt. */
 @Component
@@ -119,6 +120,55 @@ public class GroundedTutorGenerator implements TutorGenerator {
             // the served message is the fixed, honest client text.
             throw new TutorGenerationException(UNAVAILABLE_MESSAGE, e);
         }
+    }
+
+    /**
+     * Streamed generation (tutor SSE tranche): the SAME prompt assembly as
+     * the blocking path (identical system prompt, fencing nonce, options),
+     * delivered token-incrementally through the chain's streaming port.
+     *
+     * <p>Output hygiene runs INCREMENTALLY via {@link StreamSanitizer} — the
+     * concatenation of emitted deltas equals {@code sanitizeAnswer(fullText)},
+     * the same text the blocking path would have served, so the anchor-matrix
+     * hygiene contract (fence echoes and out-of-range markers never reach a
+     * learner) binds the stream path byte-for-byte. The chain-unavailable
+     * check matches {@link #generate}: same WARN, same fixed client-safe
+     * message, surfaced as a Flux error.</p>
+     *
+     * <p>State (nonce, sanitizer) is created per subscription inside
+     * {@code Flux.defer} — a resubscribed stream (failover restart) gets a
+     * fresh nonce and buffer, exactly like a fresh request.</p>
+     */
+    @Override
+    public Flux<GeneratedDelta> streamGenerate(String query, List<ConversationTurn> history,
+                                               ContextAssembler.TutorContext context) {
+        if (!chain.available()) {
+            log.warn("tutor generation refused: LLM chain unavailable (no configured "
+                    + "provider in the chain, ADR-009 free tier)");
+            return Flux.error(new TutorGenerationException(UNAVAILABLE_MESSAGE));
+        }
+        return Flux.defer(() -> {
+            String nonce = nonce();
+            StreamSanitizer sanitizer = new StreamSanitizer(
+                    context.evidence().size(), fenceOpen(nonce), fenceClose(nonce));
+            LlmRequest request = LlmRequest.withOptions(
+                    systemPrompt(), userPrompt(query, history, context, nonce), temperature, maxTokens);
+            return chain.stream(request)
+                    .map(delta -> new GeneratedDelta(
+                            sanitizer.push(delta.text() == null ? "" : delta.text()),
+                            delta.model(), delta.providerName()))
+                    .filter(delta -> !delta.answer().isEmpty())
+                    // tail flush: the sanitizer's held-back remainder goes through
+                    // the exact blocking-path sanitizeAnswer; identity fields are
+                    // null (consumers take provider/model from the FIRST delta)
+                    .concatWith(Flux.defer(() -> {
+                        String tail = sanitizer.flush();
+                        return tail.isEmpty() ? Flux.empty()
+                                : Flux.just(new GeneratedDelta(tail, null, null));
+                    }))
+                    .onErrorMap(LlmProviderException.class,
+                            e -> new TutorGenerationException(UNAVAILABLE_MESSAGE, e));
+        });
     }
 
     String systemPrompt() {

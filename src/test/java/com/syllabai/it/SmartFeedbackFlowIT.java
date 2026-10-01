@@ -19,6 +19,7 @@ import com.syllabai.assessment.dto.StructuredAttemptResultView;
 import com.syllabai.assessment.dto.StructuredSubmitRequest;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.dto.RegisterRequest;
+import com.syllabai.infrastructure.llm.FailoverLlmChain;
 import com.syllabai.infrastructure.llm.LlmProvider;
 import com.syllabai.infrastructure.llm.LlmResponse;
 import com.syllabai.smartmark.SmartMarkResult;
@@ -89,9 +90,17 @@ class SmartFeedbackFlowIT {
     @Autowired
     private AnswerRepository answers;
 
-    /** the feedback generations run against a stubbed chain — the marking itself needs no LLM */
+    /**
+     * The feedback generations run against a stubbed chain — the marking itself needs no
+     * LLM. Mocked at the CONCRETE FailoverLlmChain type, not the LlmProvider interface:
+     * a @MockitoBean on the interface replaces the failoverLlmChain bean with an
+     * interface-typed mock, and AnswerInputTranscriptionService (wave-3 answer input,
+     * which injects the concrete chain) then fails context load with
+     * BeanNotOfRequiredTypeException. The concrete mock keeps every LlmProvider
+     * injection point satisfied AND the concrete type resolvable.
+     */
     @MockitoBean
-    private LlmProvider llm;
+    private FailoverLlmChain llm;
 
     private static PastPaperDraftDto draft() {
         return new PastPaperDraftDto(

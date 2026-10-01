@@ -47,9 +47,11 @@ import org.springframework.transaction.annotation.Transactional;
  *       reason);</li>
  *   <li>concept/misconception nodes land SUGGESTED — the settled store's own
  *       node status (operator-confirmed extraction identities);</li>
- *   <li>the 117 concept→SP anchor PART_OF edges land SUGGESTED — the store's
- *       own anchor status (extraction-derived);</li>
- *   <li>the 153 HUMAN_VALIDATED semantic edges land VALIDATED with T-C11
+ *   <li>the 211 concept→SP anchor PART_OF edges land SUGGESTED — the KG keeps
+ *       the §7 node-level review gate for anchors even where the store marks
+ *       the attachment HUMAN_VALIDATED (117 flipped at the session-106
+ *       directive; 94 new SUGGESTED from batches 5-11);</li>
+ *   <li>the 272 HUMAN_VALIDATED semantic edges land VALIDATED with T-C11
  *       provenance naming the extraction pass and the operator validation.</li>
  * </ul>
  * The 3 pilot HOLD and 2 REVIEW_REQUIRED edges never reach the KG — the
@@ -340,8 +342,8 @@ public class ConceptGraphSeedService {
 
     /**
      * Idempotent PART_OF attachment by exact (child, parent) edge identity —
-     * 19 settled concepts legitimately anchor under more than one spec point
-     * (117 anchors over 98 concepts), so the seed's identity check must be the
+     * 34 settled concepts legitimately anchor under more than one spec point
+     * (211 anchors over 167 concepts), so the seed's identity check must be the
      * edge itself, not the single-parent lookup the review workflow uses.
      */
     private void attach(KnowledgeNode child, KnowledgeNode parent, String rationale,
@@ -452,8 +454,8 @@ public class ConceptGraphSeedService {
      * @param subsections           snapshot subsection count (28)
      * @param specPoints            snapshot spec-point count (182)
      * @param practicals            snapshot practical count (12)
-     * @param conceptNodes          snapshot concept/misconception node count (113)
-     * @param validatedSemanticEdges snapshot validated semantic edge count (153)
+     * @param conceptNodes          snapshot concept/misconception node count (193)
+     * @param validatedSemanticEdges snapshot validated semantic edge count (272)
      * @param nodesCreated          KG nodes created this run (0 on idempotent re-run)
      * @param nodesReused           KG nodes reused (canonical identity preserved)
      * @param edgesCreated          KG edges created this run (0 on idempotent re-run)

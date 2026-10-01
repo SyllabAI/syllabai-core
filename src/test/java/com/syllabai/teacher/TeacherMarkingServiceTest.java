@@ -26,6 +26,7 @@ import com.syllabai.smartmark.SmartMarkAgreementEvaluation;
 import com.syllabai.smartmark.SmartMarkAgreementEvaluationRepository;
 import com.syllabai.smartmark.SmartMarkResult;
 import com.syllabai.smartmark.SmartMarkResultRepository;
+import com.syllabai.sme.SmeQuestionSpecPointRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,7 +56,7 @@ class TeacherMarkingServiceTest {
             mock(SmartMarkAgreementEvaluationRepository.class);
     private final QuestionTopicRepository questionTopics = mock(QuestionTopicRepository.class);
     private final List<Object> published = new ArrayList<>();
-    private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add);
+    private final EvidencePublisher evidencePublisher = new EvidencePublisher(published::add, mock(SmeQuestionSpecPointRepository.class));
 
     private final TeacherMarkingService service = new TeacherMarkingService(
             answers, attempts, humanMarks, smartMarkResults, agreementEvaluations, questionTopics,

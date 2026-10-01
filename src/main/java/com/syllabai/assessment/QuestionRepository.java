@@ -81,12 +81,19 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
             java.util.Collection<UUID> paperIds);
 
     /**
-     * ADR-026 SME bank replacement: deactivate every currently-active question
-     * in one bulk update (rows survive — attempts, marking queues, evidence and
-     * FK chains stay intact; only serving stops).
+     * ADR-026 SME bank replacement, AMENDED for the layer-3 multi-subject
+     * imports (subject-#2): deactivate the currently-active questions whose
+     * external ref the incoming package re-emits, in one bulk update (rows
+     * survive — attempts, marking queues, evidence and FK chains stay intact;
+     * only serving stops). Scoped to the package's own refs so importing
+     * subject #2 never touches the serving 4CH1 pilot bank; re-importing a
+     * corpus replaces exactly that corpus.
      */
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(
-            "update Question q set q.active = false where q.active = true")
-    int deactivateAllActive();
+            "update Question q set q.active = false where q.active = true"
+                    + " and q.externalRef in :refs")
+    int deactivateByRefs(
+            @org.springframework.data.repository.query.Param("refs")
+            java.util.Collection<String> refs);
 }

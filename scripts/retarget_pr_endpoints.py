@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-Retarget the 12 validated practical REQUIRES_PREREQUISITE edges in
+Retarget the validated practical REQUIRES_PREREQUISITE edges in
 src/main/resources/concept-graph/concept_edges.yaml from the ad-hoc
-practical-node codes (4CH1-PR-01..11) to their real core-practical spec
+practical-node codes (4CH1-PR-01..12) to their real core-practical spec
 statements — the upstream lockstep of the syllabai-hub mirror retarget
 (scripts/fix_pr_edges.py fd05d75 + scripts/fix_pr_mirror.py), per the
 Batch-5 manifest follow-up 1 (docs/TC11_BATCH5_MANIFEST.md).
+
+Store history: applied first at the batch-4 close (12 edges); re-applied
+at the batch-11 close (19 edges — the operator's 7-edge package
+PR-05/06/07/08 x1 + PR-12 x3 was authored and operator-promoted in
+syllabai-resources batches 5/6/7/11 and core-synced in 96e7bec). This
+script is idempotent-safe and guarded: it retargets every PR-sourced
+REQUIRES_PREREQUISITE edge and aborts unless each maps 1:1 against the
+store's own practicals.yaml spec_point links.
 
 WHY A SURGICAL SCRIPT: the store header says "DO NOT hand-edit: re-run
 the script", but the c09/c11 generator toolchain and its decision-record
 registry are not in this repo (they lived in the retired analysis
 workspace; the registry is a frozen, operator-gated record). This script
 is the governed surgical path: text-level substitution only (no YAML
-round-trip — every byte outside the 12 source lines and the two
+round-trip — every byte outside the source lines and the two
 annotation insertions stays identical), full post-conditions, and a
 printed SHA-256 for the deliberate loader re-pin
-(ConceptGraphSnapshotLoader.CONCEPT_EDGES_SHA256).
+(ConceptGraphSnapshotLoader.CONCEPT_EDGES_SHA256 and
+ConceptDependencyGraphLoader.EDGES_SHA256).
 
 WHAT IT DOES NOT TOUCH: edge evidence, provenance fields (tier,
 extraction_pass, derivation_method, derivation_notes, upstream,
@@ -25,17 +34,23 @@ content, PART_OF-anchored under their spec points), and practicals.yaml.
 Untouched provenance fields mean the seed-built provenance line
 (t-c11:settled|pass:...|method:...|validated_by:...|date:...) stays
 byte-stable, so re-activation resolves the migrated rows as reused rows
-(ConceptGraphSeedService.requireSeedEdge contract).
+(ConceptGraphSeedService.requireSeedEdge contract; the V54 data migration
+moves already-seeded rows in place for exactly this reason).
 
-Mapping (verified 1:1 in spec order against the store's own
-practicals.yaml spec_point links — identical to the hub mapping):
-  4CH1-PR-01 -> 4CH1-1.7C   (solubility of a solid at a set temperature)
-  4CH1-PR-02 -> 4CH1-1.13   (paper chromatography, inks/food colourings)
-  4CH1-PR-03 -> 4CH1-1.36   (formula of a metal oxide by combustion)
-  4CH1-PR-04 -> 4CH1-1.60C  (electrolysis of aqueous solutions)
-  4CH1-PR-09 -> 4CH1-3.8    (temperature changes: HCl + NaOH calorimetry)
-  4CH1-PR-10 -> 4CH1-3.15   (marble chips surface area / concentration rate)
-  4CH1-PR-11 -> 4CH1-3.16   (catalytic decomposition of hydrogen peroxide)
+Mapping (each pair verified against the store's own practicals.yaml
+spec_point links — identical to the hub mapping for PR-01..11):
+  4CH1-PR-01 -> 4CH1-1.7C    (solubility of a solid at a set temperature)
+  4CH1-PR-02 -> 4CH1-1.13    (paper chromatography, inks/food colourings)
+  4CH1-PR-03 -> 4CH1-1.36    (formula of a metal oxide by combustion)
+  4CH1-PR-04 -> 4CH1-1.60C   (electrolysis of aqueous solutions)
+  4CH1-PR-05 -> 4CH1-2.14    (oxygen percentage in air determination)
+  4CH1-PR-06 -> 4CH1-2.21    (reactivity/arrangement: metals and acids)
+  4CH1-PR-07 -> 4CH1-2.42    (preparing a soluble salt)
+  4CH1-PR-08 -> 4CH1-2.43C   (preparing an insoluble salt)
+  4CH1-PR-09 -> 4CH1-3.8     (temperature changes: HCl + NaOH calorimetry)
+  4CH1-PR-10 -> 4CH1-3.15    (marble chips surface area / concentration rate)
+  4CH1-PR-11 -> 4CH1-3.16    (catalytic decomposition of hydrogen peroxide)
+  4CH1-PR-12 -> 4CH1-4.43C   (cores: testing for ions/gases set)
 """
 import hashlib
 import re
@@ -51,30 +66,37 @@ MAPPING = {
     "4CH1-PR-02": "4CH1-1.13",
     "4CH1-PR-03": "4CH1-1.36",
     "4CH1-PR-04": "4CH1-1.60C",
+    "4CH1-PR-05": "4CH1-2.14",
+    "4CH1-PR-06": "4CH1-2.21",
+    "4CH1-PR-07": "4CH1-2.42",
+    "4CH1-PR-08": "4CH1-2.43C",
     "4CH1-PR-09": "4CH1-3.8",
     "4CH1-PR-10": "4CH1-3.15",
     "4CH1-PR-11": "4CH1-3.16",
+    "4CH1-PR-12": "4CH1-4.43C",
 }
 
 HEADER_NOTE = (
     "# 2026-10-01 practical-endpoint retarget (scripts/retarget_pr_endpoints.py, the\n"
-    "# upstream lockstep of the syllabai-hub mirror retarget): the 12 validated\n"
+    "# upstream lockstep of the syllabai-hub mirror retarget): the 19 validated\n"
     "# practical prerequisite edges now source at their real spec statements. A c11\n"
     "# generator re-run would re-emit the ad-hoc PR-xx sources and MUST be followed\n"
     "# by this script. Record: docs/PR_ENDPOINT_RETARGET.md."
 )
 
 META_NOTE = """  practical_endpoint_retarget: >-
-    The 12 HUMAN_VALIDATED practical prerequisite edges previously sourced at the
-    ad-hoc practical-node codes (4CH1-PR-01/02/03/04/09/10/11); they now source at
-    their real core-practical spec statements (4CH1-1.7C, 4CH1-1.13, 4CH1-1.36,
-    4CH1-1.60C, 4CH1-3.8, 4CH1-3.15, 4CH1-3.16) — the same verified 1:1 spec-order
-    mapping as the syllabai-hub mirror (fix_pr_edges.py fd05d75, fix_pr_mirror.py),
-    so the settled store and its read-model mirror agree again. Edge evidence and
-    provenance fields are untouched: the seed-built provenance line stays
-    byte-stable and re-activation reuses the migrated rows (V47 moves the seeded
-    rows in place). Practical NODES remain first-class official content,
-    PART_OF-anchored under their spec statements. Record:
+    The 19 HUMAN_VALIDATED practical prerequisite edges previously sourced at the
+    ad-hoc practical-node codes (4CH1-PR-01..12); they now source at their real
+    core-practical spec statements (4CH1-1.7C, 1.13, 1.36, 1.60C, 2.14, 2.21,
+    2.42, 2.43C, 3.8, 3.15, 3.16, 4.43C) — the same verified mapping as the
+    syllabai-hub mirror (fix_pr_edges.py fd05d75, fix_pr_mirror.py), so the
+    settled store and its read-model mirror agree again. Applied at the batch-4
+    close (12 edges) and re-applied at the batch-11 close after the operator's
+    7-edge-package core sync (96e7bec). Edge evidence and provenance fields are
+    untouched: the seed-built provenance line stays byte-stable and
+    re-activation reuses the migrated rows (the V54 data migration moves
+    already-seeded rows in place). Practical NODES remain first-class official
+    content, PART_OF-anchored under their spec statements. Record:
     docs/PR_ENDPOINT_RETARGET.md."""
 
 
@@ -110,8 +132,8 @@ def main() -> int:
 
     pre_doc = yaml.safe_load(raw)
     pre_prov = provenance_inputs(pre_doc, set(MAPPING))
-    if len(pre_prov) != 12:
-        print(f"ABORT: expected 12 PR-sourced edges, found {len(pre_prov)}")
+    if len(pre_prov) != 19:
+        print(f"ABORT: expected 19 PR-sourced edges (batch-11 store), found {len(pre_prov)}")
         return 1
     pre_counts = (
         len(pre_doc["edges"]),
@@ -134,8 +156,8 @@ def main() -> int:
             out_lines.append(f"- source: {MAPPING[code]}")
         else:
             out_lines.append(l)
-    print(f"source lines retargeted: {sum(len(v) for v in swapped.values())} (expect 12)")
-    if sum(len(v) for v in swapped.values()) != 12:
+    print(f"source lines retargeted: {sum(len(v) for v in swapped.values())} (expect 19)")
+    if sum(len(v) for v in swapped.values()) != 19:
         print("ABORT: unexpected retarget count")
         return 1
 
@@ -180,7 +202,7 @@ def main() -> int:
     from collections import Counter
     dupes = [k for k, v in Counter(identities).items() if v > 1]
     pre_pairs = {(MAPPING[src], tgt) for (src, tgt) in pre_prov}
-    if dupes or len(identities) != 12 or set(identities) != pre_pairs:
+    if dupes or len(identities) != 19 or set(identities) != pre_pairs:
         print(f"ABORT: identity mismatch (dupes={dupes} n={len(identities)})")
         return 1
 
@@ -192,11 +214,11 @@ def main() -> int:
                 if post_pairs.get(k) != renamed.get(k)}
         print(f"ABORT: provenance drift on {sorted(diff)[:3]}")
         return 1
-    print("provenance/evidence fields of the 12 edges: byte-identical")
+    print(f"provenance/evidence fields of the {len(post_pairs)} edges: byte-identical")
 
     # textual residue: the 7 meta.practicals registry entries (the practical
-    # NODES remain), this file's own retarget note, and the 1 historical
-    # provenance.upstream record — none on an edge source/target line
+    # NODES remain), historical provenance.upstream records, and this file's
+    # own retarget note — none on an edge source/target line
     residue = [l for l in result.split("\n") if "4CH1-PR-" in l
                and not l.lstrip().startswith("#")]
     bad_residue = [l for l in residue
