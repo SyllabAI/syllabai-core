@@ -95,10 +95,19 @@ class NightlyDecayJobTest {
     void secondConsecutivePassDoesNotCompound() {
         Instant lastPracticed = Instant.now().minus(Duration.ofDays(40));
         SkillState state = new SkillState(LEARNER, NODE, 0.5, lastPracticed);
+        // Stubs model the job's PAGING within each pass, not the passes themselves:
+        // one pass = page 0 (the row) + page 1 (empty, ends the loop). Consecutive
+        // stubbing applies across all calls, so the sequence must interleave:
+        // [state, empty] for pass 1, [state, empty] for pass 2, then empty forever.
+        // (First draft stubbed [state, state, empty]: the paging loop consumed both
+        // state pages inside pass 1 — two identical DECAY_APPLIED events, and the
+        // JDK 25 test run caught it immediately.)
         when(skillStates.findByLastPracticedAtBefore(any(), any()))
-                .thenReturn(List.of(state))   // pass 1 — tonight's window
-                .thenReturn(List.of(state))   // pass 2 — the same row, the next window
-                .thenReturn(List.of());
+                .thenReturn(List.of(state))   // pass 1, page 0 — tonight's window
+                .thenReturn(List.of())        // pass 1, page 1 — ends the pass
+                .thenReturn(List.of(state))   // pass 2, page 0 — the same row, next window
+                .thenReturn(List.of())        // pass 2, page 1 — ends the pass
+                .thenReturn(List.of());       // exhausted stubs repeat the last page
         when(reviewSchedules.existsByLearnerIdAndNodeIdAndStatus(
                 LEARNER, NODE, ReviewSchedule.Status.PENDING)).thenReturn(false);
 
