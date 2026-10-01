@@ -29,8 +29,20 @@ public class ContentVectorRetriever implements VectorRetriever {
 
     private static final Logger log = LoggerFactory.getLogger(ContentVectorRetriever.class);
 
-    /** cosine floor for chunk candidacy (below = not evidence, however ranked) */
-    static final double MIN_COSINE = 0.15;
+    /**
+     * Cosine floor for chunk candidacy (below = not evidence, however ranked).
+     *
+     * <p>CALIBRATED 0.15 &rarr; 0.50 (T-C42, 2026-10-02): both flip gates of the
+     * calibration pack (master `evidence/bench-001/cosine-calibration-2026-10-01/`)
+     * are recorded PASS — gate 1, the run-005-c-r8 re-record (recall unchanged,
+     * &sect;8(d) byte-identical, MRR/nDCG slightly improved, zero-result 0/120);
+     * gate 2, the production-space probe on the Neon serving pool (embed_rev=2,
+     * n=2,935): PRB-01 canonical pct_above_050 = 59.5% (pack binding rule: mass
+     * above 0.50), histogram peak in the 0.50&ndash;0.55 bucket, recorded in the
+     * pack's dated addendum. 0.15 measured as a no-op floor (100% of the corpus
+     * clears it); refusal semantics below 0.50 return to the pool via the
+     * retrieval refusal rate, monitored post-deploy.</p> */
+    static final double MIN_COSINE = 0.50;
 
     private final ContentRetrievalService retrieval;
     private final DocumentRepository documents;
