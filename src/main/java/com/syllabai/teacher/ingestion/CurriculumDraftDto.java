@@ -1,5 +1,6 @@
 package com.syllabai.teacher.ingestion;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
  * SUGGESTED validation state — nothing serves until a teacher validates it
  * (Master Spec §7).</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record CurriculumDraftDto(
         @JsonProperty("schemaVersion") String schemaVersion,
         @JsonProperty("board") String board,
@@ -27,11 +29,13 @@ public record CurriculumDraftDto(
 
     public static final String SUPPORTED_SCHEMA = "1.1";
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record SubjectDraft(
             @JsonProperty("code") String code,
             @JsonProperty("name") String name) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record UnitDraft(
             @JsonProperty("code") String code,
             @JsonProperty("title") String title,
@@ -42,6 +46,7 @@ public record CurriculumDraftDto(
             @JsonProperty("confidence") double confidence) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record TopicDraft(
             @JsonProperty("code") String code,
             @JsonProperty("title") String title,
@@ -52,6 +57,7 @@ public record CurriculumDraftDto(
             @JsonProperty("confidence") double confidence) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record DraftProvenance(
             @JsonProperty("sourceDocumentId") String sourceDocumentId,
             @JsonProperty("sourceChecksum") String sourceChecksum,

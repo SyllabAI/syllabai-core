@@ -124,8 +124,16 @@ public record GlmOcrPaperDraftDto(
      *       — all opt-in and omitted (NON_NULL) for unresolvable references, so
      *       unenriched bundles stay byte-identical.</li>
      * </ul>
-     * Unknown fields still fail loud (no IGNORE_UNKNOWN_PROPERTIES anywhere on the
-     * bridge): a producer/contract drift must never be silently dropped.
+     * Unknown fields are ignored at the DTO boundary (forward-compatible
+     * parser contract, bundle-tolerance hardening round 2 + s146/s147):
+     * the parser evolves its bundle schema WITHOUT a synchronized core
+     * deploy — a parser-main MS draft already carries fields a same-day
+     * core build did not know (figureRefs), which is exactly the trap
+     * this closes. The fail-loud posture MOVED to where drift is actually
+     * actionable: content gates (schema version checks, reconciliation
+     * conflicts, duplicate papers, validator invariants) still throw —
+     * unknown ADDITIVE fields no longer do (decision record: s145 review
+     * directive, operator-approved 2026-10-01, trace 1a0f5eae400ebb7d).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record FigureRef(
