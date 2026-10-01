@@ -1,6 +1,7 @@
 package com.syllabai.tutor;
 
 import com.syllabai.learner.LearnerModelService;
+import com.syllabai.learner.SkillState;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -79,10 +80,14 @@ public class LearnerContextAssembler implements ContextAssembler {
 
     private String learnerBrief(UUID learnerId, Set<UUID> relevantNodes,
                                 KnowledgeRetriever.KnowledgeContext knowledge) {
-        Map<UUID, Double> masteryByNode = learnerModel.skillStates(learnerId).stream()
+        // M3 (audit 2026-10-02): one learner-model read per assemble — both
+        // maps below derive from the SAME skillStates list, which used to be
+        // fetched twice per ask (mastery map + fluency-gap map)
+        List<SkillState> states = learnerModel.skillStates(learnerId);
+        Map<UUID, Double> masteryByNode = states.stream()
                 .filter(s -> relevantNodes.isEmpty() || relevantNodes.contains(s.nodeId()))
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.mastery(), (a, b) -> a));
-        Map<UUID, Double> fluencyGaps = learnerModel.skillStates(learnerId).stream()
+        Map<UUID, Double> fluencyGaps = states.stream()
                 .filter(s -> relevantNodes.contains(s.nodeId()) && s.proceduralFluencyGap() != null)
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.proceduralFluencyGap(), (a, b) -> a));
         // MED-2/ADR-032: membership on the staleness-relaxed probability

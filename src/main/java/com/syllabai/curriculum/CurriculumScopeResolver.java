@@ -1,8 +1,11 @@
 package com.syllabai.curriculum;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -126,10 +129,26 @@ public class CurriculumScopeResolver {
     }
 
     /** Shared fail-closed tail of both resolution paths: exactly one
-     *  surface-owning candidate serves; anything else refuses. */
+     *  surface-owning candidate serves; anything else refuses.
+     *
+     *  <p>M3 (audit 2026-10-02): the subject-root subtrees are memoized per
+     *  resolution. The ownership test resolves each subject's PART_OF subtree
+     *  (the recursive CTE — the expensive read) and the winner's intent
+     *  surface needs the SAME subtree again; before this memo the winning
+     *  version's subjects ran the CTE twice per resolution, on every serving
+     *  request. The memo lives exactly one resolution and is never shared
+     *  across requests (no TTL semantics): validation-driven subtree growth is
+     *  visible to the very next ask, and the resolution decision, the logged
+     *  counts and the resulting scope are byte-identical to the pre-M3 flow.</p> */
     private Optional<CurriculumScope> singleOwnerScope(List<CurriculumVersion> candidates,
                                                        String describe) {
-        List<CurriculumVersion> owners = candidates.stream().filter(this::ownsSurface).toList();
+        Map<UUID, List<UUID>> subtreeMemo = new HashMap<>();
+        List<CurriculumVersion> owners = new ArrayList<>();
+        for (CurriculumVersion version : candidates) {
+            if (ownsSurface(version, subtreeMemo)) {
+                owners.add(version);
+            }
+        }
         if (owners.size() != 1) {
             log.info("curriculum scope unresolved for {}: {} candidate(s), {} owner(s)"
                             + " — refusing over serving",
@@ -137,29 +156,29 @@ public class CurriculumScopeResolver {
             return Optional.empty();
         }
         CurriculumVersion version = owners.getFirst();
-        Set<UUID> surface = intentSurface(version);
+        Set<UUID> surface = intentSurface(version, subtreeMemo);
         log.debug("curriculum scope resolved for {}: {} ({} surface node(s))",
                 describe, version.code(), surface.size());
         return Optional.of(new CurriculumScope(version.id(), version.code(), surface));
     }
 
     /** KG intent surface: union of the PART_OF subtrees under the version's subject roots. */
-    private Set<UUID> intentSurface(CurriculumVersion version) {
+    private Set<UUID> intentSurface(CurriculumVersion version, Map<UUID, List<UUID>> subtreeMemo) {
         Set<UUID> surface = new LinkedHashSet<>();
         for (Subject subject : subjects.findByCurriculumVersionIdOrderByCode(version.id())) {
             UUID rootId = subject.knowledgeNodeId();
             if (rootId != null) {
-                surface.addAll(knowledgeNodes.findSubtreeIds(rootId));
+                surface.addAll(subtree(rootId, subtreeMemo));
             }
         }
         return surface;
     }
 
     /** Ownership test: KG intent surface (VALIDATED structure) or exam-paper surface. */
-    private boolean ownsSurface(CurriculumVersion version) {
+    private boolean ownsSurface(CurriculumVersion version, Map<UUID, List<UUID>> subtreeMemo) {
         for (Subject subject : subjects.findByCurriculumVersionIdOrderByCode(version.id())) {
             UUID rootId = subject.knowledgeNodeId();
-            if (rootId != null && hasValidatedStructure(rootId)) {
+            if (rootId != null && hasValidatedStructure(subtree(rootId, subtreeMemo))) {
                 return true;
             }
             if (examPapers.existsBySubjectId(subject.id())) {
@@ -170,23 +189,25 @@ public class CurriculumScopeResolver {
     }
 
     /**
-     * Ownership test: KG intent surface (VALIDATED structure) or exam-paper surface.
-     *
-     * <p>T-C32: the VALIDATED-structure question is answered with ONE batched
-     * predicate over the subtree id set (the id set still comes from
-     * {@code findSubtreeIds}, the single source of truth). Before, this loop
-     * issued one {@code findById} per subtree node — ~340 reads per search,
-     * per subject, per ACTIVE version, on every serving request. The evaluated
-     * predicate is unchanged: a subtree owns KG surface iff it contains a
-     * UNIT/TOPIC/SUBTOPIC node whose validation is VALIDATED; an empty subtree
-     * fails closed without touching the repository predicate.</p>
+     * Ownership predicate (T-C32): the VALIDATED-structure question is answered
+     * with ONE batched predicate over the already-resolved subtree id set (M3:
+     * the caller passes the memoized ids instead of this method re-resolving
+     * them — the CTE runs once per subject per resolution, never twice). The
+     * evaluated predicate is unchanged: a subtree owns KG surface iff it
+     * contains a UNIT/TOPIC/SUBTOPIC node whose validation is VALIDATED; an
+     * empty subtree fails closed without touching the repository predicate.
      */
-    private boolean hasValidatedStructure(UUID subjectRootId) {
-        List<UUID> subtreeIds = knowledgeNodes.findSubtreeIds(subjectRootId);
+    private boolean hasValidatedStructure(List<UUID> subtreeIds) {
         if (subtreeIds.isEmpty()) {
             return false;
         }
         return knowledgeNodes.existsByIdInAndNodeTypeInAndValidationStatus(
                 subtreeIds, STRUCTURE_NODE_TYPES, KnowledgeNode.ValidationStatus.VALIDATED);
+    }
+
+    /** One resolution's subtree memo: {@code rootId → findSubtreeIds(rootId)},
+     *  computed at most once per root per resolution. */
+    private List<UUID> subtree(UUID rootId, Map<UUID, List<UUID>> memo) {
+        return memo.computeIfAbsent(rootId, knowledgeNodes::findSubtreeIds);
     }
 }
