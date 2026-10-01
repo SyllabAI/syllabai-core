@@ -176,10 +176,10 @@ class ConceptGraphSeedServiceTest {
                 .findAny()).isEmpty();
     }
 
-    // ── B: no fabrication onto a practical spec point ──────────────
+    // ── B: the practical spec point carries exactly its authored dependency ──
 
     @Test
-    @DisplayName("Case B: a practical SP lands as official structure; its authored dependency stays on the PR node, nothing fabricated onto the SP")
+    @DisplayName("Case B: the practical SP lands as official structure and carries exactly the retargeted dependency — nothing else fabricated onto it")
     void unsettledSpecPointFabricatesNothing() {
         service.activate(UUID.randomUUID());
 
@@ -189,21 +189,26 @@ class ConceptGraphSeedServiceTest {
         assertThat(sp).isNotNull();
         assertThat(sp.validationStatus()).isEqualTo(KnowledgeNode.ValidationStatus.VALIDATED);
         assertThat(findEdge("4CH1-PR-05", "4CH1-2.14", RelationType.PART_OF)).isNotNull();
-        // …nothing graph-derived hangs on the SP ITSELF: concept anchors stay on
-        // the concept SPs and the practical's dependency edges live on the
-        // PR-05 node (batch-5 close), never fabricated onto the practical SP
+        // …the SP carries EXACTLY ONE graph-derived edge: the batch-5 authored
+        // dependency, which the 2026-10-01 practical-endpoint retarget sources at
+        // the practical's real spec statement (the operator-directed upstream
+        // lockstep of the hub mirror — superseding the sync-time PR-node placement)
+        assertThat(findEdge("4CH1-2.14", "4CH1-CON-O2-PERCENT-DETERMINATION",
+                RelationType.REQUIRES_PREREQUISITE)).isNotNull();
         assertThat(edgeByKey.values().stream()
                 .filter(e -> e.relationType() != RelationType.PART_OF
                         && (e.sourceId().equals(sp.id()) || e.targetId().equals(sp.id())))
-                .findAny()).isEmpty();
+                .count()).isEqualTo(1);
         assertThat(nodeByCode.keySet().stream()
                 .filter(code -> code.startsWith("4CH1-CON-") || code.startsWith("4CH1-MIS-"))
                 .map(nodeByCode::get)
                 .filter(n -> findEdge(n.code(), "4CH1-2.14", RelationType.PART_OF) != null))
                 .isEmpty();
-        // the batch-5 authored dependency is present where it belongs — on the practical
-        assertThat(findEdge("4CH1-PR-05", "4CH1-CON-O2-PERCENT-DETERMINATION",
-                RelationType.REQUIRES_PREREQUISITE)).isNotNull();
+        // the practical node itself carries no semantic edge — only its PART_OF anchor
+        assertThat(edgeByKey.values().stream()
+                .filter(e -> e.relationType() != RelationType.PART_OF
+                        && e.sourceId().equals(nodeByCode.get("4CH1-PR-05").id()))
+                .findAny()).isEmpty();
     }
 
     // ── C + E: canonical identity + idempotency ────────────────────
