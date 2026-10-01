@@ -20,6 +20,7 @@ import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.MisconceptionStateRepository;
 import com.syllabai.learner.SkillState;
 import com.syllabai.learner.SkillStateRepository;
+import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.decay.DecayParams;
 import com.syllabai.learner.decay.EbbinghausDecayService;
 import com.syllabai.learner.LearnerProperties;
@@ -91,6 +92,7 @@ public class ClassKnowledgeGraphService {
     private final KnowledgeGraphService graph;
     private final SkillStateRepository skillStates;
     private final MisconceptionStateRepository misconceptionStates;
+    private final BdtEngine bdtEngine;
     private final TeachingCoverageRepository coverage;
     private final ClassMemberRepository members;
     private final UserRepository users;
@@ -102,6 +104,7 @@ public class ClassKnowledgeGraphService {
     public ClassKnowledgeGraphService(KnowledgeGraphService graph,
                                       SkillStateRepository skillStates,
                                       MisconceptionStateRepository misconceptionStates,
+                                      BdtEngine bdtEngine,
                                       TeachingCoverageRepository coverage,
                                       ClassMemberRepository members,
                                       UserRepository users,
@@ -112,6 +115,7 @@ public class ClassKnowledgeGraphService {
         this.graph = graph;
         this.skillStates = skillStates;
         this.misconceptionStates = misconceptionStates;
+        this.bdtEngine = bdtEngine;
         this.coverage = coverage;
         this.members = members;
         this.users = users;
@@ -356,7 +360,7 @@ public class ClassKnowledgeGraphService {
                 }
                 misconceptions.add(new StudentMisconceptionView(
                         miscoNode.id(), miscoNode.code(), miscoNode.title(),
-                        m.probability(), m.probability() >= activeThreshold));
+                        relaxed(m), relaxed(m) >= activeThreshold));
             }
             List<StudentEvidenceItemView> evidence = new ArrayList<>();
             for (Attempt a : recentByLearner.getOrDefault(learnerId, List.of())) {
@@ -531,7 +535,7 @@ public class ClassKnowledgeGraphService {
             java.util.Set<UUID> affected = new java.util.HashSet<>();
             for (NodeView misco : misconceptionsOf.getOrDefault(node.id(), List.of())) {
                 for (MisconceptionState m : miscoByNode.getOrDefault(misco.id(), List.of())) {
-                    if (m.probability() >= activeThreshold) {
+                    if (relaxed(m) >= activeThreshold) {
                         affected.add(m.learnerId());
                     }
                 }
@@ -556,6 +560,18 @@ public class ClassKnowledgeGraphService {
     /** the V39 invariant as a predicate — the exact spec-point gate */
     private static boolean isSpecPoint(NodeView node) {
         return "SUBTOPIC".equals(node.type()) && node.applicability() != null;
+    }
+
+    /**
+     * MED-2/ADR-032: staleness-relaxed P(held) for a stored misconception row —
+     * recomputed from the (P_e, lastEvidenceAt) anchor on every call, never
+     * persisted. Mirrors {@link LearnerKnowledgeGraphService} semantics so the
+     * class lens and the learner lens agree on what "active" means.
+     */
+    private double relaxed(MisconceptionState m) {
+        var bdt = learnerProperties.bdt();
+        return bdtEngine.relaxedToPrior(m.probability(), bdt.prior(), m.lastEvidenceAt(),
+                java.time.Instant.now(), java.time.Duration.ofDays(bdt.stalenessTauDays()));
     }
 
     private static double round(double v) {

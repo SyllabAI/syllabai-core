@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.learner.LearnerModelService;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.SkillState;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext;
@@ -54,7 +55,7 @@ class LearnerContextAssemblerTest {
         when(learnerModel.skillStates(learnerId)).thenReturn(List.of(
                 skill(topicId, 0.72, 0.31),
                 skill(UUID.randomUUID(), 0.9, null)));     // irrelevant node — filtered out
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of(
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(readings(
                 misconception(misconceptionId, 0.75),
                 misconception(UUID.randomUUID(), 0.1)));   // inactive — filtered out
 
@@ -71,7 +72,7 @@ class LearnerContextAssemblerTest {
     @DisplayName("no prior evidence renders honestly, never a fabricated profile")
     void noEvidenceRendersHonestly() {
         when(learnerModel.skillStates(learnerId)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         ContextAssembler.TutorContext context =
                 assembler.assemble(knowledge, List.of(), learnerId);
@@ -99,5 +100,12 @@ class LearnerContextAssemblerTest {
         field.setAccessible(true);
         field.set(state, probability);
         return state;
+    }
+
+    /** ADR-032 stub helper (fresh evidence): relaxed value equals the anchored posterior */
+    private static java.util.List<MisconceptionReading> readings(MisconceptionState... states) {
+        return java.util.Arrays.stream(states)
+                .map(ms -> new MisconceptionReading(ms, ms.probability()))
+                .toList();
     }
 }

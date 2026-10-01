@@ -26,7 +26,7 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
-import com.syllabai.learner.MisconceptionState;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.shared.events.ClaInteractionEvent;
@@ -522,8 +522,8 @@ public class ClaService {
                 .ifPresent(s -> sb.append("- measured mastery of '").append(context.topicTitle())
                         .append("': ").append(String.format(Locale.ROOT, "%.2f", s.mastery())).append('\n'));
         state.misconceptions().stream()
-                .filter(m -> m.probability() >= 0.5)
-                .forEach(m -> sb.append("- active misconception flagged on this topic (instructional "
+                .filter(r -> r.effective() >= 0.5)   // ADR-032: staleness-relaxed probability
+                .forEach(r -> sb.append("- active misconception flagged on this topic (instructional "
                         + "strategy selected from evidence)\n"));
         if (sb.indexOf("- ") < 0) {
             return lessonLine == null ? none : none + "\n" + lessonLine;

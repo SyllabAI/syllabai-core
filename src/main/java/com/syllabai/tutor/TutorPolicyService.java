@@ -70,9 +70,11 @@ public class TutorPolicyService {
         InterventionPlan selected;
         if (strongest != null) selected = planFor(strongest);
         else {
-            boolean activeMisconception = learnerModel.misconceptionStates(learnerId).stream()
-                    .anyMatch(m -> m.probability() >= ACTIVE_MISCONCEPTION_THRESHOLD
-                            && misconceptions.stream().anyMatch(s -> s.nodeId().equals(m.misconceptionNodeId())));
+            // MED-2/ADR-032: gate on the staleness-relaxed probability, not the
+            // raw anchored posterior — stale evidence loses prescribing force
+            boolean activeMisconception = learnerModel.misconceptionReadings(learnerId).stream()
+                    .anyMatch(r -> r.effective() >= ACTIVE_MISCONCEPTION_THRESHOLD
+                            && misconceptions.stream().anyMatch(s -> s.nodeId().equals(r.state().misconceptionNodeId())));
             selected = activeMisconception
                     ? plan(InterventionType.MISCONCEPTION_REMEDIATION, "active BDT misconception on a matched topic",
                     List.of("Address the misconception explicitly.", "Contrast it with the correct idea using source evidence.", "Finish with a brief verification question."))

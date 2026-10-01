@@ -117,14 +117,14 @@ public class SmartLessonService {
         this.attempts = attempts;
     }
 
-    /** an attached misconception whose BDT probability is at/above the active threshold */
-    private record ActiveMisconception(NodeView node, MisconceptionState state) { }
+    /** an attached misconception whose staleness-relaxed BDT probability is at/above the active threshold (ADR-032) */
+    private record ActiveMisconception(NodeView node, MisconceptionReading reading) { }
 
     /** newest-first comparison over misconception evidence timestamps (nulls last) */
     private static Comparator<ActiveMisconception> freshness() {
         return (a, b) -> {
-            Instant la = a.state().lastEvidenceAt();
-            Instant lb = b.state().lastEvidenceAt();
+            Instant la = a.reading().state().lastEvidenceAt();
+            Instant lb = b.reading().state().lastEvidenceAt();
             if (la == null && lb == null) {
                 return 0;
             }
@@ -149,7 +149,7 @@ public class SmartLessonService {
             Map<UUID, NodeView> byId,
             Map<String, NodeView> byCode,
             Map<UUID, SkillState> skills,
-            Map<UUID, MisconceptionState> misconceptions,
+            Map<UUID, MisconceptionReading> misconceptions,
             Map<UUID, Double> effective,
             List<ReviewSchedule> pendingReviews,
             List<KnowledgeGraphService.PrerequisiteRelation> relations,
@@ -183,10 +183,10 @@ public class SmartLessonService {
                 skills.put(s.nodeId(), s);
             }
         }
-        Map<UUID, MisconceptionState> misconceptions = new HashMap<>();
-        for (MisconceptionState m : learnerModel.misconceptionStates(learnerId)) {
-            if (byId.containsKey(m.misconceptionNodeId())) {
-                misconceptions.put(m.misconceptionNodeId(), m);
+        Map<UUID, MisconceptionReading> misconceptions = new HashMap<>();
+        for (MisconceptionReading r : learnerModel.misconceptionReadings(learnerId)) {
+            if (byId.containsKey(r.state().misconceptionNodeId())) {
+                misconceptions.put(r.state().misconceptionNodeId(), r);
             }
         }
         Map<UUID, Double> effective = new HashMap<>();
@@ -260,7 +260,7 @@ public class SmartLessonService {
     /** misconception panel: rows for every attached misconception + remediation target */
     private List<MisconceptionStatusView> misconceptionPanel(NodeView topic,
                                                              Map<String, NodeView> byCode,
-                                                             Map<UUID, MisconceptionState> misconceptions) {
+                                                             Map<UUID, MisconceptionReading> misconceptions) {
         List<MisconceptionStatusView> rows = new ArrayList<>();
         if (topic.children() == null) {
             return rows;
@@ -269,7 +269,7 @@ public class SmartLessonService {
             if (!"MISCONCEPTION".equals(child.type())) {
                 continue;
             }
-            MisconceptionState m = misconceptions.get(child.id());
+            MisconceptionReading r = misconceptions.get(child.id());
             String remediation = null;
             for (ConceptDependencyGraph.Edge edge : conceptGraph.edges(
                     SemanticRelation.REMEDIATED_BY)) {
@@ -282,8 +282,8 @@ public class SmartLessonService {
                 }
             }
             rows.add(new MisconceptionStatusView(child.id(), child.code(), child.title(),
-                    m == null ? null : m.probability(),
-                    m != null && m.probability() >= learnerProperties.bdt().activeThreshold(),
+                    r == null ? null : r.effective(),
+                    r != null && r.effective() >= learnerProperties.bdt().activeThreshold(),
                     remediation));
         }
         rows.sort(Comparator.comparing(MisconceptionStatusView::code,
@@ -365,23 +365,24 @@ public class SmartLessonService {
                 if (!"MISCONCEPTION".equals(child.type())) {
                     continue;
                 }
-                MisconceptionState m = ctx.misconceptions().get(child.id());
-                if (m == null || m.probability() < learnerProperties.bdt().activeThreshold()) {
+                MisconceptionReading r = ctx.misconceptions().get(child.id());
+                if (r == null || r.effective() < learnerProperties.bdt().activeThreshold()) {
                     continue;
                 }
-                activeMisconceptions.add(new ActiveMisconception(child, m));
+                activeMisconceptions.add(new ActiveMisconception(child, r));
             }
         }
         activeMisconceptions.sort(Comparator
-                .comparingDouble((ActiveMisconception a) -> a.state().probability()).reversed()
+                .comparingDouble((ActiveMisconception a) -> a.reading().effective()).reversed()
                 .thenComparing(freshness())
                 .thenComparing(a -> a.node().code()));
         if (!activeMisconceptions.isEmpty()) {
             ActiveMisconception strongest = activeMisconceptions.get(0);
-            MisconceptionState strongestState = strongest.state();
+            MisconceptionReading strongestReading = strongest.reading();
+            MisconceptionState strongestState = strongestReading.state();
             NodeView strongestMisconception = strongest.node();
             evidence.add(new EvidenceFactView("misconception " + strongestMisconception.code(),
-                    "probability " + fmt(strongestState.probability()) + " from "
+                    "probability " + fmt(strongestReading.effective()) + " from "
                             + strongestState.evidenceCount() + " evidence item(s), last evidence "
                             + strongestState.lastEvidenceAt()));
             // validated corrective concept?
@@ -393,7 +394,7 @@ public class SmartLessonService {
                         return practiceAction(learnerId, ActionType.STUDY_CORRECTIVE,
                                 ReasonCode.MISCONCEPTION_REMEDIATION, corrective,
                                 "Misconception \"" + strongestMisconception.title()
-                                        + "\" (probability " + fmt(strongestState.probability())
+                                        + "\" (probability " + fmt(strongestReading.effective())
                                         + ", last evidence " + strongestState.lastEvidenceAt()
                                         + ") — validated remediation: study "
                                         + corrective.code() + " (" + corrective.title()
@@ -405,7 +406,7 @@ public class SmartLessonService {
                     strongestMisconception.id(), strongestMisconception.code(),
                     strongestMisconception.title(), null, 0,
                     "Misconception \"" + strongestMisconception.title() + "\" is active "
-                            + "(probability " + fmt(strongestState.probability()) + " from "
+                            + "(probability " + fmt(strongestReading.effective()) + " from "
                             + strongestState.evidenceCount() + " evidence items, last evidence "
                             + strongestState.lastEvidenceAt() + ") — ask the Tutor"
                             + " for a grounded explanation before practising");
@@ -848,9 +849,9 @@ public class SmartLessonService {
         if (topic.children() != null) {
             for (NodeView child : topic.children()) {
                 if ("MISCONCEPTION".equals(child.type())) {
-                    MisconceptionState m = ctx.misconceptions().get(child.id());
-                    if (m != null && (misProb == null || m.probability() > misProb)) {
-                        misProb = m.probability();
+                    MisconceptionReading r = ctx.misconceptions().get(child.id());
+                    if (r != null && (misProb == null || r.effective() > misProb)) {
+                        misProb = r.effective();
                     }
                 }
             }

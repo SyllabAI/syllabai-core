@@ -26,6 +26,7 @@ import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.SkillState;
 import com.syllabai.shared.events.ClaInteractionEvent;
@@ -323,7 +324,10 @@ class ClaServiceTest {
                 Instant.now());
         when(tools.learnerState(eq(LEARNER), any())).thenReturn(
                 new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
-                        new OwnLearnerState(List.of(skill), List.of(mis))));
+                        // ADR-032: the tool surface carries staleness-relaxed readings;
+                        // fresh evidence relaxes to the anchored posterior itself
+                        new OwnLearnerState(List.of(skill),
+                                List.of(new MisconceptionReading(mis, mis.probability())))));
 
         service.contextualAsk(LEARNER, ResourceContext.Kind.KG_TOPIC, ROOT, TOPIC, null, null, null, null, ResponseMode.EXPLAIN, "explain this");
 

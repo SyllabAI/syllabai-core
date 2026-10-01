@@ -48,12 +48,17 @@ public record LearnerProperties(
     }
 
     public record Bdt(double prior, double selectIfHeld, double selectIfNotHeld,
-                      double activeThreshold) {
+                      double activeThreshold, int stalenessTauDays) {
         public Bdt {
             if (prior <= 0) prior = 0.3;
             if (selectIfHeld <= 0) selectIfHeld = 0.7;
             if (selectIfNotHeld <= 0) selectIfNotHeld = 0.1;
             if (activeThreshold <= 0) activeThreshold = 0.5;
+            // MED-2/ADR-032: how fast stale BDT evidence relaxes toward the prior.
+            // 180d = a stale diagnosis loses prescribing force over ~a term-to-year
+            // horizon — gentler than the fastest mastery band (30d) because beliefs
+            // outlive facts; recalibration (S2) may retune.
+            if (stalenessTauDays <= 0) stalenessTauDays = 180;
         }
 
         public com.syllabai.learner.bdt.BdtParams toParams() {
@@ -81,7 +86,7 @@ public record LearnerProperties(
     public LearnerProperties {
         if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1);
         if (decay == null) decay = new Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6);
-        if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5);
+        if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5, 180);
         if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
     }
 }

@@ -37,7 +37,7 @@ class LearnerKnowledgeGraphServiceTest {
     private final LearnerProperties properties = new LearnerProperties(
             null,
             new LearnerProperties.Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6),
-            new LearnerProperties.Bdt(0.3, 0.7, 0.1, 0.5),
+            new LearnerProperties.Bdt(0.3, 0.7, 0.1, 0.5, 180),
             null);
 
     private final LearnerKnowledgeGraphService service = new LearnerKnowledgeGraphService(
@@ -190,7 +190,7 @@ class LearnerKnowledgeGraphServiceTest {
         when(graph.treeWithMisconceptions(rootId)).thenReturn(defaultTree());
         when(graph.prerequisiteRelations(rootId)).thenReturn(List.of());
         when(learnerModel.skillStates(learnerId)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 learnerId, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
 
@@ -223,8 +223,8 @@ class LearnerKnowledgeGraphServiceTest {
         MisconceptionState misconceptionState =
                 new MisconceptionState(learnerId, misconceptionId, 0.3, twoDaysAgo);
         misconceptionState.update(0.75, twoDaysAgo);
-        when(learnerModel.misconceptionStates(learnerId))
-                .thenReturn(List.of(misconceptionState));
+        when(learnerModel.misconceptionReadings(learnerId))
+                .thenReturn(readings(List.of(misconceptionState)));
 
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 learnerId, ReviewSchedule.Status.PENDING)).thenReturn(List.of(
@@ -273,5 +273,17 @@ class LearnerKnowledgeGraphServiceTest {
 
     private static NodeWithStateView node(LearnerKnowledgeGraphView view, UUID id) {
         return view.nodes().stream().filter(n -> n.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    /** ADR-032 stub helper: fresh-evidence semantics — relaxed value equals the anchored posterior */
+    /** ADR-032 stub helper (list overload): fresh-evidence semantics — relaxed equals anchored */
+    private static java.util.List<MisconceptionReading> readings(java.util.List<MisconceptionState> states) {
+        return readings(states.toArray(new MisconceptionState[0]));
+    }
+
+    private static java.util.List<MisconceptionReading> readings(MisconceptionState... states) {
+        return java.util.Arrays.stream(states)
+                .map(s -> new MisconceptionReading(s, s.probability()))
+                .toList();
     }
 }

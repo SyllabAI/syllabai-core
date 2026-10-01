@@ -11,6 +11,7 @@ import com.syllabai.diagnostic.StruggleInference;
 import com.syllabai.diagnostic.StruggleInferenceRepository;
 import com.syllabai.diagnostic.StruggleType;
 import com.syllabai.learner.LearnerModelService;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.shared.events.TutorInterventionSelectedEvent;
 import java.lang.reflect.Field;
@@ -77,6 +78,11 @@ class TutorPolicyServiceTest {
         inference.applyTeacherOverride(decision, UUID.randomUUID(), Instant.now());
     }
 
+    /** ADR-032 stub: fresh evidence — the relaxed value equals the anchored posterior */
+    private MisconceptionReading reading(MisconceptionState state) {
+        return new MisconceptionReading(state, state.probability());
+    }
+
     private TutorPolicyService.InterventionPlan select() {
         return policy.select(learnerId, topics, signals);
     }
@@ -91,7 +97,7 @@ class TutorPolicyServiceTest {
         assertThat(plan.type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
         assertThat(plan.rationale()).isEqualTo("anonymous request");
         verify(inferences, times(0)).findByLearnerIdAndExpiresAtAfterAndSupersededAtIsNullOrderByProbabilityDescGeneratedAtDesc(any(), any());
-        verify(learnerModel, times(0)).misconceptionStates(any());
+        verify(learnerModel, times(0)).misconceptionReadings(any());
     }
 
     // -- precedence 1: inference threshold ----------------------------------
@@ -100,7 +106,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("inference at 0.65 (boundary) drives the intervention")
     void thresholdBoundaryFires() {
         activeInferences(inference(StruggleType.PREREQUISITE_GAP, 0.65, Instant.now()));
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.PREREQUISITE_REVIEW);
     }
@@ -109,7 +115,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("inference at 0.649 (below boundary) does not drive the intervention")
     void thresholdBoundaryDoesNotFire() {
         activeInferences(inference(StruggleType.PREREQUISITE_GAP, 0.649, Instant.now()));
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
     }
@@ -117,7 +123,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.Test
     @org.junit.jupiter.api.DisplayName("type mapping: PREREQUISITE_GAP / EXAM_LITERACY / METACOGNITIVE interventions")
     void typeMapping() {
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
         activeInferences(inference(StruggleType.PREREQUISITE_GAP, 0.9, Instant.now()));
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.PREREQUISITE_REVIEW);
 
@@ -131,7 +137,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.Test
     @org.junit.jupiter.api.DisplayName("strongest inference wins: 0.9 beats 0.7 regardless of order")
     void strongestWins() {
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
         // repository orders probability DESC; policy takes the first qualifying row
         activeInferences(
                 inference(StruggleType.EXAM_LITERACY, 0.9, Instant.now()),
@@ -147,7 +153,7 @@ class TutorPolicyServiceTest {
                 StruggleType.PREREQUISITE_GAP, "subtype", 0.95, Map.of(), "rules-v0.2",
                 Instant.now(), Instant.now().plus(7, ChronoUnit.DAYS));
         activeInferences(elsewhere);
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
     }
@@ -156,7 +162,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("unsupported struggle type (MOTIVATIONAL 0.9) falls back to explanation, never a fabricated intervention")
     void unsupportedTypeFallsBack() {
         activeInferences(inference(StruggleType.MOTIVATIONAL, 0.9, Instant.now()));
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         TutorPolicyService.InterventionPlan plan = select();
         assertThat(plan.type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
@@ -169,8 +175,8 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("active misconception overrides generic low-mastery explanation")
     void misconceptionOverridesExplanation() {
         activeInferences();   // no qualifying inference
-        when(learnerModel.misconceptionStates(learnerId))
-                .thenReturn(List.of(misconception(0.50)));
+        when(learnerModel.misconceptionReadings(learnerId))
+                .thenReturn(List.of(reading(misconception(0.50))));
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.MISCONCEPTION_REMEDIATION);
     }
@@ -179,8 +185,36 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("boundary: misconception at 0.49 is not active — generic explanation")
     void misconceptionBoundary() {
         activeInferences();
-        when(learnerModel.misconceptionStates(learnerId))
-                .thenReturn(List.of(misconception(0.49)));
+        when(learnerModel.misconceptionReadings(learnerId))
+                .thenReturn(List.of(reading(misconception(0.49))));
+
+        assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("ADR-032: a year-old 0.9 diagnosis relaxes below the threshold — no remediation")
+    void staleMisconceptionNoLongerTriggersRemediation() {
+        activeInferences();   // no qualifying inference
+        MisconceptionState stale;
+        try {
+            stale = new MisconceptionState(learnerId, misconceptionId, 0.3,
+                    Instant.now().minus(java.time.Duration.ofDays(365)));
+            Field field = MisconceptionState.class.getDeclaredField("probability");
+            field.setAccessible(true);
+            field.set(stale, 0.90);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        // the funnel computes the relaxed value from the anchor — same formula here
+        MisconceptionReading staleReading = new MisconceptionReading(stale,
+                new com.syllabai.learner.bdt.BdtEngine().relaxedToPrior(
+                        stale.probability(), 0.3, stale.lastEvidenceAt(),
+                        Instant.now(), java.time.Duration.ofDays(180)));
+        org.assertj.core.api.Assumptions.assumeThat(staleReading.effective())
+                .as("precondition: 365d staleness must relax 0.9 below the 0.5 threshold")
+                .isLessThan(0.5);
+        when(learnerModel.misconceptionReadings(learnerId))
+                .thenReturn(List.of(staleReading));
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
     }
@@ -198,7 +232,7 @@ class TutorPolicyServiceTest {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of(elsewhere));
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of(reading(elsewhere)));
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
     }
@@ -207,7 +241,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("precedence: qualifying inference (0.9) beats active misconception")
     void inferenceBeatsMisconception() {
         activeInferences(inference(StruggleType.PREREQUISITE_GAP, 0.9, Instant.now()));
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of(misconception(0.9)));
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of(reading(misconception(0.9))));
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.PREREQUISITE_REVIEW);
     }
@@ -220,7 +254,7 @@ class TutorPolicyServiceTest {
         StruggleInference weak = inference(StruggleType.PREREQUISITE_GAP, 0.30, Instant.now());
         override(weak, "confirmed");
         activeInferences(weak);
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.PREREQUISITE_REVIEW);
     }
@@ -231,7 +265,7 @@ class TutorPolicyServiceTest {
         StruggleInference strong = inference(StruggleType.PREREQUISITE_GAP, 0.95, Instant.now());
         override(strong, "rejected");
         activeInferences(strong);
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         assertThat(select().type()).isEqualTo(TutorPolicyService.InterventionType.EXPLANATION);
     }
@@ -242,7 +276,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("read path asks only for un-expired, un-superseded inferences (expiry enforced on reads)")
     void readContractEnforcedOnReads() {
         activeInferences();
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         select();
 
@@ -257,7 +291,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("deterministic: identical inputs produce the identical plan (repeated calls)")
     void deterministicSelection() {
         activeInferences(inference(StruggleType.EXAM_LITERACY, 0.8, Instant.parse("2026-09-01T00:00:00Z")));
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         TutorPolicyService.InterventionPlan first = select();
         TutorPolicyService.InterventionPlan second = select();
@@ -271,7 +305,7 @@ class TutorPolicyServiceTest {
     @org.junit.jupiter.api.DisplayName("every selection publishes a versioned TutorInterventionSelectedEvent")
     void telemetryEmitted() {
         activeInferences();
-        when(learnerModel.misconceptionStates(learnerId)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(learnerId)).thenReturn(List.of());
 
         select();
 

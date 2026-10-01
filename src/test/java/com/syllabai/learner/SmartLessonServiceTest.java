@@ -98,7 +98,7 @@ class SmartLessonServiceTest {
 
     private void givenNoEvidence() {
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of());
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of());
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of()));
         when(reviewSchedules.findByLearnerIdAndStatusOrderByDueAtAsc(
                 LEARNER, ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         when(engagements.findByLearnerIdAndOccurredAtGreaterThanEqualOrderByOccurredAtDesc(
@@ -240,8 +240,8 @@ class SmartLessonServiceTest {
         givenTree();
         givenNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(TOPIC_A, 4, 0.7)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
-                misconception(MIS_M1, 0.8)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
+                misconception(MIS_M1, 0.8))));
         ConceptDependencyGraph withEdge = ConceptDependencyGraph.of(List.of(
                 new RawEdge("M-A1", "REMEDIATED_BY", "U1-T3", "HUMAN_VALIDATED")),
                 Set.of("M-A1", "U1-T3"));
@@ -265,8 +265,8 @@ class SmartLessonServiceTest {
         givenTree();
         givenNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(TOPIC_A, 4, 0.7)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
-                misconception(MIS_M1, 0.8)));
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
+                misconception(MIS_M1, 0.8))));
 
         SmartLessonView lesson = service.lessonFor(LEARNER, ROOT, TOPIC_A);
 
@@ -542,9 +542,9 @@ class SmartLessonServiceTest {
         when(graph.prerequisiteRelations(ROOT)).thenReturn(List.of());
         givenNoEvidence();
         when(learnerModel.skillStates(LEARNER)).thenReturn(List.of(skill(TOPIC_A, 4, 0.7)));
-        when(learnerModel.misconceptionStates(LEARNER)).thenReturn(List.of(
+        when(learnerModel.misconceptionReadings(LEARNER)).thenReturn(readings(List.of(
                 misconception(MIS_M1, 0.8, NOW.minusSeconds(172800)),   // 2 days old
-                misconception(MIS_M2, 0.8, NOW.minusSeconds(600))));    // 10 minutes old
+                misconception(MIS_M2, 0.8, NOW.minusSeconds(600)))));    // 10 minutes old
 
         SmartLessonView lesson = service.lessonFor(LEARNER, ROOT, TOPIC_A);
 
@@ -655,5 +655,17 @@ class SmartLessonServiceTest {
 
         assertThat(lesson.action().reasonCode()).isEqualTo(ReasonCode.DUE_REVIEW);
         assertThat(lesson.action().reasonDetail()).contains("overdue by 3 day(s)");
+    }
+
+    /** ADR-032 stub helper: fresh-evidence semantics — relaxed value equals the anchored posterior */
+    /** ADR-032 stub helper (list overload): fresh-evidence semantics — relaxed equals anchored */
+    private static java.util.List<MisconceptionReading> readings(java.util.List<MisconceptionState> states) {
+        return readings(states.toArray(new MisconceptionState[0]));
+    }
+
+    private static java.util.List<MisconceptionReading> readings(MisconceptionState... states) {
+        return java.util.Arrays.stream(states)
+                .map(s -> new MisconceptionReading(s, s.probability()))
+                .toList();
     }
 }
