@@ -5,9 +5,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import com.syllabai.content.FetchService.FetchResult;
 import com.syllabai.content.EnumerateService.EnumerateResult;
 import com.syllabai.curriculum.CurriculumScopeResolver;
+import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.identity.CurrentUserId;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,17 @@ import org.springframework.web.bind.annotation.RestController;
  * unresolved active curriculum is an honest empty result, never an unscoped
  * query), and both are teacher/ops surfaces under the standard
  * {@code /api/v1/teacher/**} security posture.
+ *
+ * <p>ADR-030 follow-through — course-aware routing: every endpoint accepts an
+ * OPTIONAL {@code courseRef} (the same opaque hub-supplied reference the tutor
+ * ask carries since V53). A present ref resolves through
+ * {@code resolveForCourse} — exact ACTIVE code match plus the same owns-surface
+ * test — and an unresolved ref yields the SAME honest empty view as an
+ * unresolved global scope, with NO fallback to the global path. Absent/blank
+ * keeps the legacy {@code resolveActive} behavior byte-identical. The empty
+ * view contract is deliberately untouched (no cause header here — the resolver
+ * already logs every refusal; T-C31 observability stays the search endpoint's
+ * territory).</p>
  */
 @RestController
 @RequestMapping("/api/v1/teacher/content")
@@ -51,8 +64,9 @@ public class RoutingController {
      */
     @GetMapping("/fetch")
     public FetchView fetch(@CurrentUserId UUID requesterId,
-                           @RequestParam @NotBlank String query) {
-        return curriculumScopes.resolveActive(requesterId)
+                           @RequestParam @NotBlank String query,
+                           @RequestParam(required = false) String courseRef) {
+        return resolveScope(requesterId, courseRef)
                 .map(scope -> FetchView.from(fetch.fetch(query, scope)))
                 .orElse(FetchView.empty());
     }
@@ -64,8 +78,9 @@ public class RoutingController {
      */
     @GetMapping("/enumerate")
     public EnumerateView enumerate(@CurrentUserId UUID requesterId,
-                                   @RequestParam @NotBlank String query) {
-        return curriculumScopes.resolveActive(requesterId)
+                                   @RequestParam @NotBlank String query,
+                                   @RequestParam(required = false) String courseRef) {
+        return resolveScope(requesterId, courseRef)
                 .map(scope -> EnumerateView.from(enumerate.enumerate(query, scope)))
                 .orElse(EnumerateView.empty());
     }
@@ -82,12 +97,24 @@ public class RoutingController {
                                              @RequestParam(required = false) Integer yearTo,
                                              @RequestParam(required = false) Integer marks,
                                              @RequestParam(required = false) String questionType,
-                                             @RequestParam(defaultValue = "topic") String axis) {
-        return curriculumScopes.resolveActive(requesterId)
+                                             @RequestParam(defaultValue = "topic") String axis,
+                                             @RequestParam(required = false) String courseRef) {
+        return resolveScope(requesterId, courseRef)
                 .map(scope -> EnumerateView.from(enumerate.enumerateStructured(
                         nodeCode, nodeTitle, yearFrom, yearTo, marks, questionType,
                         "spec".equalsIgnoreCase(axis), scope)))
                 .orElse(EnumerateView.empty());
+    }
+
+    /** Shared resolution tail of the ADR-030 follow-through: a blank/absent
+     *  ref keeps the global single-scope path (pilot compatibility is a design
+     *  decision, not a fallback); a present ref resolves fail-closed per
+     *  course — zero or ambiguous owners refuse, never a wrong-corpus route. */
+    private Optional<CurriculumScope> resolveScope(
+            UUID requesterId, String courseRef) {
+        return (courseRef == null || courseRef.isBlank())
+                ? curriculumScopes.resolveActive(requesterId)
+                : curriculumScopes.resolveForCourse(courseRef.strip());
     }
 
     // ── views ───────────────────────────────────────────────────────────────

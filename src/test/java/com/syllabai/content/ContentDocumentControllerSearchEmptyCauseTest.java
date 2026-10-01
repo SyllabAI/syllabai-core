@@ -70,7 +70,7 @@ class ContentDocumentControllerSearchEmptyCauseTest {
                         "test-embed", 0.9)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
-                controller.search(REQUESTER, "electrolysis", Document.Kind.MARK_SCHEME, 10);
+                controller.search(REQUESTER, "electrolysis", Document.Kind.MARK_SCHEME, 10, null);
 
         assertThat(response.getBody()).hasSize(1);
         assertThat(response.getHeaders().getFirst(
@@ -87,7 +87,7 @@ class ContentDocumentControllerSearchEmptyCauseTest {
                 .thenReturn(new SearchEmptyDiagnostics(30, 30, 0, 0));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
-                controller.search(REQUESTER, "electrolysis", Document.Kind.MARK_SCHEME, 10);
+                controller.search(REQUESTER, "electrolysis", Document.Kind.MARK_SCHEME, 10, null);
 
         assertThat(response.getBody()).isEmpty();
         assertThat(response.getHeaders().getFirst(
@@ -102,7 +102,7 @@ class ContentDocumentControllerSearchEmptyCauseTest {
         when(scopes.resolveActive(REQUESTER)).thenReturn(Optional.empty());
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
-                controller.search(REQUESTER, "electrolysis", null, 10);
+                controller.search(REQUESTER, "electrolysis", null, 10, null);
 
         assertThat(response.getBody()).isEmpty();
         assertThat(response.getHeaders().getFirst(
