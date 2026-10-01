@@ -64,7 +64,7 @@ class ContentDocumentControllerCourseSearchTest {
         when(scopes.resolveForCourse(REF)).thenReturn(Optional.of(SCOPE));
         when(vectors.searchServingEligible(any(float[].class), any(), eq(CV_ID), anyInt()))
                 .thenReturn(List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
-                        "doc-1", "MARK_SCHEME", 0, "content", 1, 2, List.of(),
+                        1, "doc-1", "MARK_SCHEME", 0, "content", 1, 2, List.of(),
                         "test-embed", 0.9)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
@@ -99,7 +99,7 @@ class ContentDocumentControllerCourseSearchTest {
         when(scopes.resolveActive(REQUESTER)).thenReturn(Optional.of(SCOPE));
         when(vectors.searchServingEligible(any(float[].class), any(), eq(CV_ID), anyInt()))
                 .thenReturn(List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
-                        "doc-2", "NOTES", 0, "content", 1, 2, List.of(),
+                        1, "doc-2", "NOTES", 0, "content", 1, 2, List.of(),
                         "test-embed", 0.8)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =
@@ -118,7 +118,7 @@ class ContentDocumentControllerCourseSearchTest {
         when(scopes.resolveActive(REQUESTER)).thenReturn(Optional.of(SCOPE));
         when(vectors.searchServingEligible(any(float[].class), any(), eq(CV_ID), anyInt()))
                 .thenReturn(List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
-                        "doc-3", "NOTES", 0, "content", 1, 2, List.of(),
+                        1, "doc-3", "NOTES", 0, "content", 1, 2, List.of(),
                         "test-embed", 0.7)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =

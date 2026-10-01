@@ -76,7 +76,7 @@ class ContentRetrievalServiceTest {
     void happyPath() {
         when(provider.getIfAvailable()).thenReturn(recording);
         List<ChunkHit> expected = List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
-                "doc-1", "MARK_SCHEME", 0, "content", 1, 1, List.of("e0"),
+                1, "doc-1", "MARK_SCHEME", 0, "content", 1, 1, List.of("e0"),
                 "gemini-embedding-001", 0.98));
         when(vectors.searchServingEligible(any(), eq(Document.Kind.MARK_SCHEME), eq(CV_ID), eq(10)))
                 .thenReturn(expected);

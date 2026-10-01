@@ -13,10 +13,8 @@ import static org.mockito.Mockito.when;
 import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ChunkLexicalRepository;
 import com.syllabai.content.Document;
-import com.syllabai.content.DocumentRepository;
 import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -40,8 +38,7 @@ class Bm25RetrieverTest {
             UUID.fromString("00000000-0000-0000-0000-0000000000d1");
 
     private final ChunkLexicalRepository lexical = mock(ChunkLexicalRepository.class);
-    private final DocumentRepository documents = mock(DocumentRepository.class);
-    private final Bm25Retriever retriever = new Bm25Retriever(lexical, documents);
+    private final Bm25Retriever retriever = new Bm25Retriever(lexical);
 
     @Test
     @DisplayName("provider identity: bm25, available (V28 column is flyway-owned)")
@@ -69,10 +66,9 @@ class Bm25RetrieverTest {
     @Test
     @DisplayName("hits map to candidates: chunk id is the locator, score is native, no invented status")
     void hitsMapToCandidates() {
-        ChunkHit hit = new ChunkHit(CHUNK_ID, DOC_ROW_ID, "doc-1", "QUESTION_PAPER", 3,
+        ChunkHit hit = new ChunkHit(CHUNK_ID, DOC_ROW_ID, 2, "doc-1", "QUESTION_PAPER", 3,
                 "molten lead bromide conducts", 2, 2, List.of(), null, 1.75);
         when(lexical.searchServingEligible("electrolysis", Set.of(), CV_ID, 5)).thenReturn(List.of(hit));
-        when(documents.findById(DOC_ROW_ID)).thenReturn(Optional.empty());
 
         List<RetrievalCandidate> candidates =
                 retriever.retrieve(StructuredRetrievalQuery.of("electrolysis", SCOPE, 5));
@@ -83,7 +79,7 @@ class Bm25RetrieverTest {
         assertThat(c.evidenceLocator()).isEqualTo(CHUNK_ID.toString());
         assertThat(c.documentRowId()).isEqualTo(DOC_ROW_ID);
         assertThat(c.documentId()).isEqualTo("doc-1");
-        assertThat(c.docVersion()).isEqualTo(1); // honest default when the row is gone
+        assertThat(c.docVersion()).isEqualTo(2); // carried by the search join, not re-read per hit
         assertThat(c.knowledgeNodeId()).isNull();
         assertThat(c.nodeCode()).isNull();
         assertThat(c.content()).isEqualTo("molten lead bromide conducts");
@@ -96,7 +92,7 @@ class Bm25RetrieverTest {
     }
 
     @Test
-    @DisplayName("kinds and limit pass through; document version resolved from the repository")
+    @DisplayName("kinds and limit pass through")
     void passthroughAndVersionResolution() {
         when(lexical.searchServingEligible(anyString(), anySet(), any(UUID.class), any(Integer.class)))
                 .thenReturn(List.of());

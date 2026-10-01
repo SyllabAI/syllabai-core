@@ -77,12 +77,12 @@ public final class Run003B {
         SnapshotLoad load = loadSnapshot(jdbc, snapshot);
         CurriculumScope scope = load.scope();
 
-        // ── 3. the production arm (their fabric provider; DocumentRepository
-        //         stub → docVersion falls back to 1, the bench corpus) ────────
+        // ── 3. the production arm (their fabric provider; document version
+        //         is carried by the search SQL — the bench corpus is
+        //         doc_version 1) ─────────────────────────────────────────
         com.syllabai.retrieval.Bm25Retriever retriever =
                 new com.syllabai.retrieval.Bm25Retriever(
-                        new com.syllabai.content.ChunkLexicalRepository(jdbc),
-                        stubDocumentRepository());
+                        new com.syllabai.content.ChunkLexicalRepository(jdbc));
         ArmB arm = new ArmB(retriever, scope, load.paperStateByDocumentId());
 
         // ── 4. per-query scoring (chunk axis; resolution axis = named gap) ───
@@ -415,44 +415,6 @@ public final class Run003B {
         }
         return new SnapshotLoad(new CurriculumScope(scopeId, "BENCH-SNAP-001", Set.of()),
                 paperStateByDoc, docCount, snapshot.chunkCount(), paperCount);
-    }
-
-    private static com.syllabai.content.DocumentRepository stubDocumentRepository() {
-        // bench corpus is doc_version 1 — findById → empty makes Bm25Retriever's
-        // documentVersion fall back to 1 (the production code path, unmodified)
-        return (com.syllabai.content.DocumentRepository) java.lang.reflect.Proxy.newProxyInstance(
-                com.syllabai.content.DocumentRepository.class.getClassLoader(),
-                new Class<?>[]{com.syllabai.content.DocumentRepository.class},
-                (proxy, method, methodArgs) -> {
-                    switch (method.getName()) {
-                        case "findById":
-                            return java.util.Optional.empty();
-                        case "equals":
-                            return proxy == methodArgs[0];
-                        case "hashCode":
-                            return System.identityHashCode(proxy);
-                        case "toString":
-                            return "bench-stub-document-repository";
-                        default:
-                            Class<?> t = method.getReturnType();
-                            if (t == boolean.class) {
-                                return false;
-                            }
-                            if (t == int.class) {
-                                return 0;
-                            }
-                            if (t == long.class) {
-                                return 0L;
-                            }
-                            if (java.util.Optional.class == t) {
-                                return java.util.Optional.empty();
-                            }
-                            if (java.util.List.class == t) {
-                                return List.of();
-                            }
-                            return null;
-                    }
-                });
     }
 
     private static Map<String, Object> readJson(Path path) {

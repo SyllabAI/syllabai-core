@@ -150,7 +150,7 @@ public class ChunkVectorRepository {
         String literal = toVectorLiteral(queryVector);
         String kindFilter = kindFilter(kind);
         String sql = """
-                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                select c.id, c.document_row_id, d.doc_version, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
                        c.embedding_model, 1 - (c.embedding <=> ?::vector) as score
                 from document_chunks c
@@ -208,7 +208,7 @@ public class ChunkVectorRepository {
         String literal = toVectorLiteral(queryVector);
         String kindFilter = kindFilter(kind);
         String sql = """
-                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                select c.id, c.document_row_id, d.doc_version, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
                        c.embedding_model, 1 - (c.embedding <=> ?::vector) as score
                 from document_chunks c
@@ -299,6 +299,7 @@ public class ChunkVectorRepository {
         return new ChunkHit(
                 rs.getObject("id", UUID.class),
                 rs.getObject("document_row_id", UUID.class),
+                rs.getInt("doc_version"),
                 rs.getString("document_id"),
                 rs.getString("kind"),
                 rs.getInt("chunk_index"),
