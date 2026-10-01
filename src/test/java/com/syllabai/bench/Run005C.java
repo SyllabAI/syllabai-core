@@ -88,10 +88,26 @@ public final class Run005C {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** Ratified §8 v1.0 lines (§10 ruling 1: B-proxy ALL + 10% / +0.05 / +0.05). */
+    /** Ratified §8 v1.0 lines (§10 ruling 1: B-proxy ALL + 10% / +0.05 / +0.05). RETAINED
+     *  for the recorded-era reference column — v1.0 verdicts on recorded runs stand unchanged
+     *  (spec §8: new thresholds mean new runs; no recorded verdict is re-judged). */
     private static final double GATE_RECALL10 = 0.3249;
     private static final double GATE_MRR = 0.2964;
     private static final double GATE_NDCG10 = 0.4799;
+
+    /** Re-indexed §8 v1.1 bars (spec §8.1, T-C40 ②, 2026-10-01): DUAL-VIEW, derived from the
+     *  run-006-bproxy re-baseline (snap-006 × gold-v5) with the SAME arithmetic as v1.0 applied
+     *  per denominator view. The v1.0 bars were indexed to the Run-1 ALL-corpus baseline while a
+     *  compliant surface may only touch VALIDATED chunks — structurally unpassable, which is how
+     *  honest scoreboards decay into ritual. From 2026-10-01 gate arithmetic runs on BOTH views:
+     *  ALL bars on the served view (ruling 1 unchanged) AND VALIDATED bars on the compliant view;
+     *  promotion requires both. */
+    private static final double GATE_V11_ALL_RECALL10 = 0.1920;
+    private static final double GATE_V11_ALL_MRR = 0.1237;
+    private static final double GATE_V11_ALL_NDCG10 = 0.2316;
+    private static final double GATE_V11_VALIDATED_RECALL10 = 0.0734;
+    private static final double GATE_V11_VALIDATED_MRR = 0.1184;
+    private static final double GATE_V11_VALIDATED_NDCG10 = 0.1683;
 
     private Run005C() {
     }
@@ -282,7 +298,7 @@ public final class Run005C {
         //      = the served view) + prior-arm context ─────────────────────────
         final Map<String, Object> hvAggServed = hvPresent
                 ? ChunkSpecHvResolution.aggregate(hvRowsServed) : Map.of();
-        Map<String, Object> gate = gateArithmetic(servedOverall, violations,
+        Map<String, Object> gate = gateArithmetic(servedOverall, compliantOverall, violations,
                 hvPresent ? hvAggServed : null);
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("A0_run_002", overallOf(run002a0Results, "chunk_axis", "all_chunks"));
@@ -535,26 +551,49 @@ public final class Run005C {
         }
     }
 
-    /** Ratified §8 v1.0 arithmetic (ruling 1): evaluated on the ALL denominator = served view. */
+    /** §8 v1.1 arithmetic (spec §8.1, T-C40 ②): (a)(b)(c) evaluated on the ALL denominator
+     *  = served view against the v1.1 ALL bars (ruling 1 unchanged), PLUS the same three axes
+     *  evaluated on the compliant (VALIDATED-gated) view against the v1.1 VALIDATED bars —
+     *  an ALL-pass whose compliant view fails is the validation boundary converting the
+     *  learner's serving pool into the weaker one, and it blocks promotion, with a note, not
+     *  a waiver. v1.0 floors retained as a reference column; verdicts already recorded under
+     *  v1.0 are NOT re-judged. */
     private static Map<String, Object> gateArithmetic(Map<String, Object> servedOverall,
+                                                      Map<String, Object> compliantOverall,
                                                       int violations,
                                                       Map<String, Object> hvAggServed) {
         double recall10 = asDouble(servedOverall.get("recall@10"));
         double mrr = asDouble(servedOverall.get("mrr"));
         double ndcg10 = asDouble(servedOverall.get("ndcg@10"));
-        boolean a = recall10 >= GATE_RECALL10;
-        boolean b = mrr >= GATE_MRR;
-        boolean c = ndcg10 >= GATE_NDCG10;
+        double vRecall10 = asDouble(compliantOverall.get("recall@10"));
+        double vMrr = asDouble(compliantOverall.get("mrr"));
+        double vNdcg10 = asDouble(compliantOverall.get("ndcg@10"));
+        boolean a = recall10 >= GATE_V11_ALL_RECALL10;
+        boolean b = mrr >= GATE_V11_ALL_MRR;
+        boolean c = ndcg10 >= GATE_V11_ALL_NDCG10;
+        boolean va = vRecall10 >= GATE_V11_VALIDATED_RECALL10;
+        boolean vb = vMrr >= GATE_V11_VALIDATED_MRR;
+        boolean vc = vNdcg10 >= GATE_V11_VALIDATED_NDCG10;
         boolean f = violations == 0;
-        boolean promoted = a && b && c && f;
+        boolean promoted = a && b && c && va && vb && vc && f;
         Map<String, Object> gate = new LinkedHashMap<>();
-        gate.put("version", "spec §8 v1.0 (ratified 2026-09-17) + §10 ruling 1: gate arithmetic "
-                + "evaluated on the ALL denominator (the served view); floors = B-proxy ALL "
-                + "+10% relative / +0.05 absolute (0.2954→0.3249, 0.2464→0.2964, 0.4299→0.4799)");
-        gate.put("evaluated_on", "served view (ALL denominator)");
-        gate.put("a_recall@10", Map.of("value", recall10, "floor", GATE_RECALL10, "pass", a));
-        gate.put("b_mrr", Map.of("value", mrr, "floor", GATE_MRR, "pass", b));
-        gate.put("c_ndcg@10", Map.of("value", ndcg10, "floor", GATE_NDCG10, "pass", c));
+        gate.put("version", "spec §8 v1.1 re-index (2026-10-01, T-C40 ②, §8.1): dual-view bars from "
+                + "run-006-bproxy (snap-006 × gold-v5), B-proxy +10% relative / +0.05 absolute per view "
+                + "(ALL 0.1745→0.1920, 0.0737→0.1237, 0.1816→0.2316 · VALIDATED 0.0667→0.0734, "
+                + "0.0684→0.1184, 0.1183→0.1683); v1.0 lines retained as reference (0.2954→0.3249, "
+                + "0.2464→0.2964, 0.4299→0.4799); no recorded verdict re-judged");
+        gate.put("evaluated_on", "served view (ALL denominator, v1.1 ALL bars) + compliant view "
+                + "(v1.1 VALIDATED bars); promotion requires BOTH");
+        gate.put("a_recall@10", Map.of("value", recall10, "floor", GATE_V11_ALL_RECALL10, "pass", a));
+        gate.put("b_mrr", Map.of("value", mrr, "floor", GATE_V11_ALL_MRR, "pass", b));
+        gate.put("c_ndcg@10", Map.of("value", ndcg10, "floor", GATE_V11_ALL_NDCG10, "pass", c));
+        gate.put("a2_validated_recall@10", Map.of("value", vRecall10, "floor", GATE_V11_VALIDATED_RECALL10, "pass", va));
+        gate.put("b2_validated_mrr", Map.of("value", vMrr, "floor", GATE_V11_VALIDATED_MRR, "pass", vb));
+        gate.put("c2_validated_ndcg@10", Map.of("value", vNdcg10, "floor", GATE_V11_VALIDATED_NDCG10, "pass", vc));
+        gate.put("v1_0_reference", Map.of(
+                "a_recall@10", Map.of("floor", GATE_RECALL10, "pass", recall10 >= GATE_RECALL10),
+                "b_mrr", Map.of("floor", GATE_MRR, "pass", mrr >= GATE_MRR),
+                "c_ndcg@10", Map.of("floor", GATE_NDCG10, "pass", ndcg10 >= GATE_NDCG10)));
         if (hvAggServed != null && !hvAggServed.isEmpty()) {
             gate.put("d_spec_resolution", "SCORED (spec_resolution_hv): full-coverage "
                     + hvAggServed.get("spec_points_full_coverage_rate") + " · micro-average "
@@ -696,10 +735,14 @@ public final class Run005C {
                     .append(" |\n");
         }
 
-        md.append("\n## S8 gate arithmetic (ratified v1.0; ruling 1: ALL denominator = served view)\n\n");
-        md.append("- (a) Recall@10: **").append(fmtGate(gate, "a_recall@10")).append("\n");
-        md.append("- (b) MRR: **").append(fmtGate(gate, "b_mrr")).append("\n");
-        md.append("- (c) nDCG@10: **").append(fmtGate(gate, "c_ndcg@10")).append("\n");
+        md.append("\n## S8 gate arithmetic (§8 v1.1 re-index 2026-10-01, spec §8.1; ruling 1: ALL ")
+                .append("denominator = served view; VALIDATED bars on the compliant view; v1.0 reference retained)\n\n");
+        md.append("- (a) ALL bars, served view — Recall@10: **").append(fmtGate(gate, "a_recall@10")).append("\n");
+        md.append("- (b) ALL bars, served view — MRR: **").append(fmtGate(gate, "b_mrr")).append("\n");
+        md.append("- (c) ALL bars, served view — nDCG@10: **").append(fmtGate(gate, "c_ndcg@10")).append("\n");
+        md.append("- (a2) VALIDATED bars, compliant view — Recall@10: **").append(fmtGate(gate, "a2_validated_recall@10")).append("\n");
+        md.append("- (b2) VALIDATED bars, compliant view — MRR: **").append(fmtGate(gate, "b2_validated_mrr")).append("\n");
+        md.append("- (c2) VALIDATED bars, compliant view — nDCG@10: **").append(fmtGate(gate, "c2_validated_ndcg@10")).append("\n");
         md.append("- (d) SpecificationPoint resolution: not scoreable (zero chunk-to-SP ")
                 .append("HUMAN_VALIDATED rows — named data gap; nothing to regress).\n");
         md.append("- (e) p95 latency: not evaluable from records (A0 p95 not recorded); this run ")

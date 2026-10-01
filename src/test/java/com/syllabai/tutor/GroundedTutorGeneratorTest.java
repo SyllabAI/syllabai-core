@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.syllabai.infrastructure.llm.FakeLlmProvider;
 import com.syllabai.infrastructure.llm.LlmResponse;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -349,6 +350,25 @@ class GroundedTutorGeneratorTest {
         assertThat(GroundedTutorGenerator.sanitizeAnswer("", 2, open, close)).isEmpty();
         // a marker that would leave an empty answer is still just stripped
         assertThat(GroundedTutorGenerator.sanitizeAnswer("[9]", 2, open, close)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sanitizeAnswer sink (T-C40 ③b): stripped marker numbers reported, output byte-identical")
+    void sanitizeAnswerStrippedSink() {
+        String open = "<<<UNTRUSTED-AB2CD3E9>>>";
+        String close = "<<<END-UNTRUSTED-AB2CD3E9>>>";
+        List<Integer> stripped = new ArrayList<>();
+        String raw = "keep [1] and 【2】, drop [3] [0] 【44】 [2025]";
+        String viaSink = GroundedTutorGenerator.sanitizeAnswer(
+                raw, 2, open, close, stripped::add);
+        // output identical to the 4-arg form — only the observation is new
+        assertThat(viaSink).isEqualTo(GroundedTutorGenerator.sanitizeAnswer(raw, 2, open, close));
+        // exactly the out-of-range markers, in removal order; [2025] is content
+        // (4 digits — not a marker), in-range markers are never reported
+        assertThat(stripped).containsExactly(3, 0, 44);
+        // null sink = the historical silent behavior
+        assertThat(GroundedTutorGenerator.sanitizeAnswer(raw, 2, open, close, null))
+                .isEqualTo(viaSink);
     }
 
     @Test

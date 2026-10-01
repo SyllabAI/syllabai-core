@@ -149,4 +149,30 @@ class StreamSanitizerTest {
         assertThat(s.push(null)).isEmpty();
         assertThat(s.flush()).isEmpty();
     }
+
+    @Test
+    @DisplayName("T-C40 ③b: stripped out-of-range markers accumulate across deltas for the end-of-stream log")
+    void strippedCitationsAccumulate() {
+        StreamSanitizer s = sanitizer();
+        String out = StreamSanitizer.streamThrough(s, List.of(
+                "Claim [", "12] then ok [1]; tail 【9】"));
+        assertThat(out).isEqualTo("Claim  then ok [1]; tail ");
+        // exactly the out-of-range markers, in removal order (the mid-stream
+        // one at emit time, the tail one at flush); in-range [1] is not reported
+        assertThat(s.strippedCitations()).containsExactly(12, 9);
+    }
+
+    @Test
+    @DisplayName("T-C40 ③b: strippedCitations is empty when nothing was stripped, and is a defensive copy")
+    void strippedCitationsEmptyAndCopy() {
+        StreamSanitizer s = sanitizer();
+        StreamSanitizer.streamThrough(s, List.of("clean [1] text"));
+        assertThat(s.strippedCitations()).isEmpty();
+        s.push("bad [7] tail");
+        s.flush();
+        List<Integer> copy = s.strippedCitations();
+        assertThat(copy).containsExactly(7);
+        // the accessor hands out a copy — a caller cannot mutate the accumulator
+        assertThat(s.strippedCitations()).isNotSameAs(copy);
+    }
 }
