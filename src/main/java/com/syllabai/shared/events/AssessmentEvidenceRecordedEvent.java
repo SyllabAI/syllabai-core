@@ -16,6 +16,16 @@ import java.util.UUID;
  * @param attemptId        id of the persisted attempt
  * @param learnerId        user id of the learner
  * @param questionId       question that was attempted
+ * @param questionType     the question format's enum name — "MCQ_SINGLE",
+ *                         "SHORT_ANSWER" or "STRUCTURED" (S2/ADR-033: the
+ *                         learner model's emission model is format-aware — a
+ *                         4-option MCQ is guessable, a marked multi-part
+ *                         structured answer is not). Nullable only for legacy
+ *                         publishers that never knew the format; consumers fall
+ *                         back to the configured paper-default guess.
+ * @param optionCount      number of answer options on an MCQ_SINGLE question
+ *                         (the per-item guess base is 1/optionCount); 0 when
+ *                         the format is not MCQ or is unknown.
  * @param topicNodeIds     knowledge-graph nodes the question tests (primary first)
  * @param specPointNodeIds the question's mapped spec-point nodes (T-C18 mapping,
  *                         ADR-026/V30 {@code question_spec_points}) — the SAME
@@ -45,6 +55,8 @@ public record AssessmentEvidenceRecordedEvent(
         UUID attemptId,
         UUID learnerId,
         UUID questionId,
+        String questionType,
+        int optionCount,
         List<UUID> topicNodeIds,
         List<UUID> specPointNodeIds,
         boolean correctness,

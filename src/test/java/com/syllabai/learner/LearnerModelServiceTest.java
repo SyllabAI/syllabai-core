@@ -28,7 +28,8 @@ import org.springframework.context.ApplicationEventPublisher;
  * The BDT evidence contract the audit found missing: a correct answer must weaken
  * the misconceptions an item monitors (updateOnCorrect), while a tagged-distractor
  * choice strengthens them. Also covers the Mastery/Misconception events that feed
- * BKT_UPDATED / BDT_UPDATED telemetry.
+ * BKT_UPDATED / BDT_UPDATED telemetry, and the S2/ADR-033 format-aware emission
+ * resolution (the guess base is priced per question format).
  */
 class LearnerModelServiceTest {
 
@@ -53,8 +54,17 @@ class LearnerModelServiceTest {
     private AssessmentEvidenceRecordedEvent evidence(boolean correct,
                                                      List<UUID> expressed,
                                                      List<UUID> observed) {
+        // legacy shape: no format on the event — the paper-default emission path
+        return evidence(correct, null, 0, expressed, observed);
+    }
+
+    private AssessmentEvidenceRecordedEvent evidence(boolean correct, String questionType,
+                                                     int optionCount,
+                                                     List<UUID> expressed,
+                                                     List<UUID> observed) {
         return new AssessmentEvidenceRecordedEvent(
-                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(SPEC_POINT_1, SPEC_POINT_2), correct, 1, correct ? 1 : 0,
+                ATTEMPT, LEARNER, QUESTION, questionType, optionCount,
+                List.of(NODE), List.of(SPEC_POINT_1, SPEC_POINT_2), correct, 1, correct ? 1 : 0,
                 1000L, 3, false, false, expressed, observed, "test", WHEN);
     }
 
@@ -168,7 +178,7 @@ class LearnerModelServiceTest {
                 .thenReturn(Optional.empty());
 
         AssessmentEvidenceRecordedEvent event = new AssessmentEvidenceRecordedEvent(
-                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(NODE), true, 1, 1,
+                ATTEMPT, LEARNER, QUESTION, null, 0, List.of(NODE), List.of(NODE), true, 1, 1,
                 1000L, 3, false, false, List.of(), List.of(), "test", WHEN);
         service.onAssessmentEvidence(event);
 
@@ -195,5 +205,66 @@ class LearnerModelServiceTest {
         assertThat(event.expressed()).isTrue();
         assertThat(event.priorProbability()).isCloseTo(0.3, within(1e-9));
         assertThat(event.posteriorProbability()).isCloseTo(0.75, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("S2/ADR-033: a correct STRUCTURED answer is near-conclusive — not priced as a 1-in-4 guess")
+    void structuredCorrectAnswerIsCreditedAsNearConclusive() {
+        when(skillStates.findByLearnerIdAndNodeId(any(), any())).thenReturn(Optional.empty());
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, "STRUCTURED", 0, List.of(), List.of()));
+
+        ArgumentCaptor<List<SkillState>> saved = ArgumentCaptor.captor();
+        verify(skillStates).saveAll(saved.capture());
+        // posterior = 0.1*0.9 / (0.1*0.9 + 0.9*0.01) = 0.909091; + T on the remainder
+        // The format-blind model priced the SAME performance at 0.357 — a 2.6x under-credit.
+        assertThat(saved.getValue().get(0).mastery()).isCloseTo(0.9181818, within(1e-6));
+    }
+
+    @Test
+    @DisplayName("S2/ADR-033: the MCQ guess base is 1/optionCount — the paper's 0.25 is exactly the four-option value")
+    void mcqGuessBaseIsPerOptionCount() {
+        when(skillStates.findByLearnerIdAndNodeId(any(), any())).thenReturn(Optional.empty());
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, "MCQ_SINGLE", 5, List.of(), List.of()));
+
+        ArgumentCaptor<List<SkillState>> saved = ArgumentCaptor.captor();
+        verify(skillStates).saveAll(saved.capture());
+        // posterior = 0.1*0.9 / (0.1*0.9 + 0.9*0.2) = 1/3; + (1 - 1/3)*0.1 = 0.4 exactly
+        assertThat(saved.getValue().get(0).mastery()).isCloseTo(0.4, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("S2/ADR-033: MCQ_SINGLE with four options is identical to the paper-default path")
+    void fourOptionMcqMatchesThePaperDefault() {
+        SkillState state = new SkillState(LEARNER, NODE, 0.1131, WHEN);
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE)).thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, "MCQ_SINGLE", 4, List.of(), List.of()));
+
+        // same numbers as the untyped legacy pin above — 1/4 == 0.25 == paper default
+        assertThat(state.mastery()).isCloseTo(0.3832, within(1e-4));
+    }
+
+    @Test
+    @DisplayName("S2/ADR-033: a wrong STRUCTURED answer is no longer forgiven as a lucky guess")
+    void structuredWrongAnswerIsNotOverForgiven() {
+        SkillState state = new SkillState(LEARNER, NODE, 0.5, WHEN);
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE)).thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(false, "STRUCTURED", 0, List.of(), List.of()));
+
+        // posterior = 0.5*0.1 / (0.5*0.1 + 0.5*0.99) = 0.0917431; + T on the remainder
+        // (the format-blind model forgave it to 0.2062 — a wrong worked answer treated
+        // as if a quarter of non-knowers produce one)
+        assertThat(state.mastery()).isCloseTo(0.1825688, within(1e-6));
     }
 }

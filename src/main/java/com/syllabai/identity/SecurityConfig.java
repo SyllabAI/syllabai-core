@@ -85,6 +85,9 @@ public class SecurityConfig {
                                 "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/teacher/**").hasAnyRole("TEACHER", "ADMIN")
+                        // S2/ADR-033: the research calibration report aggregates
+                        // across ALL learners — never student-visible
+                        .requestMatchers("/api/v1/research/**").hasAnyRole("TEACHER", "ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
                         (request, response, authException) ->

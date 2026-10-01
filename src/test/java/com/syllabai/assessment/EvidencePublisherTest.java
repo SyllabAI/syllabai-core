@@ -7,6 +7,7 @@ import com.syllabai.TestIds;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
 import com.syllabai.sme.QuestionSpecPoint;
 import com.syllabai.sme.SmeQuestionSpecPointRepository;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -62,6 +63,39 @@ class EvidencePublisherTest {
         assertThat(event.attemptId()).isEqualTo(attempt.id());
         assertThat(event.learnerId()).isEqualTo(attempt.learnerId());
         assertThat(event.questionId()).isEqualTo(question.id());
+        // S2/ADR-033: the format rides the evidence — a structured answer is
+        // emitted as STRUCTURED with no option count (no guess surface)
+        assertThat(event.questionType()).isEqualTo("STRUCTURED");
+        assertThat(event.optionCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("S2/ADR-033: an MCQ event carries the format and the LIVE option count")
+    void mcqEventCarriesFormatAndLiveOptionCount() throws Exception {
+        Question mcq = new Question("q-mcq", Question.Type.MCQ_SINGLE, "stem", 1, 1, 60,
+                "pick", UUID.randomUUID(), Question.Provenance.SEED_DEMO);
+        TestIds.withId(mcq, UUID.randomUUID());
+        Field optionsField = Question.class.getDeclaredField("options");
+        optionsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<QuestionOption> options = (List<QuestionOption>) optionsField.get(mcq);
+        options.add(new QuestionOption(mcq, "A", "alpha", true, null, 1));
+        options.add(new QuestionOption(mcq, "B", "beta", false, null, 2));
+        options.add(new QuestionOption(mcq, "C", "gamma", false, null, 3));
+
+        Attempt mcqAttempt = new Attempt(UUID.randomUUID(), mcq, null, true, 1,
+                4000L, 3, false, false, "test");
+        TestIds.withId(mcqAttempt, UUID.randomUUID());
+        mcqAttempt.beginMarking();
+
+        publisher.publishMcq(mcqAttempt, mcq, List.of(), List.of(), List.of());
+
+        assertThat(published).hasSize(1);
+        AssessmentEvidenceRecordedEvent event = (AssessmentEvidenceRecordedEvent) published.get(0);
+        assertThat(event.questionType()).isEqualTo("MCQ_SINGLE");
+        // the learner model prices this item's guess base at 1/3 — the event must
+        // carry the live count, not a hardcoded four-option assumption
+        assertThat(event.optionCount()).isEqualTo(3);
     }
 
     @Test

@@ -67,6 +67,12 @@ public class EvidencePublisher {
                       List<UUID> expressedIds, List<UUID> observedIds) {
         events.publishEvent(new AssessmentEvidenceRecordedEvent(
                 attempt.id(), attempt.learnerId(), question.id(),
+                // S2/ADR-033: the format rides the evidence so the learner model's
+                // emission model can price guessability per format (an MCQ option
+                // list is a pure guess surface; a marked multi-part answer is not).
+                // Options are materialized in this transaction on both paths.
+                question.type().name(),
+                question.type() == Question.Type.MCQ_SINGLE ? question.options().size() : 0,
                 topicNodeIds(question, secondaryTopics),
                 specPointNodeIds(question),
                 correct, question.marks(), marksAwarded,

@@ -42,7 +42,7 @@ class TelemetryServiceTest {
 
     private AssessmentEvidenceRecordedEvent evidence(boolean selfDoubt) {
         return new AssessmentEvidenceRecordedEvent(
-                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(), false, 1, 0,
+                ATTEMPT, LEARNER, QUESTION, "MCQ_SINGLE", 4, List.of(NODE), List.of(), false, 1, 0,
                 1000L, 3, selfDoubt, false,
                 List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", WHEN);
     }
@@ -68,7 +68,7 @@ class TelemetryServiceTest {
     @DisplayName("attempt evidence with the OPTIONAL confidence null still appends (regression: Map.copyOf NPE 500'd POST /attempts)")
     void attemptSubmittedWithoutConfidence() {
         service.onAssessmentEvidence(new AssessmentEvidenceRecordedEvent(
-                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(), false, 1, 0,
+                ATTEMPT, LEARNER, QUESTION, "MCQ_SINGLE", 4, List.of(NODE), List.of(), false, 1, 0,
                 1000L, null, false, false,
                 List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", WHEN));
 

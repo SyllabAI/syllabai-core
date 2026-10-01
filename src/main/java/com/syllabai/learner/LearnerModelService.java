@@ -76,7 +76,14 @@ public class LearnerModelService {
     }
 
     private void updateMastery(AssessmentEvidenceRecordedEvent event) {
-        var bktParams = properties.bkt().toParams();
+        var bkt = properties.bkt();
+        // S2/ADR-033: the emission model is format-aware. The evidence event now
+        // carries the question format and option count, so guessability is priced
+        // per item — a marked structured answer is near-unguessable, a 4-option
+        // MCQ keeps the paper's 0.25 base, a 5-option MCQ gets 0.2. Events from
+        // publishers that never knew the format (null/blank type or an unknown
+        // name) keep the paper-default behaviour exactly.
+        var bktParams = effectiveParams(bkt, event);
         Instant when = event.occurredAt();
         // spec points (T-C18 mapping) ride the SAME evidence class as topics:
         // one marked attempt is one BKT update per node it honestly tests —
@@ -105,6 +112,34 @@ public class LearnerModelService {
         skillStates.saveAll(toSave);
         log.debug("BKT updated for learner {} on {} node(s) (topics + spec points): correct={}",
                 event.learnerId(), evidenceNodes.size(), event.correctness());
+    }
+
+    /**
+     * S2/ADR-033: resolve the BKT parameter set for one evidence event. Only the
+     * guess base varies by format (the probability of a correct answer WITHOUT
+     * knowing the skill): MCQ_SINGLE prices it at 1/optionCount — the paper's
+     * 0.25 is exactly the four-option value — SHORT_ANSWER at the configured
+     * lucky-match rate, STRUCTURED at the configured near-zero rate. Slip stays
+     * global (mistakes happen in every format); l0 and the learning transition
+     * are format-agnostic. Legacy events without a format keep the paper
+     * default, so the resolution is a strict refinement, never a behaviour
+     * change for untyped evidence.
+     */
+    private static com.syllabai.learner.bkt.BktParams effectiveParams(
+            LearnerProperties.Bkt props, AssessmentEvidenceRecordedEvent event) {
+        String type = event.questionType();
+        if (type == null || type.isBlank()) {
+            return props.toParams();
+        }
+        double guess = switch (type) {
+            case "MCQ_SINGLE" -> event.optionCount() >= 2
+                    ? 1.0 / event.optionCount()
+                    : props.guess();          // anomalous option list — paper default
+            case "SHORT_ANSWER" -> props.shortAnswerGuess();
+            case "STRUCTURED" -> props.structuredGuess();
+            default -> props.guess();          // unknown future format — paper default
+        };
+        return new com.syllabai.learner.bkt.BktParams(props.l0(), props.slip(), guess, props.learnRate());
     }
 
     private void updateMisconceptions(AssessmentEvidenceRecordedEvent event) {

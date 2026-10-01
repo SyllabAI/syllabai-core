@@ -54,6 +54,7 @@ class AssessmentServiceTest {
         Question question = Mockito.mock(Question.class);
         when(question.id()).thenReturn(QUESTION_ID);
         when(question.active()).thenReturn(true);
+        when(question.type()).thenReturn(Question.Type.MCQ_SINGLE);   // S2/ADR-033: emit() prices the format
         when(question.marks()).thenReturn(1);
         when(question.primaryTopicNodeId()).thenReturn(TOPIC_NODE);
         when(question.options()).thenReturn(List.of(correct, tagged, other));

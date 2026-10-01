@@ -14,12 +14,19 @@ public record LearnerProperties(
         Bdt bdt,
         DecayJob decayJob) {
 
-    public record Bkt(double l0, double slip, double guess, double learnRate) {
+    public record Bkt(double l0, double slip, double guess, double learnRate,
+                      double shortAnswerGuess, double structuredGuess) {
         public Bkt {
             if (l0 <= 0) l0 = 0.1;
             if (slip <= 0) slip = 0.1;
             if (guess <= 0) guess = 0.25;
             if (learnRate <= 0) learnRate = 0.1;
+            // S2/ADR-033: per-format guess bases. The paper's 0.25 is the FOUR-option
+            // MCQ value (1/4); short answers are luckier than structured but still
+            // rare; a marked multi-part structured answer is effectively unguessable
+            // (kept strictly positive so BKT params stay identifiable).
+            if (shortAnswerGuess <= 0) shortAnswerGuess = 0.05;
+            if (structuredGuess <= 0) structuredGuess = 0.01;
         }
 
         public com.syllabai.learner.bkt.BktParams toParams() {
@@ -84,7 +91,7 @@ public record LearnerProperties(
     }
 
     public LearnerProperties {
-        if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1);
+        if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1, 0.05, 0.01);
         if (decay == null) decay = new Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6);
         if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5, 180);
         if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
