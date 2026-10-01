@@ -116,6 +116,21 @@ class V54PracticalEndpointRetargetIT {
     @Order(2)
     @DisplayName("V54 repairs a pre-retarget seeded database in place; re-activation is a full structural no-op")
     void migrationRepairsAPreRetargetSeededDatabase() {
+        // the spot row's full state BEFORE the simulation — the migration must
+        // leave every column except the source byte-identical
+        Map<String, Object> spotBefore = jdbc.queryForMap("""
+                SELECT e.provenance, e.rationale, e.validation_status, e.created_by
+                FROM knowledge_edges e
+                JOIN knowledge_nodes s ON s.id = e.source_node_id
+                JOIN knowledge_nodes t ON t.id = e.target_node_id
+                WHERE s.code = '4CH1-1.7C' AND t.code = '4CH1-CON-SATURATED-SOLUTION'
+                  AND e.relation_type = 'REQUIRES_PREREQUISITE'
+                """);
+        assertThat(spotBefore.get("provenance")).isEqualTo(
+                "t-c11:settled|pass:c11-s16-batch-1|method:USED_WITHOUT_RETEACHING"
+                        + "|validated_by:operator|date:2026-09-12");
+        assertThat(spotBefore.get("validation_status")).isEqualTo("VALIDATED");
+
         // simulate the pre-retarget seeded state: move the 12 rows back to their
         // ad-hoc sources, keeping the exact rows (provenance, rationale, status)
         Map<String, String> provenanceBefore = new HashMap<>();
@@ -143,8 +158,8 @@ class V54PracticalEndpointRetargetIT {
                     .as("provenance of %s -> %s", t[1], t[2])
                     .isEqualTo(provenanceBefore.get(t[2] + "|" + t[1]));
         }
-        // the move touched ONLY the source: provenance, rationale, status and
-        // created_by are byte-identical to the pre-retarget seeded row
+        // the move touched ONLY the source node: provenance, rationale, status
+        // and created_by are byte-identical to the pre-simulation seeded row
         Map<String, Object> spotAfter = jdbc.queryForMap("""
                 SELECT e.provenance, e.rationale, e.validation_status, e.created_by
                 FROM knowledge_edges e
@@ -154,18 +169,6 @@ class V54PracticalEndpointRetargetIT {
                   AND e.relation_type = 'REQUIRES_PREREQUISITE'
                 """);
         assertThat(spotAfter).isEqualTo(spotBefore);
-        Map<String, Object> spotBefore = jdbc.queryForMap("""
-                SELECT e.provenance, e.rationale, e.validation_status, e.created_by
-                FROM knowledge_edges e
-                JOIN knowledge_nodes s ON s.id = e.source_node_id
-                JOIN knowledge_nodes t ON t.id = e.target_node_id
-                WHERE s.code = '4CH1-1.7C' AND t.code = '4CH1-CON-SATURATED-SOLUTION'
-                  AND e.relation_type = 'REQUIRES_PREREQUISITE'
-                """);
-        assertThat(spotBefore.get("provenance")).isEqualTo(
-                "t-c11:settled|pass:c11-s16-batch-1|method:USED_WITHOUT_RETEACHING"
-                        + "|validated_by:operator|date:2026-09-12");
-        assertThat(spotBefore.get("validation_status")).isEqualTo("VALIDATED");
 
         // the lockstep proof: with the re-pinned snapshot, re-activation resolves
         // every migrated row by identity + provenance — zero new rows, no conflict
@@ -190,7 +193,7 @@ class V54PracticalEndpointRetargetIT {
                         provenance, created_by, version, created_at)
                 SELECT gen_random_uuid(), pr.id, t.id, 'REQUIRES_PREREQUISITE',
                         NULL, 'drift simulation (V54 IT fixture)', 'VALIDATED',
-                        'drift:simulation', 'v47-it', 1, now()
+                        'drift:simulation', 'v54-it', 1, now()
                 FROM knowledge_nodes pr, knowledge_nodes t
                 WHERE pr.code = '4CH1-PR-01'
                   AND t.code = '4CH1-CON-SATURATED-SOLUTION'
