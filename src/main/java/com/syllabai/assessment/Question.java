@@ -58,8 +58,10 @@ public class Question {
     @Column(name = "command_word", length = 30)
     private String commandWord;
 
-    /** primary KG node this question tests */
-    @Column(name = "primary_topic_node_id", nullable = false)
+    /** primary KG node this question tests; null for archived questions
+     * (V57: ingest-era ING anchors were removed — honest absence, not
+     * re-pointing). Serving paths tolerate null. */
+    @Column(name = "primary_topic_node_id")
     private UUID primaryTopicNodeId;
 
     /** exam paper this question belongs to (null = standalone bank item) */
