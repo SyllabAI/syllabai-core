@@ -220,7 +220,8 @@ class V54PracticalEndpointRetargetIT {
                 JOIN knowledge_nodes s ON s.id = e.source_node_id
                 WHERE e.relation_type = 'REQUIRES_PREREQUISITE'
                   AND s.code IN ('4CH1-1.7C', '4CH1-1.13', '4CH1-1.36', '4CH1-1.60C',
-                                 '4CH1-3.8', '4CH1-3.15', '4CH1-3.16')
+                                 '4CH1-2.14', '4CH1-2.21', '4CH1-2.42', '4CH1-2.43C',
+                                 '4CH1-3.8', '4CH1-3.15', '4CH1-3.16', '4CH1-4.43C')
                 """, Long.class);
         return counts.get(0).intValue();
     }
