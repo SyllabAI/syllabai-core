@@ -175,10 +175,19 @@ public class TutorController {
         TutorAnswerView answer = kaRag.ask(learnerId, request.question(), history,
                 request.sessionId(), courseRef);
         if (request.sessionId() != null) {
-            sessionStore.append(learnerId, new TutorSessionService.AppendRequest(
-                    request.sessionId(), request.question(), answer.answer(),
-                    answer.evidenceCount(), answer.refused(), answer.model(),
-                    answer.provider(), answer.latencyMs(), courseRef));
+            try {
+                sessionStore.append(learnerId, new TutorSessionService.AppendRequest(
+                        request.sessionId(), request.question(), answer.answer(),
+                        answer.evidenceCount(), answer.refused(), answer.model(),
+                        answer.provider(), answer.latencyMs(), courseRef));
+            } catch (RuntimeException e) {
+                // parity with the stream path's append guard: a session
+                // persistence failure must not 5xx an answer the learner
+                // already paid the full pipeline for — the exchange is lost
+                // from the transcript, the answer itself is delivered
+                log.error("tutor ask session append failed (session {}): {}",
+                        request.sessionId(), e.toString());
+            }
         }
         return answer;
     }
