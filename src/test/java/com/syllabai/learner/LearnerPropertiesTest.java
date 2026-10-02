@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 import com.syllabai.learner.bkt.BktParams;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,7 @@ class LearnerPropertiesTest {
         assertThat(blank.shortAnswerGuess()).isEqualTo(0.05);
         assertThat(blank.structuredGuess()).isEqualTo(0.01);
 
-        LearnerProperties defaults = new LearnerProperties(null, null, null, null);
+        LearnerProperties defaults = new LearnerProperties(null, null, null, null, null);
         assertThat(defaults.bkt()).isEqualTo(blank);
     }
 
@@ -98,5 +99,31 @@ class LearnerPropertiesTest {
             assertThat(p.l0()).isEqualTo(legacy.l0());
             assertThat(p.learnRate()).isEqualTo(legacy.learnRate());
         }
+    }
+
+    @Test
+    @DisplayName("flashcard ladder (T-C53): a null fifth component carries the shipped default; malformed ladders degrade to it")
+    void flashcardLadderDefaults() {
+        // null fifth component = the hub-parity ladder (the compact ctor normalizes)
+        LearnerProperties defaults = new LearnerProperties(null, null, null, null, null);
+        assertThat(defaults.flashcardReview().intervalDays())
+                .containsExactly(1, 2, 4, 8, 16, 32);
+
+        // explicit construction honors a well-formed custom ladder…
+        LearnerProperties custom = new LearnerProperties(
+                null, null, null, null, new LearnerProperties.FlashcardReview(List.of(3, 7)));
+        assertThat(custom.flashcardReview().intervalDays()).containsExactly(3, 7);
+
+        // …and lenient normalization matches the Bkt/Decay/Bdt convention
+        assertThat(new LearnerProperties.FlashcardReview(null).intervalDays())
+                .containsExactly(1, 2, 4, 8, 16, 32);
+        assertThat(new LearnerProperties.FlashcardReview(List.of()).intervalDays())
+                .containsExactly(1, 2, 4, 8, 16, 32);
+        assertThat(new LearnerProperties.FlashcardReview(List.of(1, 0)).intervalDays())
+                .containsExactly(1, 2, 4, 8, 16, 32);
+
+        // the parameters round-trip into the domain type the scheduler consumes
+        assertThat(custom.flashcardReview().toParams().intervalDaysFor(1)).isEqualTo(3);
+        assertThat(custom.flashcardReview().toParams().intervalDaysFor(3)).isEqualTo(7);
     }
 }

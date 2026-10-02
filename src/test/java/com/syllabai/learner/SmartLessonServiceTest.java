@@ -61,7 +61,7 @@ class SmartLessonServiceTest {
     private final SmartLessonService service = new SmartLessonService(
             graph, learnerModel, reviewSchedules, ConceptDependencyGraph.empty(),
             servableQuestions, engagements,
-            new LearnerProperties(null, null, null, null),
+            new LearnerProperties(null, null, null, null, null),
             new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
             new com.syllabai.learner.decay.EbbinghausDecayService(),
             attempts);
@@ -247,7 +247,7 @@ class SmartLessonServiceTest {
                 Set.of("M-A1", "U1-T3"));
         SmartLessonService withGraph = new SmartLessonService(graph, learnerModel,
                 reviewSchedules, withEdge, servableQuestions, engagements,
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 new com.syllabai.learner.decay.EbbinghausDecayService(),
                 attempts);

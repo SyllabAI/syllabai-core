@@ -24,4 +24,15 @@ public interface FlashcardRatingRepository extends JpaRepository<FlashcardRating
      */
     @Query("select count(distinct r.cardId) from FlashcardRating r where r.learnerId = :learnerId")
     long countDistinctCardsByLearnerId(@Param("learnerId") UUID learnerId);
+
+    /**
+     * FULL trail, card-grouped and chronological within the card — the
+     * review-schedule feed's read (T-C53): the schedule is derived from this
+     * at READ time and persisted nowhere (ADR-031 doctrine). The id is the
+     * final tiebreaker so the read is deterministic even on an occurred_at
+     * tie (a production non-event — the rating flow IT paces writes like a
+     * human deck flip — but the derived schedule must not depend on row
+     * fetch order regardless).
+     */
+    List<FlashcardRating> findByLearnerIdOrderByCardIdAscOccurredAtAscIdAsc(UUID learnerId);
 }

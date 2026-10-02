@@ -39,7 +39,7 @@ class LearnerModelCalibrationServiceTest {
     void setUp() {
         repository = mock(TelemetryEventRepository.class);
         service = new LearnerModelCalibrationService(repository,
-                new LearnerProperties(null, null, null, null));
+                new LearnerProperties(null, null, null, null, null));
     }
 
     private TelemetryEvent bktRow(UUID nodeId, Object decayedPrior, Object correctness,

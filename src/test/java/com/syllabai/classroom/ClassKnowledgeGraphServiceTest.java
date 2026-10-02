@@ -58,7 +58,7 @@ class ClassKnowledgeGraphServiceTest {
     private final ClassMemberRepository members = mock(ClassMemberRepository.class);
     private final UserRepository users = mock(UserRepository.class);
 
-    private final LearnerProperties learnerProperties = new LearnerProperties(null, null, null, null);
+    private final LearnerProperties learnerProperties = new LearnerProperties(null, null, null, null, null);
     private final EbbinghausDecayService decayService = new EbbinghausDecayService();
     private final AttemptRepository attempts = mock(AttemptRepository.class);
     private final LearnerKnowledgeGraphService learnerGraphs =

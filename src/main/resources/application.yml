@@ -242,6 +242,16 @@ syllabai:
       check-cron: "0 */15 * * * *"
       window-hour-utc: 3
       idle-grace-period: 48h
+    # flashcard review ladder (T-C53 — the V47 rating trail's reserved scheduler):
+    # expanding Ebbinghaus intervals (days) by consecutive-"know" streak, mirrored
+    # bit-for-bit from the hub's shipped lib/flashcard-review.ts ladder ("still
+    # learning" → due now; the 32d tail is the maintenance cap). The schedule is
+    # COMPUTED AT READ from the append-only flashcard_ratings trail and persisted
+    # nowhere (ADR-031 doctrine); it drives review TIMING only — ratings never
+    # touch mastery (the honesty pin, FlashcardRatingFlowIT). Registry-seeded as
+    # learner.flashcard-review (V59).
+    flashcard-review:
+      interval-days: [1, 2, 4, 8, 16, 32]
 
   storage:
     type: ${SYLLABAI_STORAGE_TYPE:local}

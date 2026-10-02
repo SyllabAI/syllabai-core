@@ -45,7 +45,8 @@ class NightlyDecayJobTest {
     private final NightlyDecayJob job = new NightlyDecayJob(
             skillStates, reviewSchedules, decayJobRuns, new EbbinghausDecayService(),
             new LearnerProperties(null, null, null,
-                    new LearnerProperties.DecayJob(true, null, 3, null)),
+                    new LearnerProperties.DecayJob(true, null, 3, null),
+                    null),
             published::add);
 
     @Test
