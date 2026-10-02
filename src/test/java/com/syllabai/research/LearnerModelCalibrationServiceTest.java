@@ -44,6 +44,15 @@ class LearnerModelCalibrationServiceTest {
 
     private TelemetryEvent bktRow(UUID nodeId, Object decayedPrior, Object correctness,
                                   String questionType, int optionCount) {
+        // first-practice shape by default: gap 0, anchor == decayedPrior (the exact
+        // bit-identity leg) — gap-specific tests override both explicitly
+        return bktRow(nodeId, decayedPrior, correctness, questionType, optionCount,
+                0L, decayedPrior instanceof Number n ? n.doubleValue() : null);
+    }
+
+    private TelemetryEvent bktRow(UUID nodeId, Object decayedPrior, Object correctness,
+                                  String questionType, int optionCount, Object gapDays,
+                                  Object anchor) {
         Map<String, Object> payload = new java.util.LinkedHashMap<>();
         payload.put("nodeId", nodeId.toString());
         if (decayedPrior != null) {
@@ -52,6 +61,10 @@ class LearnerModelCalibrationServiceTest {
         payload.put("correctness", correctness);
         payload.put("questionType", questionType);
         payload.put("optionCount", optionCount);
+        payload.put("gapDays", gapDays);
+        if (anchor != null) {
+            payload.put("priorMastery", anchor);
+        }
         return new TelemetryEvent(UUID.randomUUID(),
                 TelemetryEvent.Type.BKT_UPDATED, payload, WHEN);
     }
@@ -282,6 +295,139 @@ class LearnerModelCalibrationServiceTest {
         assertThat(segment(report, "UNTYPED").sampleCount()).isZero();
         assertThat(report.segments().stream()
                 .mapToLong(LearnerModelCalibrationService.FormatSegment::sampleCount).sum())
+                .isEqualTo(1);
+    }
+
+    // ─── the gap cut (C4 protocol §6 item 4; §2 gap axis) ─────────────────
+
+    private static LearnerModelCalibrationService.GapSegment gapSegment(
+            LearnerModelCalibrationService.CalibrationReport report, String key) {
+        return report.gapSegments().stream()
+                .filter(s -> s.segment().equals(key))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    @Test
+    @DisplayName("gap bands {0, 1-30, 31-90, 91-365, 366+} per the protocol's τ alignment; "
+            + "missing/unparseable/negative gapDays lands in UNKNOWN")
+    void gapBandBoundaryPins() {
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(0L)).isEqualTo("0");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(1L)).isEqualTo("1-30");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(30L)).isEqualTo("1-30");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(31L)).isEqualTo("31-90");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(90L)).isEqualTo("31-90");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(91L)).isEqualTo("91-365");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(365L)).isEqualTo("91-365");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(366L)).isEqualTo("366+");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(40000L)).isEqualTo("366+");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(null)).isEqualTo("UNKNOWN");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey(-5L)).isEqualTo("UNKNOWN");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey("12")).isEqualTo("1-30");
+        assertThat(LearnerModelCalibrationService.gapSegmentKey("abc")).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    @DisplayName("the gap cut: segments partition the contract rows and recompute "
+            + "per-band stats on the same emission mapping")
+    void gapSegmentsPartitionAndRecompute() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(List.of(
+                        bktRow(NODE_A, 0.95, true, "STRUCTURED", 0, 0L, 0.95),
+                        bktRow(NODE_A, 0.93, true, "STRUCTURED", 0, 45L, 0.96),
+                        bktRow(NODE_A, 0.35, false, "MCQ_SINGLE", 4, 200L, 0.50),
+                        bktRow(NODE_A, 0.32, true, "MCQ_SINGLE", 4, 400L, 0.40),
+                        bktRow(NODE_A, 0.50, true, null, 0, 10L, 0.55),
+                        bktRow(NODE_A, 0.80, true, "STRUCTURED", 0, 0L, 0.90),
+                        bktRow(NODE_A, 0.60, false, "SHORT_ANSWER", 0, "abc", 0.62)));
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(null);
+
+        // fixed taxonomy order, empty segments included — diffable across time
+        assertThat(report.gapSegments())
+                .extracting(LearnerModelCalibrationService.GapSegment::segment)
+                .containsExactly("0", "1-30", "31-90", "91-365", "366+", "UNKNOWN");
+
+        // partition property: the pooled sampleCount is the sum of the gap counts
+        assertThat(report.gapSegments().stream()
+                .mapToLong(LearnerModelCalibrationService.GapSegment::sampleCount).sum())
+                .isEqualTo(report.sampleCount());
+
+        // zero-gap (first-practice 0.95 + same-day 0.80), hand-derived: mapped
+        // 0.8555/0.722, both correct → brier (0.02088025+0.077284)/2 = 0.049082125,
+        // ECE (0.1445+0.278)/2 = 0.21125
+        var zero = gapSegment(report, "0");
+        assertThat(zero.sampleCount()).isEqualTo(2);
+        assertThat(zero.brier()).isCloseTo(0.049082125, within(1e-9));
+        assertThat(zero.ece()).isCloseTo(0.21125, within(1e-9));
+
+        // τ-aligned band boundaries exercised end to end; single-row per-band pins
+        assertThat(gapSegment(report, "1-30").sampleCount()).isEqualTo(1);
+        assertThat(gapSegment(report, "1-30").ece()).isCloseTo(0.425, within(1e-9));
+        assertThat(gapSegment(report, "31-90").ece()).isCloseTo(0.1623, within(1e-9));
+        assertThat(gapSegment(report, "91-365").ece()).isCloseTo(0.4775, within(1e-9));
+        assertThat(gapSegment(report, "366+").ece()).isCloseTo(0.542, within(1e-9));
+        assertThat(gapSegment(report, "UNKNOWN").sampleCount()).isEqualTo(1);
+        assertThat(gapSegment(report, "UNKNOWN").brier()).isCloseTo(0.3136, within(1e-9));
+
+        // the anchor leg on the mixed zero-gap stratum: meanAnchor (0.95+0.90)/2 = 0.925
+        // vs decayed (0.95+0.80)/2 = 0.875 — divergence exactly the same-day row's
+        // sub-day decay share, (0.90−0.80)/2 = 0.05
+        double weightedDecayed = 0.0;
+        for (var bin : zero.bins()) {
+            weightedDecayed += bin.count() * bin.meanLatentPredicted();
+        }
+        assertThat(weightedDecayed / zero.sampleCount()).isCloseTo(0.875, within(1e-9));
+        assertThat(zero.meanAnchor()).isCloseTo(0.925, within(1e-9));
+
+        // the same rows keep flowing through the format axis — the cuts are independent
+        assertThat(report.segments().stream()
+                .mapToLong(LearnerModelCalibrationService.FormatSegment::sampleCount).sum())
+                .isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("zero-gap bit-identity leg: anchor==decayedPrior rows match exactly — "
+            + "and the unused bands render honest zeros")
+    void zeroGapBitIdentityLeg() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(fullStream());
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(null);
+
+        // every fixture row is first-practice shaped (anchor == decayedPrior, gap 0):
+        // the leg matches EXACTLY — meanAnchor 4.76/7 = 0.68 equals the decayed mean
+        var zero = gapSegment(report, "0");
+        assertThat(zero.sampleCount()).isEqualTo(7);
+        assertThat(zero.meanAnchor()).isCloseTo(0.68, within(1e-9));
+        double weightedDecayed = 0.0;
+        for (var bin : zero.bins()) {
+            weightedDecayed += bin.count() * bin.meanLatentPredicted();
+        }
+        assertThat(weightedDecayed / zero.sampleCount()).isCloseTo(0.68, within(1e-9));
+
+        // the other five bands render honest zeros — no evidence is not good evidence
+        for (String key : List.of("1-30", "31-90", "91-365", "366+", "UNKNOWN")) {
+            var s = gapSegment(report, key);
+            assertThat(s.sampleCount()).isZero();
+            assertThat(s.brier()).isZero();
+            assertThat(s.meanAnchor()).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("the nodeId filter cuts the gap segments too")
+    void nodeIdFilterCutsGapSegments() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(fullStream());
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(NODE_OTHER);
+
+        assertThat(report.sampleCount()).isEqualTo(1);
+        assertThat(gapSegment(report, "0").sampleCount()).isEqualTo(1);
+        assertThat(gapSegment(report, "1-30").sampleCount()).isZero();
+        assertThat(report.gapSegments().stream()
+                .mapToLong(LearnerModelCalibrationService.GapSegment::sampleCount).sum())
                 .isEqualTo(1);
     }
 }
