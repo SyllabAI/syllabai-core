@@ -14,6 +14,7 @@ import com.syllabai.retrieval.RetrievalFabric;
 import com.syllabai.retrieval.RetrievalProvider;
 import com.syllabai.retrieval.StructuredRetrievalQuery;
 import com.syllabai.tutor.ContentVectorRetriever;
+import com.syllabai.tutor.EvidenceReranker;
 import com.syllabai.tutor.ReciprocalRankFusion;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -118,7 +120,14 @@ public final class Run005C {
         Path snapshotDir = Path.of(env("BENCH_SNAPSHOT", "evidence/bench-001/snapshot"));
         Path goldDir = Path.of(env("BENCH_GOLD", "bench/inputs/gold"));
         Path artifactDir = Path.of(required("BENCH_EMBED_ARTIFACT"));
-        Path runOut = Path.of(env("BENCH_RUN_OUT", "evidence/bench-001/runs/run-005-c"));
+        // T-C63 tranche 1 env identity (the T-C40 bproxy lesson): BENCH_RUN_ID
+        // names the run in results.json AND defaults the output directory — the
+        // default "run-005-c" keeps the recorded configuration byte-identical.
+        // BENCH_ARM_D_RERANKER blank → the NoReranker path, byte-identical to the
+        // recorded r9 configuration; any non-blank unknown value fails closed.
+        String rerankerSpec = env("BENCH_ARM_D_RERANKER", "");
+        String runId = env("BENCH_RUN_ID", "run-005-c");
+        Path runOut = Path.of(env("BENCH_RUN_OUT", "evidence/bench-001/runs/" + runId));
         Path run003b = Path.of(env("BENCH_RUN003B_RESULTS",
                 "evidence/bench-001/runs/run-003-b/results.json"));
         Path run004a = Path.of(env("BENCH_RUN004A_RESULTS",
@@ -140,8 +149,9 @@ public final class Run005C {
         JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(url, user, pass));
 
         Result result = run(jdbc, snapshotDir, snapshot, gold, goldDir, artifactDir, runOut,
-                coreCommit, runDate, run003b, run004a, run002a0, perArmLimit);
-        System.out.println("run-005-c recorded");
+                coreCommit, runDate, run003b, run004a, run002a0, perArmLimit,
+                rerankerSpec, runId);
+        System.out.println(runId + " recorded");
         System.out.println("C served overall: " + result.servedOverall());
         System.out.println("C compliant overall: " + result.compliantOverall());
         System.out.println("boundary findings (served): " + result.violations()
@@ -160,7 +170,8 @@ public final class Run005C {
     static Result run(JdbcTemplate jdbc, Path snapshotDir, BenchSnapshot snapshot, BenchGold gold,
                       Path goldDir, Path artifactDir, Path runOut, String coreCommit,
                       String runDate, Path run003bResults, Path run004aResults,
-                      Path run002a0Results, int perArmLimit) throws Exception {
+                      Path run002a0Results, int perArmLimit,
+                      String rerankerSpec, String runId) throws Exception {
 
         // ── 0. verify the frozen artifact against the exact frozen inputs ────
         log("verifying artifact checksums (fail-closed)");
@@ -221,6 +232,24 @@ public final class Run005C {
                 List.of(semantic, lexical), fusion,
                 candidate -> "VALIDATED".equals(paperState.get(candidate.documentId())));
 
+        // ── 3b. arm D wrapper (T-C63 tranche 1): rerank downstream of fusion,
+        // BOTH views wrapped identically; blank spec → no wrapper at all (the
+        // recorded NoReranker configuration). The boundary stays inside the inner
+        // fabric (pre-fusion, untouched): the reranker can only reorder what
+        // fusion produced, so §8(f) is structurally unaffected.
+        final EvidenceReranker reranker = rerankerSpec.isBlank()
+                ? null : LexicalPrecisionReranker.forName(rerankerSpec);
+        final RerankedRetrieval servedReranked =
+                reranker == null ? null : new RerankedRetrieval(servedFabric, reranker);
+        final RerankedRetrieval compliantReranked =
+                reranker == null ? null : new RerankedRetrieval(compliantFabric, reranker);
+        final Function<StructuredRetrievalQuery, List<RetrievalFabric.FusedCandidate>>
+                servedRetrieve =
+                reranker == null ? servedFabric::retrieve : servedReranked::retrieve;
+        final Function<StructuredRetrievalQuery, List<RetrievalFabric.FusedCandidate>>
+                compliantRetrieve =
+                reranker == null ? compliantFabric::retrieve : compliantReranked::retrieve;
+
         // ── 4. per-query scoring: served view (ALL) + compliant view (gate-on)
         List<BenchMetrics.ChunkRow> servedRows = new ArrayList<>();
         List<BenchMetrics.ChunkRow> compliantRows = new ArrayList<>();
@@ -249,7 +278,7 @@ public final class Run005C {
             rec.goldEvidence().forEach(e -> tierByRef.put(e.chunkRef(), e.tier()));
 
             long t0 = System.nanoTime();
-            List<RetrievalFabric.FusedCandidate> served = servedFabric.retrieve(
+            List<RetrievalFabric.FusedCandidate> served = servedRetrieve.apply(
                     StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit));
             servedNanos.add(System.nanoTime() - t0);
             List<String> servedRefs = refs(served);
@@ -262,7 +291,7 @@ public final class Run005C {
             }
 
             long t1 = System.nanoTime();
-            List<RetrievalFabric.FusedCandidate> compliant = compliantFabric.retrieve(
+            List<RetrievalFabric.FusedCandidate> compliant = compliantRetrieve.apply(
                     StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit));
             compliantNanos.add(System.nanoTime() - t1);
             List<String> compliantRefs = refs(compliant);
@@ -333,14 +362,22 @@ public final class Run005C {
                 + "same formulas; A0 chunk axis is the zero baseline");
 
         Map<String, Object> results = new LinkedHashMap<>();
-        results.put("run_id", "run-005-c");
+        results.put("run_id", runId);
         results.put("date", runDate);
-        results.put("arm", "C hybrid — PRODUCTION retrieval fabric (com.syllabai.retrieval."
-                + "RetrievalFabric: explicit arms [pgvector, bm25], central BoundaryPolicy, "
-                + "shipped ReciprocalRankFusion k=60, rank-only, NoReranker) over arm A's "
-                + "production vector path and arm B's production lexical path; chunk+query "
-                + "vectors replayed from the frozen artifact " + manifest.path("run_id").asText()
-                + ", zero API calls at run time");
+        results.put("arm", reranker == null
+                ? "C hybrid — PRODUCTION retrieval fabric (com.syllabai.retrieval."
+                        + "RetrievalFabric: explicit arms [pgvector, bm25], central BoundaryPolicy, "
+                        + "shipped ReciprocalRankFusion k=60, rank-only, NoReranker) over arm A's "
+                        + "production vector path and arm B's production lexical path; chunk+query "
+                        + "vectors replayed from the frozen artifact " + manifest.path("run_id").asText()
+                        + ", zero API calls at run time"
+                : "D rank-quality — C's PRODUCTION retrieval fabric (com.syllabai.retrieval."
+                        + "RetrievalFabric: explicit arms [pgvector, bm25], central BoundaryPolicy, "
+                        + "shipped ReciprocalRankFusion k=60, rank-only) + "
+                        + LexicalPrecisionReranker.NAME + " behind the EvidenceReranker port (T-024), "
+                        + "applied downstream of fusion on BOTH views; chunk+query vectors replayed "
+                        + "from the frozen artifact " + manifest.path("run_id").asText()
+                        + ", zero API calls at run time");
         results.put("arm_status", "RUNNABLE — this run (the fabric orchestrator landed with the "
                 + "run; arm promotion must stay explicit, never injection-implied); benchmark "
                 + "arm only, NOT a production serving default — nothing in production "
@@ -370,6 +407,33 @@ public final class Run005C {
                 "backfill_core_commit", manifest.path("core_commit").asText(),
                 "backfill_run_date", manifest.path("run_date").asText(),
                 "sha256_echo", EmbedBackfill.Manifests.filesSha256(artifactDir)));
+        if (reranker != null) {
+            results.put("rerank", Map.of(
+                    "name", LexicalPrecisionReranker.NAME,
+                    "port", "com.syllabai.tutor.EvidenceReranker (T-024) — bench-scope "
+                            + "implementation; NO production serving change (nothing in "
+                            + "production constructs a reranking fabric, harness spec §9)",
+                    "pre_registration", "evidence/bench-001/rank-quality-lane-2026-10-02/"
+                            + "CHARTER.md — arm D instrument, parameters frozen BEFORE any "
+                            + "recorded run (spec §9 anti-gaming; changing k1/b after seeing "
+                            + "results requires a dated new pre-registration and a new run)",
+                    "algorithm", "tokenizer: lowercase, letter-runs and digit-runs are tokens "
+                            + "(no spec-code special-casing, no kind-awareness, no gold "
+                            + "knowledge); idf(t)=ln(1+(N-df+0.5)/(df+0.5)) per query over the "
+                            + "rerank pool itself (N = pool size — self-contained, no corpus- "
+                            + "statistics dependency, no snapshot drift); score = sum over "
+                            + "unique query tokens of idf(t)*tf*(k1+1)/(tf+k1) with k1=1.2, "
+                            + "b=0 (NO length normalization — deliberate: spec-mapped note "
+                            + "carriers are systematically longer than QP/MS chunks; a length "
+                            + "penalty would demote exactly the evidence §8(d) prices)",
+                    "ordering", "score desc; ties by fused rank ascending (stable); rerankScore "
+                            + "set on every item; never invents or drops candidates",
+                    "scope", "both views' fabrics wrapped identically; the boundary stays inside "
+                            + "the inner fabric (pre-fusion untouched — (f) structurally "
+                            + "unaffected); §8(d) scored on the RERANKED served lists "
+                            + "(compositionality recovery is what the run measures)",
+                    "latency", "per-query latency includes the rerank pass"));
+        }
         results.put("evaluation_contract", Map.of(
                 "chunk_axis", "Recall@5/10/20, MRR (first tier-2 hit in top-20), nDCG@10 "
                         + "(2/1/0 tiers), evidence precision@10 and FP@10 over the fixed "
@@ -430,13 +494,17 @@ public final class Run005C {
                         + "production query-embedding round-trip"));
         results.put("s8_gate", gate);
         results.put("context", context);
+        String registryRowD = reranker == null
+                ? "UNAVAILABLE — C + reranker behind the EvidenceReranker port"
+                : "RUNNABLE — this run (C + " + LexicalPrecisionReranker.NAME
+                        + " behind the EvidenceReranker port, applied downstream of fusion)";
         results.put("arms_registry", Map.of(
                 "A0", "RUNNABLE — recorded in run-002-a0 (production baseline)",
                 "B", "RUNNABLE — recorded in run-003-b (production lexical arm)",
                 "B-proxy", "RECORDED (run-001) — harness-internal probe; never citable",
                 "A", "RUNNABLE — recorded in run-004-a (production semantic arm)",
                 "C", "RUNNABLE — this run (hybrid over the production fabric)",
-                "D", "UNAVAILABLE — C + reranker behind the EvidenceReranker port",
+                "D", registryRowD,
                 "E/F/G", "UNAVAILABLE — require T-C15",
                 "H1/H2/H3/I", "UNAVAILABLE — prerequisites unchanged"));
         results.put("per_query_chunks", perQueryServed);
@@ -458,10 +526,10 @@ public final class Run005C {
             if (rec.goldEvidence().isEmpty()) {
                 continue;
             }
-            List<String> againServed = refs(servedFabric.retrieve(
+            List<String> againServed = refs(servedRetrieve.apply(
                     StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
             secondServed.add(BenchMetrics.scoreChunks(againServed, tiers(rec)));
-            List<String> againCompliant = refs(compliantFabric.retrieve(
+            List<String> againCompliant = refs(compliantRetrieve.apply(
                     StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
             secondCompliant.add(BenchMetrics.scoreChunks(againCompliant, tiers(rec)));
         }
@@ -479,11 +547,11 @@ public final class Run005C {
                 if (rec.goldEvidence().isEmpty()) {
                     continue;
                 }
-                List<String> againServed = refs(servedFabric.retrieve(
+                List<String> againServed = refs(servedRetrieve.apply(
                         StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
                 hvSecondServed.add(ChunkSpecHvResolution.scoreQuery(rec.id(), againServed,
                         rec.goldSpecPoints(), hvCodes));
-                List<String> againCompliant = refs(compliantFabric.retrieve(
+                List<String> againCompliant = refs(compliantRetrieve.apply(
                         StructuredRetrievalQuery.of(rec.query(), scope, perArmLimit)));
                 hvSecondCompliant.add(ChunkSpecHvResolution.scoreQuery(rec.id(), againCompliant,
                         rec.goldSpecPoints(), hvCodes));
@@ -497,10 +565,25 @@ public final class Run005C {
         }
         results.put("determinism_check", "PASS — scoring recomputed twice in-process (second "
                 + "full retrieval pass), both views' aggregates byte-identical; serialization "
-                + "byte-stable");
+                + "byte-stable"
+                + (reranker == null ? "" : "; reranked path included — the reranker is a pure "
+                        + "function of query × fused pool, so the double pass covers it "
+                        + "(byte-identical or abort)"));
 
         // ── 8. write evidence (results.json + RUN_REPORT.md + SHA256SUMS) ────
         Files.createDirectories(runOut);
+        // no frozen artifact is mutated: refuse to overwrite a results.json that
+        // already records a DIFFERENT run_id (same-id re-records stay allowed)
+        Path priorResults = runOut.resolve("results.json");
+        if (Files.exists(priorResults)) {
+            String priorRunId = JSON.readTree(Files.readString(priorResults,
+                    StandardCharsets.UTF_8)).path("run_id").asText("");
+            if (!priorRunId.equals(runId)) {
+                throw new IllegalStateException("refusing to overwrite " + priorResults
+                        + " (already holds recorded run_id '" + priorRunId + "') with run_id '"
+                        + runId + "' — no frozen artifact is mutated (fail-closed)");
+            }
+        }
         String pretty = stable.writerWithDefaultPrettyPrinter().writeValueAsString(results);
         Files.writeString(runOut.resolve("results.json"), pretty, StandardCharsets.UTF_8);
         Files.writeString(runOut.resolve("RUN_REPORT.md"),
@@ -688,6 +771,13 @@ public final class Run005C {
         md.append("**Status:** RECORDED — production hybrid arm on record (deterministic, offline ")
                 .append("replay, zero API calls; snapshot ").append(results.get("snapshot")).append(").\n");
         md.append("**Arm:** ").append(results.get("arm")).append("\n");
+        if (results.get("rerank") instanceof Map<?, ?> rerank) {
+            md.append("**Rerank (arm D, T-C63):** ").append(rerank.get("name"))
+                    .append(" behind the EvidenceReranker port — pre-registration: ")
+                    .append(rerank.get("pre_registration")).append("\n");
+            md.append("**Rerank algorithm:** ").append(rerank.get("algorithm")).append("\n");
+            md.append("**Rerank ordering:** ").append(rerank.get("ordering")).append("\n\n");
+        }
         md.append("**Executor:** ").append(results.get("executor")).append(" — code `")
                 .append(results.get("code_version")).append("`.\n");
         md.append("**Date:** ").append(runDate).append(" | **Gold:** ")
