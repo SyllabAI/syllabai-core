@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -92,7 +93,7 @@ public class KnowledgeGraphService {
     private record TreeSnapshot(NodeView root, long nanos) {
     }
 
-    private final java.util.concurrent.ConcurrentHashMap<UUID, TreeSnapshot> treeCache =
+    private final ConcurrentHashMap<UUID, TreeSnapshot> treeCache =
             new ConcurrentHashMap<>();
 
     /**
