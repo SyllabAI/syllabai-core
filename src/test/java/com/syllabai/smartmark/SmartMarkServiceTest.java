@@ -378,9 +378,8 @@ class SmartMarkServiceTest {
         assertThat(attempt.marksAwarded()).isEqualTo(4);
         // one event per part, κ gate closed → honest provisional flags
         assertThat(published).hasSize(2);
-        assertThat(published.stream()
-                .map(e -> ((SmartMarkCompletedEvent) e).authoritative())
-                .allSatisfy(a -> assertThat(a).isFalse())).isTrue();
+        assertThat(published).allSatisfy(e ->
+                assertThat(((SmartMarkCompletedEvent) e).authoritative()).isFalse());
         verify(evidencePublisher, never()).publishGraded(any(), any(), any());
     }
 
@@ -397,9 +396,8 @@ class SmartMarkServiceTest {
         // check collapses to a single completeness check after the pass
         verify(evidencePublisher, times(1)).publishGraded(any(), any(), any());
         assertThat(published).hasSize(2);
-        assertThat(published.stream()
-                .map(e -> ((SmartMarkCompletedEvent) e).authoritative())
-                .allSatisfy(a -> assertThat(a).isTrue())).isTrue();
+        assertThat(published).allSatisfy(e ->
+                assertThat(((SmartMarkCompletedEvent) e).authoritative()).isTrue());
         // (the evidence flag flip itself is EvidencePublisherTest's contract —
         // the mock publisher stands in here; one publishGraded call is the pin)
     }
