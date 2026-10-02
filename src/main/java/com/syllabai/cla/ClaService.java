@@ -26,6 +26,7 @@ import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
+import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
@@ -141,6 +142,7 @@ public class ClaService {
     private final EvidenceReranker reranker;
     private final TutorGenerator generator;
     private final CitationResolver citationResolver;
+    private final LearnerModelService learnerModel;
     private final TutorPolicyService policy;
     private final ApplicationEventPublisher events;
     private final DocumentRepository documents;
@@ -164,6 +166,7 @@ public class ClaService {
                       EvidenceReranker reranker,
                       TutorGenerator generator,
                       CitationResolver citationResolver,
+                      LearnerModelService learnerModel,
                       TutorPolicyService policy,
                       ApplicationEventPublisher events,
                       DocumentRepository documents,
@@ -185,6 +188,7 @@ public class ClaService {
         this.reranker = reranker;
         this.generator = generator;
         this.citationResolver = citationResolver;
+        this.learnerModel = learnerModel;
         this.policy = policy;
         this.events = events;
         this.documents = documents;
@@ -393,8 +397,13 @@ public class ClaService {
             var scope = tools.learnerStateScope(context.topicNodeId(), related.value().prerequisites());
             ToolResultWith<ClaToolRegistry.OwnLearnerState> ownState =
                     trace(toolTraces, () -> tools.learnerState(learnerId, scope));
+            // M3 tranche 2 (audit 2026-10-02): the policy consumes the FULL
+            // reading list propagated by the caller — select() no longer makes
+            // its own learner-model read. Full list, not the GET_LEARNER_STATE
+            // tool's scope-filtered view: the two answer different questions.
+            List<MisconceptionReading> readings = learnerModel.misconceptionReadings(learnerId);
             TutorPolicyService.InterventionPlan policyPlan =
-                    policy.select(learnerId, knowledge.topics(), knowledge.misconceptions());
+                    policy.select(learnerId, knowledge.topics(), knowledge.misconceptions(), readings);
             TutorPolicyService.InterventionPlan modePlan =
                     modePlan(mode, context, policyPlan);
             interventionType = modePlan.type().name();
@@ -790,11 +799,16 @@ public class ClaService {
      */
     private List<EvidenceItem> noteSectionEvidence(ResourceContext context) {
         String fileName = NOTE_DOCUMENT_FILE_PREFIX + context.noteId() + ".txt";
-        List<DocumentChunk> sections = documents
+        // the note's document is resolved ONCE — every chunk below belongs to
+        // THIS row (chunks were fetched by documentRowId), so the per-chunk
+        // documents.findById the section mapping used to make was the same
+        // row re-read up to NOTE_CHUNK_LIMIT times (M3 tranche 2)
+        Document noteDocument = documents
                 .findTopByFileNameOrderByDocVersionDesc(fileName)
-                .map(Document::id)
-                .map(documentChunks::findByDocumentRowIdOrderByChunkIndexAsc)
-                .orElse(List.of());
+                .orElse(null);
+        List<DocumentChunk> sections = noteDocument == null
+                ? List.of()
+                : documentChunks.findByDocumentRowIdOrderByChunkIndexAsc(noteDocument.id());
         if (sections.isEmpty()) {
             log.warn("note {} has no chunked content document ({} sections=0) — "
                     + "evidence falls back to the spec-anchored pool",
@@ -806,8 +820,7 @@ public class ClaService {
                 .map(chunk -> EvidenceItem.fromChunk(
                         chunk.documentRowId(),
                         NOTE_DOCUMENT_FILE_PREFIX + context.noteId(),
-                        documents.findById(chunk.documentRowId())
-                                .map(Document::docVersion).orElse(1),
+                        noteDocument.docVersion(),
                         chunk.id(), chunk.chunkIndex(),
                         chunk.kind() != null ? chunk.kind().name() : "EXTERNAL_NOTES",
                         chunk.content(), chunk.pageStart(), chunk.pageEnd(),

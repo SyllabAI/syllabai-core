@@ -4,7 +4,9 @@ import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.shared.NotFoundException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -67,10 +69,43 @@ public class KnowledgeGraphService {
                 .toList();
     }
 
+    /**
+     * Batched prerequisite chains for several origin nodes (M3 tranche 2,
+     * audit 2026-10-02): ONE recursive-CTE pass + ONE node fetch for the whole
+     * matched-topic set instead of a three-query chain per topic. Keyed by
+     * origin id (missing key = no prerequisites); within-origin order matches
+     * {@link #prerequisiteChain(UUID)} exactly.
+     */
+    public Map<UUID, List<PrerequisiteView>> prerequisiteChains(Collection<UUID> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<PrerequisiteView>> result = new LinkedHashMap<>();
+        graph.findPrerequisiteClosures(nodeIds).forEach((origin, closure) ->
+                result.put(origin, closure.stream().map(PrerequisiteView::from).toList()));
+        return result;
+    }
+
     public List<NodeView> misconceptions(UUID topicNodeId) {
         return graph.findMisconceptions(topicNodeId).stream()
                 .map(NodeView::flat)
                 .toList();
+    }
+
+    /**
+     * Batched misconception attachments for several topic nodes (M3 tranche
+     * 2): one edge query for all matched topics instead of one per topic.
+     * Keyed by topic id (missing key = none attached); within-topic content
+     * matches {@link #misconceptions(UUID)}.
+     */
+    public Map<UUID, List<NodeView>> misconceptionsForTopics(Collection<UUID> topicNodeIds) {
+        if (topicNodeIds == null || topicNodeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<NodeView>> result = new LinkedHashMap<>();
+        graph.findMisconceptionsForTopics(topicNodeIds).forEach((topic, mis) ->
+                result.put(topic, mis.stream().map(NodeView::flat).toList()));
+        return result;
     }
 
     public KnowledgeNode node(UUID id) {
@@ -115,10 +150,37 @@ public class KnowledgeGraphService {
      * Every UNIT/TOPIC/SUBTOPIC node, code-ordered — the deterministic intent
      * surface for KA-RAG (T-024): query tokens are matched against these
      * titles; nothing outside the KG may be inferred.
+     *
+     * <p>M3 (audit 2026-10-02): the structure list is read on EVERY tutor ask
+     * (the GraphKnowledgeRetriever intent matcher is this method's only
+     * production caller) yet changes only through curriculum ingest and
+     * teacher validation waves. A 30-second in-process TTL trims one
+     * full-structure query per ask; a ≤30s-late node list is immaterial for
+     * title-token matching, and the per-node VALIDATED gate still runs in the
+     * retriever AFTER the cache, so serving eligibility never rides on it.
+     * The cache is a single immutable snapshot swapped wholesale (one volatile
+     * reference — no partial visibility), never tunable, never shared across
+     * instances: one constant, fail-safe expiry.</p>
      */
     public List<KnowledgeNode> structureNodes() {
-        return nodes.findStructureNodes();
+        StructureSnapshot snapshot = structureCache;
+        long now = System.nanoTime();
+        if (snapshot != null && now - snapshot.nanos() < STRUCTURE_CACHE_TTL_NANOS) {
+            return snapshot.nodes();
+        }
+        List<KnowledgeNode> fresh = List.copyOf(nodes.findStructureNodes());
+        structureCache = new StructureSnapshot(fresh, now);
+        return fresh;
     }
+
+    /** M3: in-process TTL for {@link #structureNodes()} — 30s, wholesale expiry. */
+    private static final long STRUCTURE_CACHE_TTL_NANOS = 30_000_000_000L;
+
+    /** One immutable cache generation: the node list + when it was read. */
+    private record StructureSnapshot(List<KnowledgeNode> nodes, long nanos) {
+    }
+
+    private volatile StructureSnapshot structureCache;
 
     /**
      * Direct prerequisite relations among the subtree's structure nodes — the

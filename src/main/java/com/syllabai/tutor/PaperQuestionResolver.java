@@ -4,6 +4,7 @@ import com.syllabai.content.Document;
 import com.syllabai.content.DocumentChunk;
 import com.syllabai.content.DocumentChunkRepository;
 import com.syllabai.content.DocumentRepository;
+import com.syllabai.content.FetchQueryParser;
 import com.syllabai.content.FetchService;
 import com.syllabai.content.FetchService.FetchResult;
 import com.syllabai.content.FetchService.FetchPaperHit;
@@ -154,7 +155,13 @@ public class PaperQuestionResolver {
      * (09-27 G1 evidence: JUN-2019 q10 bank rows on SUGGESTED 1C/1CR).
      * An exception mid-resolution leaves the anchor state unknown, so the
      * verdict degrades to {@code identityParsed=false}: the resolver never
-     * gates an ask on unknown state. (The content-store tier's own catch
+     * gates an ask on unknown state — a state that is KNOWN because the parse
+     * is pure in-memory work is not degraded: under a complete parsed identity
+     * an infrastructure failure keeps {@code identityParsed=true} so the
+     * fail-open guard refuses deterministically (L3, audit 2026-10-02 — the
+     * old catch-all downgraded the verdict to "not a paper ask" exactly when
+     * the corpus was unavailable, and the ask silently served generic
+     * retrieval). (The content-store tier's own catch
      * converts a store error into empty items — under a parsed identity
      * that is a fail-closed refusal, never the wrong-paper serve.)
      */
@@ -166,28 +173,46 @@ public class PaperQuestionResolver {
         try {
             fetch = fetchService.fetch(query, scope);
         } catch (RuntimeException e) {
-            // the resolver must never break the ask: the vector+KG path remains the safety net
-            LOG.warn("paper-question resolver: fetch step failed ({}); falling back to card anchor",
-                    e.getClass().getSimpleName());
-            fetch = null;
+            // L3 (audit 2026-10-02): a fetch failure used to degrade the whole
+            // verdict to notPaperAsk — disarming the fail-open guard exactly
+            // when the corpus was unavailable. The parse is a pure in-memory
+            // step (FetchQueryParser.parse), so the identity verdict is
+            // recovered locally: a COMPLETE identity under a DB error is a
+            // KNOWN state (nothing bound — the store could not be asked), and
+            // the guard's deterministic paper refusal fires instead of the ask
+            // silently degrading to generic retrieval. A query that does not
+            // parse a complete identity keeps the legacy honest fallback (the
+            // vector+KG path serves).
+            LOG.warn("paper-question resolver: fetch step failed ({}); "
+                    + "verdict recovered from local re-parse", e.getClass().getSimpleName());
+            ParsedFetchQuery reparsed = FetchQueryParser.parse(query);
+            if (completeIdentity(reparsed)) {
+                return new Resolution(List.of(), true, identityLabel(reparsed, query));
+            }
+            return Resolution.notPaperAsk();
         }
 
+        ParsedFetchQuery parsed = fetch.parsed();
+        boolean identityParsed = completeIdentity(parsed);
         try {
-            if (fetch != null) {
-                List<EvidenceItem> bankAnchored = bankAnchored(fetch);
-                if (!bankAnchored.isEmpty()) {
-                    return Resolution.served(bankAnchored, identityLabel(fetch.parsed(), query));
-                }
+            List<EvidenceItem> bankAnchored = bankAnchored(fetch);
+            if (!bankAnchored.isEmpty()) {
+                return Resolution.served(bankAnchored, identityLabel(parsed, query));
             }
-            ParsedFetchQuery parsed = fetch == null ? null : fetch.parsed();
-            boolean identityParsed = completeIdentity(parsed) && fetch != null;
             List<EvidenceItem> pinned = new ArrayList<>(cardAnchored(query, parsed, scope));
             pinned.addAll(contentStoreAnchored(query, parsed, scope));
             return new Resolution(List.copyOf(pinned), identityParsed,
                     identityParsed ? identityLabel(parsed, query) : null);
         } catch (RuntimeException e) {
-            LOG.warn("paper-question resolver: resolution failed ({}); serving the unmodified path",
+            LOG.warn("paper-question resolver: resolution failed ({})",
                     e.getClass().getSimpleName());
+            if (identityParsed) {
+                // L3: the anchor state is KNOWN-bad mid-flight (infrastructure
+                // failure after a complete identity parsed) — the fail-open
+                // guard refuses deterministically; the verdict is never
+                // downgraded to "not a paper ask"
+                return new Resolution(List.of(), true, identityLabel(parsed, query));
+            }
             // anchor state unknown mid-flight — never gate the ask on unknown
             return Resolution.notPaperAsk();
         }

@@ -13,6 +13,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -127,6 +128,28 @@ public final class BenchGraph {
         @Override
         public List<KnowledgeNode> findMisconceptions(java.util.UUID topicNodeId) {
             return familyMisconceptions(codeOf(topicNodeId));
+        }
+
+        // M3 tranche 2: the batched port methods — the fake keeps snapshot
+        // fidelity (not speed) by delegating to the single-node walks
+        @Override
+        public java.util.Map<java.util.UUID, List<PrerequisiteWithDepth>> findPrerequisiteClosures(
+                java.util.Collection<java.util.UUID> nodeIds) {
+            java.util.Map<java.util.UUID, List<PrerequisiteWithDepth>> out = new LinkedHashMap<>();
+            for (java.util.UUID id : nodeIds) {
+                out.put(id, findPrerequisiteClosure(id));
+            }
+            return out;
+        }
+
+        @Override
+        public java.util.Map<java.util.UUID, List<KnowledgeNode>> findMisconceptionsForTopics(
+                java.util.Collection<java.util.UUID> topicNodeIds) {
+            java.util.Map<java.util.UUID, List<KnowledgeNode>> out = new LinkedHashMap<>();
+            for (java.util.UUID id : topicNodeIds) {
+                out.put(id, findMisconceptions(id));
+            }
+            return out;
         }
 
         @Override

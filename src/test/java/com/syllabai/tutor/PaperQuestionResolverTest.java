@@ -531,9 +531,9 @@ class PaperQuestionResolverTest {
     }
 
     @Test
-    @DisplayName("fail-open verdict: a mid-resolution card failure degrades to not-a-paper-ask "
-            + "(never gates on unknown state)")
-    void cardFailureDegradesToNotPaperAsk() {
+    @DisplayName("L3: a mid-resolution card failure under a parsed identity keeps the verdict — "
+            + "the guard refuses deterministically, never downgrades to not-a-paper-ask")
+    void cardFailureUnderParsedIdentityRefuses() {
         ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
                 null, false, "explain question 10 june 2019 paper 2");
         when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
@@ -543,6 +543,36 @@ class PaperQuestionResolverTest {
 
         PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
                 "explain question 10 june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel()).contains("question 10");
+    }
+
+    @Test
+    @DisplayName("L3: a fetch-tier failure under a complete identity recovers the verdict by "
+            + "local re-parse — identityParsed=true, the fail-open guard fires")
+    void fetchFailureUnderParsedIdentityRefuses() {
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenThrow(new IllegalStateException("bank unavailable"));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain question 10 from june 2019 paper 2", SCOPE);
+
+        assertThat(resolution.items()).isEmpty();
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel()).contains("question 10");
+    }
+
+    @Test
+    @DisplayName("L3: a fetch-tier failure under an INCOMPLETE identity keeps the honest fallback — "
+            + "notPaperAsk, the vector+KG path serves")
+    void fetchFailureUnderPartialIdentityFallsBack() {
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenThrow(new IllegalStateException("bank unavailable"));
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "explain ionic bonding", SCOPE);
 
         assertThat(resolution.items()).isEmpty();
         assertThat(resolution.identityParsed()).isFalse();

@@ -245,4 +245,29 @@ class TelemetryServiceTest {
                 .containsEntry("answerProvider", "groq")
                 .containsEntry("answerModel", "model-x");
     }
+
+    // ── audit M1: telemetry must never fail the serving path ────────────────
+
+    @Test
+    @DisplayName("M1: a telemetry write failure never propagates out of the ask path — the row is dropped with a WARN")
+    void tutorAnsweredSwallowsRepositoryFailure() {
+        org.mockito.Mockito.doThrow(new RuntimeException("neon jitter: connection reset"))
+                .when(events).save(org.mockito.ArgumentMatchers.any());
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.onTutorAnswered(
+                        new TutorAnsweredEvent(LEARNER, "bonding question", List.of(NODE), 4,
+                                List.of("MARK_SCHEME"), false, "model-x", "tutor-grounded/v5",
+                                1200.0, WHEN, "EXPLANATION", 0, null, "groq")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("M1: the attempt path is equally insulated — a failed ATTEMPT_SUBMITTED write drops, never throws")
+    void attemptEvidenceSwallowsRepositoryFailure() {
+        org.mockito.Mockito.doThrow(new RuntimeException("neon jitter: connection reset"))
+                .when(events).save(org.mockito.ArgumentMatchers.any());
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.onAssessmentEvidence(evidence(true)))
+                .doesNotThrowAnyException();
+    }
 }

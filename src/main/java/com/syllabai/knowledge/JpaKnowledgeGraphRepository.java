@@ -1,7 +1,11 @@
 package com.syllabai.knowledge;
 
 import com.syllabai.shared.NotFoundException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +50,28 @@ public class JpaKnowledgeGraphRepository implements KnowledgeGraphRepository {
     }
 
     @Override
+    public Map<UUID, List<PrerequisiteWithDepth>> findPrerequisiteClosures(Collection<UUID> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = nodes.findPrerequisiteClosureRows(nodeIds);
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> prereqIds = rows.stream().map(r -> (UUID) r[1]).distinct().toList();
+        var byId = nodes.findAllById(prereqIds).stream()
+                .collect(java.util.stream.Collectors.toMap(KnowledgeNode::id, n -> n));
+        // rows arrive ordered (origin, depth DESC, node) — per-origin slices
+        // keep the single-node contract by construction (M3 tranche 2)
+        Map<UUID, List<PrerequisiteWithDepth>> result = new LinkedHashMap<>();
+        for (Object[] r : rows) {
+            result.computeIfAbsent((UUID) r[0], k -> new ArrayList<>())
+                    .add(new PrerequisiteWithDepth(byId.get(r[1]), ((Number) r[2]).intValue()));
+        }
+        return result;
+    }
+
+    @Override
     public List<KnowledgeNode> findSubtree(UUID nodeId) {
         requireNode(nodeId);
         List<UUID> ids = nodes.findSubtreeIds(nodeId);
@@ -66,6 +92,20 @@ public class JpaKnowledgeGraphRepository implements KnowledgeGraphRepository {
         return edges.findMisconceptionEdgesTo(topicNodeId).stream()
                 .map(KnowledgeEdge::source)
                 .toList();
+    }
+
+    @Override
+    public Map<UUID, List<KnowledgeNode>> findMisconceptionsForTopics(Collection<UUID> topicNodeIds) {
+        if (topicNodeIds == null || topicNodeIds.isEmpty()) {
+            return Map.of();
+        }
+        // same edge direction contract as findMisconceptions above: the
+        // misconception is the edge SOURCE, the topic the TARGET
+        Map<UUID, List<KnowledgeNode>> result = new LinkedHashMap<>();
+        for (KnowledgeEdge e : edges.findMisconceptionEdgesToTopics(topicNodeIds)) {
+            result.computeIfAbsent(e.target().id(), k -> new ArrayList<>()).add(e.source());
+        }
+        return result;
     }
 
     @Override

@@ -58,6 +58,23 @@ public interface KnowledgeEdgeRepository extends JpaRepository<KnowledgeEdge, UU
             """)
     List<KnowledgeEdge> findMisconceptionEdgesTo(@Param("nodeId") UUID nodeId);
 
+    /**
+     * Batched MISCONCEPTION_OF edges pointing at ANY of the given topics (M3
+     * tranche 2, audit 2026-10-02) — the IN form of
+     * {@link #findMisconceptionEdgesTo(UUID)}, one query for all matched
+     * topics instead of one per topic. Same query shape (no ORDER BY beyond
+     * what the store returns), both endpoints join-fetched so the per-topic
+     * grouping in the read model never touches lazy state.
+     */
+    @Query("""
+            select e from KnowledgeEdge e
+            join fetch e.source
+            join fetch e.target
+            where e.target.id in :topicIds
+              and e.relationType = com.syllabai.knowledge.RelationType.MISCONCEPTION_OF
+            """)
+    List<KnowledgeEdge> findMisconceptionEdgesToTopics(@Param("topicIds") java.util.Collection<UUID> topicIds);
+
     /** The PART_OF edge that hangs a node under its parent (§7 review workflow). */
     Optional<KnowledgeEdge> findBySourceIdAndRelationType(
             @Param("sourceId") UUID sourceId, @Param("relationType") RelationType relationType);

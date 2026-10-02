@@ -66,7 +66,7 @@ class ContentDocumentControllerSearchEmptyCauseTest {
     void happyPathRunsNoDiagnostics() {
         when(vectors.searchServingEligible(any(float[].class), any(), eq(CV_ID), anyInt()))
                 .thenReturn(List.of(new ChunkHit(UUID.randomUUID(), UUID.randomUUID(),
-                        "doc-1", "MARK_SCHEME", 0, "content", 1, 2, List.of(),
+                        1, "doc-1", "MARK_SCHEME", 0, "content", 1, 2, List.of(),
                         "test-embed", 0.9)));
 
         ResponseEntity<List<ContentDocumentController.ChunkHitView>> response =

@@ -13,6 +13,13 @@ syllabai:
   # payload assertions); the limiter itself is unit-tested directly
   ratelimit:
     enabled: false
+  # telemetry dispatch (audit M1): production dispatches the research-record
+  # listeners on a bounded pool; tests pin the pre-M1 inline dispatch so flow
+  # ITs (KaRagFlowIT, ClaFlowIT, MultipartMarkingFlowIT,
+  # EvidenceStateConcurrencyIT) can assert telemetry rows deterministically
+  # right after the act
+  telemetry:
+    dispatch: sync
 
 logging:
   level:

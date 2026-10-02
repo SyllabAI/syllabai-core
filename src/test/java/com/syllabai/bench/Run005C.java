@@ -39,7 +39,9 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * of the two recorded arms — {@code PgVectorRetrievalProvider} (arm A path:
  * ContentVectorRetriever → ContentRetrievalService →
  * ChunkVectorRepository.searchServingEligible (T-C20), pgvector cosine over V11
- * vector(768), T-C07 scope, cosine floor 0.15,
+ * vector(768), T-C07 scope, cosine floor = {@code ContentVectorRetriever#MIN_COSINE}
+ * (T-C42-calibrated 0.50; run-005-c through r7 were recorded pre-calibration
+ * at 0.15, r8 at 0.50),
  * kind-agnostic) and {@code Bm25Retriever} (arm B path: T-C14 Postgres FTS
  * ts_rank_cd over V28 content_tsv, T-C07 scope + T-C05 VALIDATED serving) —
  * fused by the shipped {@code ReciprocalRankFusion} (k=60), rank-only,
@@ -182,13 +184,35 @@ public final class Run005C {
         int applied = Run004A.applyChunkVectors(jdbc, artifactDir, snapshot);
         Run004A.assertStoredState(jdbc, artifactDir);
 
+        // ── 2b. paired embed_rev stamp (the 2026-09-28 cut-over mirror) ──────
+        // The frozen artifact IS the rev2 corpus; the bench loader's inserts
+        // land at the V33 default embed_rev=1, and BOTH serving arms gate at
+        // ChunkVectorRepository.CURRENT_EMBED_REV — without this paired stamp
+        // a post-flip replay reproduces the T-C23 empty funnel in miniature
+        // (every chunk invisible, 120/120 zero-result). Production mirror:
+        // evidence/serving-rev2-restamp-cutover-2026-09-28 (in-window restamp,
+        // serving set provably identical across the boundary).
+        int revNow = com.syllabai.content.ChunkVectorRepository.CURRENT_EMBED_REV;
+        int restamped = jdbc.update(
+                "update document_chunks set embed_rev = ? where embed_rev <> ? and embedding is not null",
+                revNow, revNow);
+        int atRev = jdbc.queryForObject(
+                "select count(*) from document_chunks where embed_rev = ? and embedding is not null",
+                Integer.class, revNow);
+        if (atRev != dbChunks) {
+            throw new IllegalStateException("paired rev stamp incomplete: " + atRev
+                    + " chunks at embed_rev=" + revNow + " != " + dbChunks + " (fail-closed)");
+        }
+        log("paired embed_rev stamp: " + restamped + " chunks -> rev " + revNow
+                + " (all " + atRev + " embedded chunks now serving-eligible by rev)");
+
         // ── 3. the production fabric: explicit arms + shipped fusion ─────────
         EmbeddingProvider frozen = Run004A.frozenQueryProvider(artifactDir, gold);
         ContentVectorRetriever vectorRetriever = ArmA.productionRetriever(
                 new ArmA.JdbcTemplateHolder(jdbc), frozen);
         RetrievalProvider semantic = new PgVectorRetrievalProvider(vectorRetriever);
         RetrievalProvider lexical = new Bm25Retriever(
-                new ChunkLexicalRepository(jdbc), ArmA.stubDocumentRepository());
+                new ChunkLexicalRepository(jdbc));
         ReciprocalRankFusion fusion = new ReciprocalRankFusion(60);
 
         RetrievalFabric servedFabric = new RetrievalFabric(

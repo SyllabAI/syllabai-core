@@ -171,4 +171,25 @@ class KaRagServiceStreamTest {
         assertThat(signals.get(3).isOnError()).isTrue();
         verify(events, never()).publishEvent(any());
     }
+
+    @Test
+    @DisplayName("L2: an EMPTY generation (zero tokens) is a failure — no meta, no blank done, "
+            + "no research event, nothing persists")
+    void emptyGenerationSurfacesAsFailure() {
+        scopeWithKnowledge();
+        when(generator.streamGenerate(anyString(), anyList(), any()))
+                .thenReturn(Flux.empty());
+
+        List<reactor.core.publisher.Signal<TutorStreamEvent>> signals =
+                service.askStream(learnerId, "q", List.of(), null)
+                        .materialize().collectList().block();
+
+        assertThat(signals).hasSize(2); // citations, then the error — never a blank completion
+        assertThat(signals.get(0).get()).isInstanceOf(TutorStreamEvent.Citations.class);
+        assertThat(signals.get(1).isOnError()).isTrue();
+        assertThat(signals.get(1).getThrowable())
+                .isInstanceOf(TutorGenerationException.class);
+        // nothing persisted — no research event was published for the blank stream
+        verify(events, never()).publishEvent(any());
+    }
 }
