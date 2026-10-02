@@ -39,7 +39,9 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * of the two recorded arms — {@code PgVectorRetrievalProvider} (arm A path:
  * ContentVectorRetriever → ContentRetrievalService →
  * ChunkVectorRepository.searchServingEligible (T-C20), pgvector cosine over V11
- * vector(768), T-C07 scope, cosine floor 0.15,
+ * vector(768), T-C07 scope, cosine floor = {@code ContentVectorRetriever#MIN_COSINE}
+ * (T-C42-calibrated 0.50; run-005-c through r7 were recorded pre-calibration
+ * at 0.15, r8 at 0.50),
  * kind-agnostic) and {@code Bm25Retriever} (arm B path: T-C14 Postgres FTS
  * ts_rank_cd over V28 content_tsv, T-C07 scope + T-C05 VALIDATED serving) —
  * fused by the shipped {@code ReciprocalRankFusion} (k=60), rank-only,

@@ -91,8 +91,9 @@ class ArmAReplayIT {
 
     /**
      * Deterministic, offline, dim-768, and ALIGNED: query and document vectors
-     * for the same text are IDENTICAL (arm A's floor 0.15 passes exactly for
-     * the identical content; other chunks fall far below). IT-only stand-in.
+     * for the same text are IDENTICAL (cosine 1.0 clears arm A's floor at any
+     * calibrated setting — 0.50 since T-C42, 0.15 before; other chunks fall
+     * far below). IT-only stand-in.
      */
     static final class AlignedFakeEmbeddingProvider implements EmbeddingProvider {
         @Override
