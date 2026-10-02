@@ -35,4 +35,39 @@ public interface FlashcardRatingRepository extends JpaRepository<FlashcardRating
      * fetch order regardless).
      */
     List<FlashcardRating> findByLearnerIdOrderByCardIdAscOccurredAtAscIdAsc(UUID learnerId);
+
+    /**
+     * KEYSET page 1 of the raw trail, newest first (T-C61 — the bounded
+     * raw-trail read, GET /api/v1/learners/me/flashcard-rating-trail): the
+     * order is the total order {@code (occurred_at DESC, id DESC)} — the id
+     * is the deterministic tiebreaker because V47's UUID id carries no time
+     * information. Page 2+ uses {@link #pageByLearnerNewestFirstAfter} with
+     * the TrailCursor position of this page's last row; the two methods MUST
+     * keep the same order clause or the walk loses its keyset guarantees.
+     */
+    List<FlashcardRating> findByLearnerIdOrderByOccurredAtDescIdDesc(UUID learnerId,
+            Pageable pageable);
+
+    /**
+     * KEYSET pages 2+ of the raw trail (T-C61): strictly AFTER the cursor
+     * position — the exclusive-tuple predicate {@code (occurred_at, id) <
+     * (beforeTs, beforeId)} expressed as its disjunctive normal form. The
+     * cursor pair comes from {@link TrailCursor} (server-issued, opaque);
+     * exclusive comparison means a row added with EXACTLY the cursor's
+     * position and a smaller id could still precede it — impossible for
+     * pages already served (append-only trail, ids never reused), which is
+     * what makes the walk gap-free and duplicate-free.
+     */
+    @Query("""
+            select r from FlashcardRating r
+            where r.learnerId = :learnerId
+              and (r.occurredAt < :beforeTs
+                   or (r.occurredAt = :beforeTs and r.id < :beforeId))
+            order by r.occurredAt desc, r.id desc
+            """)
+    List<FlashcardRating> pageByLearnerNewestFirstAfter(
+            @Param("learnerId") UUID learnerId,
+            @Param("beforeTs") java.time.Instant beforeTs,
+            @Param("beforeId") UUID beforeId,
+            Pageable pageable);
 }
