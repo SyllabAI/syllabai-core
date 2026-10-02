@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.syllabai.content.CanonicalDocumentDto.EquationElement;
 import com.syllabai.content.CanonicalDocumentDto.TableElement;
 import com.syllabai.content.CanonicalDocumentDto.TextBlockElement;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,8 +92,10 @@ class DocumentPageTextTest {
     @Test
     @DisplayName("null text and null elements are skipped, never rendered as 'null'")
     void nullTextSkipped() {
+        // Arrays.asList (List.of rejects nulls): the extractor's defensive
+        // null-element skip is part of its contract, so the test feeds one
         CanonicalDocumentDto d = doc(
-                List.of(text("a", 1, 1, "kept"),
+                Arrays.asList(text("a", 1, 1, "kept"),
                         new TextBlockElement("b", "text", 1, null, null, 2, null, null, null,
                                 "e", "1", null),
                         null),
