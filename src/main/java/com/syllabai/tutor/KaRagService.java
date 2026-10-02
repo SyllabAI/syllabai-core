@@ -359,6 +359,21 @@ public class KaRagService {
                 // completion: publish the research event once, with full parity
                 // fields, then hand the controller its §22 persistence summary
                 Flux.defer(() -> {
+                    if (!metaSent.get()) {
+                        // L2 (audit 2026-10-02): an EMPTY generation — the provider
+                        // closed its stream without a single surviving token — is a
+                        // generation FAILURE, not a successful blank answer. No Meta
+                        // was ever sent (no provider identity exists to invent), the
+                        // research event does not publish and nothing persists: the
+                        // same nothing-persists posture as a mid-stream provider
+                        // death. The client sees citations → the fixed error event,
+                        // never a silently blank done.
+                        log.warn("KA-RAG streamed generation produced no tokens "
+                                + "({} evidence, {} topics) — surfacing as a generation failure",
+                                evidenceCount, prep.knowledge().topics().size());
+                        return Flux.error(new TutorGenerationException(
+                                GroundedTutorGenerator.UNAVAILABLE_MESSAGE));
+                    }
                     double latencyMs = (System.nanoTime() - startedAt) / 1_000_000.0;
                     String provider = providerRef.get();
                     String model = modelRef.get();
