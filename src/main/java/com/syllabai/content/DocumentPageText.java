@@ -19,6 +19,11 @@ import java.util.List;
  */
 final class DocumentPageText {
 
+    /** One text-bearing element placed on the page: its canonical reading
+     *  order (nullable — sorts last, never first) and its verbatim text. */
+    private record Piece(Integer readingOrder, String text) {
+    }
+
     private DocumentPageText() {
     }
 
@@ -29,12 +34,10 @@ final class DocumentPageText {
      * "this page carries no text layer", never a fabricated placeholder.
      */
     static String of(CanonicalDocumentDto doc, int page) {
-        record Piece(Integer readingOrder, String text) {
-        }
         List<Piece> pieces = new ArrayList<>();
-        collect(pieces, page, doc.textBlocks());
-        collect(pieces, page, doc.tables());
-        collect(pieces, page, doc.equations());
+        collectTextBlocks(pieces, page, doc.textBlocks());
+        collectTables(pieces, page, doc.tables());
+        collectEquations(pieces, page, doc.equations());
         // stable sort: equal reading_order keeps canonical document order;
         // a missing reading_order sorts last within the page, never first
         pieces.sort(Comparator.comparing(Piece::readingOrder,
@@ -49,8 +52,8 @@ final class DocumentPageText {
         return joined.toString();
     }
 
-    private static void collect(List<Piece> pieces, int page,
-                                List<CanonicalDocumentDto.TextBlockElement> elements) {
+    private static void collectTextBlocks(List<Piece> pieces, int page,
+                                          List<CanonicalDocumentDto.TextBlockElement> elements) {
         if (elements == null) {
             return;
         }
@@ -62,8 +65,8 @@ final class DocumentPageText {
         }
     }
 
-    private static void collect(List<Piece> pieces, int page,
-                                List<CanonicalDocumentDto.TableElement> elements) {
+    private static void collectTables(List<Piece> pieces, int page,
+                                      List<CanonicalDocumentDto.TableElement> elements) {
         if (elements == null) {
             return;
         }
@@ -75,8 +78,8 @@ final class DocumentPageText {
         }
     }
 
-    private static void collect(List<Piece> pieces, int page,
-                                List<CanonicalDocumentDto.EquationElement> elements) {
+    private static void collectEquations(List<Piece> pieces, int page,
+                                         List<CanonicalDocumentDto.EquationElement> elements) {
         if (elements == null) {
             return;
         }
