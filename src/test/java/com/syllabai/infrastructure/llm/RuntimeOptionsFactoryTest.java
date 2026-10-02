@@ -59,4 +59,49 @@ class RuntimeOptionsFactoryTest {
                 LlmRequest.of("sys", "user").withModel("not-a-gemini-model"), "gemini-3.6-flash"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("reasoning-effort knob: reasoning_effort wire value on the OpenAI factory")
+    void openAiFactoryCarriesReasoningEffort() {
+        ChatOptions withEffort = LlmChainConfig.openAiRuntimeOptions(
+                LlmRequest.of("sys", "user").withReasoningEffort(LlmReasoningEffort.LOW),
+                "default-model");
+        assertThat(((OpenAiChatOptions) withEffort).getReasoningEffort()).isEqualTo("low");
+
+        ChatOptions minimal = LlmChainConfig.openAiRuntimeOptions(
+                LlmRequest.of("sys", "user").withReasoningEffort(LlmReasoningEffort.MINIMAL),
+                "default-model");
+        assertThat(((OpenAiChatOptions) minimal).getReasoningEffort()).isEqualTo("minimal");
+
+        // unset = provider default, exactly the pre-knob behavior
+        ChatOptions unset = LlmChainConfig.openAiRuntimeOptions(
+                LlmRequest.of("sys", "user"), "default-model");
+        assertThat(((OpenAiChatOptions) unset).getReasoningEffort()).isNull();
+    }
+
+    @Test
+    @DisplayName("reasoning-effort knob: thinkingLevel enum mapping on the GenAI factory")
+    void genAiFactoryCarriesThinkingLevel() {
+        ChatOptions low = LlmChainConfig.genAiRuntimeOptions(
+                LlmRequest.of("sys", "user").withReasoningEffort(LlmReasoningEffort.LOW),
+                "gemini-3.6-flash");
+        assertThat(((GoogleGenAiChatOptions) low).getThinkingLevel())
+                .isEqualTo(GoogleGenAiThinkingLevel.LOW);
+
+        ChatOptions unset = LlmChainConfig.genAiRuntimeOptions(
+                LlmRequest.of("sys", "user"), "gemini-3.6-flash");
+        assertThat(((GoogleGenAiChatOptions) unset).getThinkingLevel()).isNull();
+    }
+
+    @Test
+    @DisplayName("knob copy semantics: survives model/media copies, cleared by null")
+    void reasoningEffortCopySemantics() {
+        LlmRequest request = LlmRequest.of("sys", "user").withReasoningEffort(LlmReasoningEffort.LOW);
+        assertThat(request.withModel("pinned").reasoningEffort()).isEqualTo(LlmReasoningEffort.LOW);
+        assertThat(request.withMedia(null).reasoningEffort()).isEqualTo(LlmReasoningEffort.LOW);
+        assertThat(request.withReasoningEffort(null).reasoningEffort()).isNull();
+        // the legacy arities keep the pre-knob contract (provider default)
+        assertThat(new LlmRequest("s", "u", null, null, null, null).reasoningEffort()).isNull();
+        assertThat(new LlmRequest("s", "u", null, null, null, null, null).reasoningEffort()).isNull();
+    }
 }

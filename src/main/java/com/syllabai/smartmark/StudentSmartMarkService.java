@@ -13,6 +13,7 @@ import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.infrastructure.llm.LlmProvider;
 import com.syllabai.infrastructure.llm.LlmProviderException;
+import com.syllabai.infrastructure.llm.LlmReasoningEffort;
 import com.syllabai.infrastructure.llm.LlmRequest;
 import com.syllabai.infrastructure.llm.LlmResponse;
 import com.syllabai.shared.BadRequestException;
@@ -375,7 +376,10 @@ public class StudentSmartMarkService {
         }
         try {
             LlmResponse response = llm.generate(
-                    LlmRequest.withOptions(systemPrompt, userPrompt, temperature, 700));
+                    LlmRequest.withOptions(systemPrompt, userPrompt, temperature, 700)
+                            // learner-facing feedback is a short structured write —
+                            // LOW keeps it out of extended-thinking latencies
+                            .withReasoningEffort(LlmReasoningEffort.LOW));
             String text = response.text();
             if (text == null || text.isBlank()) {
                 throw new SmartFeedbackGenerationException(

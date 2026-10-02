@@ -11,6 +11,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
+import org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -181,6 +182,9 @@ public class LlmChainConfig {
         if (request.maxTokens() != null) {
             builder.maxTokens(request.maxTokens());
         }
+        if (request.reasoningEffort() != null) {
+            builder.reasoningEffort(request.reasoningEffort().wireName());
+        }
         return builder.build();
     }
 
@@ -194,6 +198,10 @@ public class LlmChainConfig {
         }
         if (request.maxTokens() != null) {
             builder.maxOutputTokens(request.maxTokens());   // GenAI names the cap differently
+        }
+        if (request.reasoningEffort() != null) {
+            // the Spring AI thinking-level enum names match LlmReasoningEffort exactly
+            builder.thinkingLevel(GoogleGenAiThinkingLevel.valueOf(request.reasoningEffort().name()));
         }
         return builder.build();
     }
