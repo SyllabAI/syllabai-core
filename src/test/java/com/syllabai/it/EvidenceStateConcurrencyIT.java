@@ -299,14 +299,18 @@ class EvidenceStateConcurrencyIT {
         assertThat(payload.get("topicNodeIds"))
                 .asList().contains(question.primaryTopicNodeId().toString());
 
-        // deterministic learner-state projection: BKT(l0=0.1, slip=0.1, guess=0.25,
-        // T=0.1) after ONE correct observation = 5/14 (pinned by BktEngineTest;
-        // guards against partial-correctness contamination of counters/mastery)
+        // deterministic learner-state projection: BKT(l0=0.1, slip=0.1, T=0.1) with
+        // the format-aware emission (S2/ADR-033): this fixture's question is
+        // STRUCTURED, so guess resolves to 0.01 and ONE correct observation gives
+        // p=(0.1·0.9)/(0.1·0.9+0.9·0.01)=10/11, then the T=0.1 learn transition
+        // settles 101/110 (the legacy flat-guess=0.25 path keeps its 5/14 pin in
+        // BktEngineTest; still guards against partial-correctness contamination
+        // of counters/mastery)
         SkillState state = skillStates
                 .findByLearnerIdAndNodeId(learner, question.primaryTopicNodeId()).orElseThrow();
         assertThat(state.attempts()).isEqualTo(1);
         assertThat(state.correctCount()).isEqualTo(1);
-        assertThat(state.mastery()).isCloseTo(5.0 / 14.0, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(state.mastery()).isCloseTo(101.0 / 110.0, org.assertj.core.data.Offset.offset(1e-9));
     }
 
     // ─────────────────────────────────────────────────────────────────────
