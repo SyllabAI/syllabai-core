@@ -115,10 +115,37 @@ public class KnowledgeGraphService {
      * Every UNIT/TOPIC/SUBTOPIC node, code-ordered — the deterministic intent
      * surface for KA-RAG (T-024): query tokens are matched against these
      * titles; nothing outside the KG may be inferred.
+     *
+     * <p>M3 (audit 2026-10-02): the structure list is read on EVERY tutor ask
+     * (the GraphKnowledgeRetriever intent matcher is this method's only
+     * production caller) yet changes only through curriculum ingest and
+     * teacher validation waves. A 30-second in-process TTL trims one
+     * full-structure query per ask; a ≤30s-late node list is immaterial for
+     * title-token matching, and the per-node VALIDATED gate still runs in the
+     * retriever AFTER the cache, so serving eligibility never rides on it.
+     * The cache is a single immutable snapshot swapped wholesale (one volatile
+     * reference — no partial visibility), never tunable, never shared across
+     * instances: one constant, fail-safe expiry.</p>
      */
     public List<KnowledgeNode> structureNodes() {
-        return nodes.findStructureNodes();
+        StructureSnapshot snapshot = structureCache;
+        long now = System.nanoTime();
+        if (snapshot != null && now - snapshot.nanos() < STRUCTURE_CACHE_TTL_NANOS) {
+            return snapshot.nodes();
+        }
+        List<KnowledgeNode> fresh = List.copyOf(nodes.findStructureNodes());
+        structureCache = new StructureSnapshot(fresh, now);
+        return fresh;
     }
+
+    /** M3: in-process TTL for {@link #structureNodes()} — 30s, wholesale expiry. */
+    private static final long STRUCTURE_CACHE_TTL_NANOS = 30_000_000_000L;
+
+    /** One immutable cache generation: the node list + when it was read. */
+    private record StructureSnapshot(List<KnowledgeNode> nodes, long nanos) {
+    }
+
+    private volatile StructureSnapshot structureCache;
 
     /**
      * Direct prerequisite relations among the subtree's structure nodes — the
