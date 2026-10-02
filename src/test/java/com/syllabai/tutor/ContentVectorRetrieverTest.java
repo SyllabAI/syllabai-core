@@ -9,11 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ContentRetrievalService;
-import com.syllabai.content.Document;
-import com.syllabai.content.DocumentRepository;
 import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +20,8 @@ import org.junit.jupiter.api.Test;
  * Vector adapter (T-024): chunk hits lift into evidence with provenance;
  * sub-threshold similarity is NOT evidence (pgvector ranks return zero-relevance
  * chunks too); a missing embedding provider degrades to empty, not failure.
+ * Document version arrives carried by the search SQL (M2/T-C32-class N+1 kill:
+ * the adapter has no DocumentRepository and never re-reads a document row).
  */
 class ContentVectorRetrieverTest {
 
@@ -31,21 +30,15 @@ class ContentVectorRetrieverTest {
             Set.of(UUID.randomUUID()));
 
     private final ContentRetrievalService retrieval = mock(ContentRetrievalService.class);
-    private final DocumentRepository documents = mock(DocumentRepository.class);
-    private final ContentVectorRetriever adapter =
-            new ContentVectorRetriever(retrieval, documents);
+    private final ContentVectorRetriever adapter = new ContentVectorRetriever(retrieval);
 
     @Test
-    @DisplayName("chunks lift into evidence with document provenance intact")
+    @DisplayName("chunks lift into evidence with document provenance intact — version carried by the hit, no per-hit re-read")
     void liftsChunks() {
         UUID docRow = UUID.randomUUID();
         UUID chunkId = UUID.randomUUID();
-        Document doc = new Document("ms-1", "1.0", 3, Document.Kind.MARK_SCHEME,
-                "test://ms.pdf", "ms.pdf", "application/pdf", "c".repeat(64), "SHA-256",
-                20, 25, 18, 3, "opendataloader-pdf", "2.5.7", null, "{}", null);
-        when(documents.findById(docRow)).thenReturn(Optional.of(doc));
         when(retrieval.search(any(), isNull(), org.mockito.ArgumentMatchers.eq(SCOPE), anyInt())).thenReturn(List.of(
-                new ChunkHit(chunkId, docRow, "ms-1", "MARK_SCHEME", 4,
+                new ChunkHit(chunkId, docRow, 3, "ms-1", "MARK_SCHEME", 4,
                         "accept: chlorine is oxidised", 16, 16, List.of("e26"),
                         "gemini", 0.81)));
 
@@ -94,7 +87,7 @@ class ContentVectorRetrieverTest {
     }
 
     private ChunkHit hit(double score) {
-        return new ChunkHit(UUID.randomUUID(), UUID.randomUUID(), "d", "MARK_SCHEME", 0,
+        return new ChunkHit(UUID.randomUUID(), UUID.randomUUID(), 1, "d", "MARK_SCHEME", 0,
                 "content", 1, 1, List.of(), "m", score);
     }
 }

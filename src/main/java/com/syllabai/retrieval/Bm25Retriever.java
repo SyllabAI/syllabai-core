@@ -2,7 +2,6 @@ package com.syllabai.retrieval;
 
 import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ChunkLexicalRepository;
-import com.syllabai.content.DocumentRepository;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +39,13 @@ import org.springframework.stereotype.Component;
  * validation boundary is enforced once, centrally, and never per-provider
  * (contract invariant 1). Serving wiring is untouched: BM25 enters the served
  * fusion only if the T-C13 benchmark promotes it.</p>
+ *
+ * <p>Document version is carried by the lexical search SQL itself
+ * ({@code documents.doc_version} joined in
+ * {@link ChunkLexicalRepository#searchServingEligible}): {@code toCandidate}
+ * reads {@code hit.docVersion()} and never re-reads the document row per hit
+ * (the per-hit {@code findById()} this class used to perform was a T-C32-class
+ * N+1 — one extra query per candidate, every retrieval).</p>
  */
 @Component
 public class Bm25Retriever implements RetrievalProvider {
@@ -47,11 +53,9 @@ public class Bm25Retriever implements RetrievalProvider {
     private static final Logger log = LoggerFactory.getLogger(Bm25Retriever.class);
 
     private final ChunkLexicalRepository lexical;
-    private final DocumentRepository documents;
 
-    public Bm25Retriever(ChunkLexicalRepository lexical, DocumentRepository documents) {
+    public Bm25Retriever(ChunkLexicalRepository lexical) {
         this.lexical = lexical;
-        this.documents = documents;
     }
 
     @Override
@@ -82,7 +86,7 @@ public class Bm25Retriever implements RetrievalProvider {
                 id(),
                 hit.documentRowId(),
                 hit.documentId(),
-                documentVersion(hit),
+                hit.docVersion(),
                 String.valueOf(hit.chunkId()),
                 null,
                 null,
@@ -93,14 +97,5 @@ public class Bm25Retriever implements RetrievalProvider {
                 java.util.Map.of(
                         "chunk_index", String.valueOf(hit.chunkIndex()),
                         "document_kind", hit.kind() == null ? "OTHER" : hit.kind()));
-    }
-
-    private int documentVersion(ChunkHit hit) {
-        if (hit.documentRowId() == null) {
-            return 1;
-        }
-        return documents.findById(hit.documentRowId())
-                .map(d -> d.docVersion())
-                .orElse(1);
     }
 }

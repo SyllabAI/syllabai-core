@@ -2,7 +2,6 @@ package com.syllabai.bench;
 
 import com.syllabai.content.ChunkVectorRepository;
 import com.syllabai.content.ContentRetrievalService;
-import com.syllabai.content.DocumentRepository;
 import com.syllabai.content.EmbeddingProvider;
 import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.tutor.ContentVectorRetriever;
@@ -176,15 +175,17 @@ public final class ArmA {
     /**
      * The production retrieval stack wired for the bench: real
      * {@code ContentRetrievalService} with the frozen provider behind the
-     * {@code ObjectProvider<EmbeddingProvider>} seam (reflective stub, the
-     * Run003B {@code stubDocumentRepository} pattern) and the real
-     * {@code ChunkVectorRepository} over the bench JDBC template.
+     * {@code ObjectProvider<EmbeddingProvider>} seam (reflective stub) and the
+     * real {@code ChunkVectorRepository} over the bench JDBC template. Document
+     * version provenance is carried by the search SQL itself (the bench corpus
+     * documents are doc_version 1) — no document-row re-reads, matching the
+     * production serving path.
      */
     static ContentVectorRetriever productionRetriever(JdbcTemplateHolder holder,
                                                       EmbeddingProvider frozenProvider) {
         ContentRetrievalService service = new ContentRetrievalService(
                 objectProvider(frozenProvider), new ChunkVectorRepository(holder.jdbc()));
-        return new ContentVectorRetriever(service, stubDocumentRepository());
+        return new ContentVectorRetriever(service);
     }
 
     /** Minimal ObjectProvider stub — the service only calls getIfAvailable(). */
@@ -220,44 +221,6 @@ public final class ArmA {
                                 }
                             }
                         });
-    }
-
-    /** Same stub as Run003B: bench corpus is doc_version 1 — findById → empty → fallback 1. */
-    static DocumentRepository stubDocumentRepository() {
-        return (DocumentRepository) java.lang.reflect.Proxy.newProxyInstance(
-                DocumentRepository.class.getClassLoader(),
-                new Class<?>[]{DocumentRepository.class},
-                (proxy, method, methodArgs) -> {
-                    switch (method.getName()) {
-                        case "findById":
-                            return java.util.Optional.empty();
-                        case "equals":
-                            return proxy == methodArgs[0];
-                        case "hashCode":
-                            return System.identityHashCode(proxy);
-                        case "toString":
-                            return "bench-stub-document-repository";
-                        default: {
-                            Class<?> t = method.getReturnType();
-                            if (t == boolean.class) {
-                                return false;
-                            }
-                            if (t == int.class) {
-                                return 0;
-                            }
-                            if (t == long.class) {
-                                return 0L;
-                            }
-                            if (java.util.Optional.class == t) {
-                                return java.util.Optional.empty();
-                            }
-                            if (java.util.List.class == t) {
-                                return List.of();
-                            }
-                            return null;
-                        }
-                    }
-                });
     }
 
     /** Tiny holder so the wiring method's signature stays framework-free. */

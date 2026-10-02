@@ -76,7 +76,7 @@ public class ChunkLexicalRepository {
         }
         String kindFilter = kindFilter(kinds);
         String sql = """
-                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                select c.id, c.document_row_id, d.doc_version, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
                        null as embedding_model, ts_rank_cd(c.content_tsv, q.tsq) as score
                 from document_chunks c
@@ -129,7 +129,7 @@ public class ChunkLexicalRepository {
         }
         String kindFilter = kindFilter(kinds);
         String sql = """
-                select c.id, c.document_row_id, d.document_id, d.kind, c.chunk_index,
+                select c.id, c.document_row_id, d.doc_version, d.document_id, d.kind, c.chunk_index,
                        c.content, c.page_start, c.page_end, c.element_ids,
                        null as embedding_model, ts_rank_cd(c.content_tsv, q.tsq) as score
                 from document_chunks c
@@ -182,6 +182,7 @@ public class ChunkLexicalRepository {
         return new ChunkHit(
                 rs.getObject("id", UUID.class),
                 rs.getObject("document_row_id", UUID.class),
+                rs.getInt("doc_version"),
                 rs.getString("document_id"),
                 rs.getString("kind"),
                 rs.getInt("chunk_index"),

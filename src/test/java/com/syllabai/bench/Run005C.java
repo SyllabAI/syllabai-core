@@ -188,7 +188,7 @@ public final class Run005C {
                 new ArmA.JdbcTemplateHolder(jdbc), frozen);
         RetrievalProvider semantic = new PgVectorRetrievalProvider(vectorRetriever);
         RetrievalProvider lexical = new Bm25Retriever(
-                new ChunkLexicalRepository(jdbc), ArmA.stubDocumentRepository());
+                new ChunkLexicalRepository(jdbc));
         ReciprocalRankFusion fusion = new ReciprocalRankFusion(60);
 
         RetrievalFabric servedFabric = new RetrievalFabric(

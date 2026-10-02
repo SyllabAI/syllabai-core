@@ -2,7 +2,6 @@ package com.syllabai.tutor;
 
 import com.syllabai.content.ChunkHit;
 import com.syllabai.content.ContentRetrievalService;
-import com.syllabai.content.DocumentRepository;
 import com.syllabai.curriculum.CurriculumScope;
 import java.util.List;
 import org.slf4j.Logger;
@@ -23,6 +22,14 @@ import org.springframework.stereotype.Component;
  * no embedding provider is configured the adapter degrades honestly: empty
  * candidates, KG-only evidence, logged once per failure (never silently
  * retried).</p>
+ *
+ * <p>Document version provenance is carried by the search SQL itself
+ * ({@code documents.doc_version} joined in
+ * {@link com.syllabai.content.ChunkVectorRepository#searchServingEligible}):
+ * the adapter reads {@code hit.docVersion()} directly and never re-reads the
+ * document row per hit — the per-hit {@code findById()} this class used to
+ * perform was a T-C32-class N+1 on the serving path, one extra query per
+ * evidence candidate, every ask.</p>
  */
 @Component
 public class ContentVectorRetriever implements VectorRetriever {
@@ -45,12 +52,9 @@ public class ContentVectorRetriever implements VectorRetriever {
     static final double MIN_COSINE = 0.50;
 
     private final ContentRetrievalService retrieval;
-    private final DocumentRepository documents;
 
-    public ContentVectorRetriever(ContentRetrievalService retrieval,
-                                  DocumentRepository documents) {
+    public ContentVectorRetriever(ContentRetrievalService retrieval) {
         this.retrieval = retrieval;
-        this.documents = documents;
     }
 
     @Override
@@ -63,7 +67,7 @@ public class ContentVectorRetriever implements VectorRetriever {
             return hits.stream()
                     .filter(hit -> hit.score() >= MIN_COSINE)
                     .map(hit -> EvidenceItem.fromChunk(
-                            hit.documentRowId(), hit.documentId(), documentVersion(hit),
+                            hit.documentRowId(), hit.documentId(), hit.docVersion(),
                             hit.chunkId(), hit.chunkIndex(), hit.kind(), hit.content(),
                             hit.pageStart(), hit.pageEnd(), hit.elementIds(),
                             hit.embeddingModel(), hit.score()))
@@ -74,14 +78,5 @@ public class ContentVectorRetriever implements VectorRetriever {
             log.warn("vector retrieval unavailable: {}", e.getMessage());
             return List.of();
         }
-    }
-
-    private int documentVersion(ChunkHit hit) {
-        if (hit.documentRowId() == null) {
-            return 1;
-        }
-        return documents.findById(hit.documentRowId())
-                .map(d -> d.docVersion())
-                .orElse(1);
     }
 }
