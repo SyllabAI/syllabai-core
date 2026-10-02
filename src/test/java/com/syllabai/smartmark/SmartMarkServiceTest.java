@@ -25,6 +25,7 @@ import com.syllabai.assessment.QuestionVersionRepository;
 import com.syllabai.shared.events.SmartMarkCompletedEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -288,5 +289,274 @@ class SmartMarkServiceTest {
         assertThat(attempt.marksAwarded()).isEqualTo(4);
         // two completed-events, exactly one evidence call — no duplicate evidence
         assertThat(published).hasSize(2);
+    }
+
+    // ── markAttempt: the single-call batching pass (latency round 2026-10-02) ──
+
+    private Answer answerB;
+    private MarkScheme bothParts;
+
+    /** a second answered part + a scheme covering BOTH parts, stubbed for markAttempt */
+    private void batchFixture() {
+        QuestionPart partB = new QuestionPart(version, "b", "part b", "State", 2, 1);
+        TestIds.withId(partB, UUID.randomUUID());
+        version.addPart(partB);
+        answerB = new Answer(attempt, partB, "a second written answer");
+        TestIds.withId(answerB, UUID.randomUUID());
+        when(answers.findWithPartAndAttempt(answerB.id())).thenReturn(Optional.of(answerB));
+        when(answers.findByAttemptIdOrderByQuestionPartId(attempt.id()))
+                .thenReturn(List.of(answer, answerB));
+
+        bothParts = new MarkScheme(version, "2", "ms-b", "test");
+        TestIds.withId(bothParts, UUID.randomUUID());
+        MarkPoint pointA2 = new MarkPoint(bothParts, part, "1-a", 0, "first answer", 1, List.of(), 0.9);
+        TestIds.withId(pointA2, UUID.randomUUID());
+        MarkPoint pointA3 = new MarkPoint(bothParts, part, "1-a", 1, "first reason", 1, List.of(), 0.9);
+        TestIds.withId(pointA3, UUID.randomUUID());
+        MarkPoint pointB1 = new MarkPoint(bothParts, partB, "1-b", 0, "second answer", 1, List.of(), 0.9);
+        TestIds.withId(pointB1, UUID.randomUUID());
+        MarkPoint pointB2 = new MarkPoint(bothParts, partB, "1-b", 1, "second reason", 1, List.of(), 0.9);
+        TestIds.withId(pointB2, UUID.randomUUID());
+        bothParts.addPoint(pointA2);
+        bothParts.addPoint(pointA3);
+        bothParts.addPoint(pointB1);
+        bothParts.addPoint(pointB2);
+        bothParts.validate();   // G-2: only a VALIDATED scheme backs marking
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
+                .thenReturn(Optional.of(bothParts));
+    }
+
+    /** the awarding pipeline the markAttempt tests run against (every point earned) */
+    private SmartMarkService fullMarksService() {
+        return new SmartMarkService(
+                answers, attempts, questionVersions, markSchemes, smartMarkResults,
+                agreementEvaluations, questionTopics, evidencePublisher,
+                new SmartMarkPipeline(
+                        ctx -> new MarkingCandidate("test-model", ctx.points().stream()
+                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(),
+                                        p.marks(), "quoted learner text", "earned"))
+                                .toList(), 0.9, "raw"),
+                        List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                                new MarkSumMarkingValidator())),
+                published::add);
+    }
+
+    private void gateClosed() {
+        when(agreementEvaluations.findFirstByScopeOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_ALL)).thenReturn(Optional.empty());
+        when(agreementEvaluations.findFirstByScopeAndExamPaperIdOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_PAPER, PAPER)).thenReturn(Optional.empty());
+    }
+
+    private void gateReleased() {
+        when(agreementEvaluations.findFirstByScopeOrderByComputedAtDesc(
+                SmartMarkAgreementEvaluation.SCOPE_ALL))
+                .thenReturn(Optional.of(new SmartMarkAgreementEvaluation(
+                        SmartMarkAgreementEvaluation.SCOPE_ALL, null, 10, 0.72, 0.9, 0.6, null)));
+        when(evidencePublisher.publishGraded(any(), any(), any())).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("markAttempt marks every part in one pass: rows, states, total recomputed once")
+    void markAttemptMarksEveryPartInOnePass() {
+        batchFixture();
+        gateClosed();
+
+        Map<UUID, SmartMarkResult> results = fullMarksService().markAttempt(attempt.id());
+
+        // one row per part answer, keyed by answer id, in part order
+        assertThat(results.keySet()).containsExactly(answer.id(), answerB.id());
+        assertThat(results.get(answer.id()).validationPassed()).isTrue();
+        assertThat(results.get(answerB.id()).validationPassed()).isTrue();
+        assertThat(results.get(answer.id()).marksAwarded()).isEqualTo(2);
+        assertThat(results.get(answerB.id()).marksAwarded()).isEqualTo(2);
+        assertThat(results.get(answer.id()).markSchemeId()).isEqualTo(bothParts.id());
+        // both parts provisionally marked; the attempt total reflects the full pass
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
+        assertThat(answerB.markingState()).isEqualTo(Answer.MarkingState.SMART_MARKED);
+        assertThat(attempt.marksAwarded()).isEqualTo(4);
+        // one event per part, κ gate closed → honest provisional flags
+        assertThat(published).hasSize(2);
+        assertThat(published).allSatisfy(e ->
+                assertThat(((SmartMarkCompletedEvent) e).authoritative()).isFalse());
+        verify(evidencePublisher, never()).publishGraded(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("κ-released complete batch pass fires evidence exactly ONCE for the attempt")
+    void markAttemptFiresEvidenceOnceWhenComplete() {
+        batchFixture();
+        gateReleased();
+
+        Map<UUID, SmartMarkResult> results = service.markAttempt(attempt.id());
+
+        assertThat(results.get(answer.id()).validationPassed()).isTrue();
+        // two part events, ONE evidence call — the serial loop's completing-part
+        // check collapses to a single completeness check after the pass
+        verify(evidencePublisher, times(1)).publishGraded(any(), any(), any());
+        assertThat(published).hasSize(2);
+        assertThat(published).allSatisfy(e ->
+                assertThat(((SmartMarkCompletedEvent) e).authoritative()).isTrue());
+        // (the evidence flag flip itself is EvidencePublisherTest's contract —
+        // the mock publisher stands in here; one publishGraded call is the pin)
+    }
+
+    @Test
+    @DisplayName("a rejected part stays PENDING and withholds evidence — batch parity with serial")
+    void markAttemptRejectedPartWithholdsEvidence() {
+        batchFixture();
+        gateReleased();
+        // a generator that fails ONLY the second part: the default (serial)
+        // proposeAll propagates the failure → the pipeline's fallback ladder
+        // re-runs per part → part a still marked, part b honestly rejected
+        SmartMarkService mixed = new SmartMarkService(
+                answers, attempts, questionVersions, markSchemes, smartMarkResults,
+                agreementEvaluations, questionTopics, evidencePublisher,
+                new SmartMarkPipeline(
+                        ctx -> {
+                            if (ctx.answer() == answerB) {
+                                throw new CandidateGenerationException(
+                                        CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,
+                                        "chain down for part b", null);
+                            }
+                            return new MarkingCandidate("test-model", ctx.points().stream()
+                                    .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(),
+                                            p.marks(), "quoted learner text", "earned"))
+                                    .toList(), 0.9, "raw");
+                        },
+                        List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                                new MarkSumMarkingValidator())),
+                published::add);
+
+        Map<UUID, SmartMarkResult> results = mixed.markAttempt(attempt.id());
+
+        assertThat(results.get(answer.id()).validationPassed()).isTrue();
+        assertThat(results.get(answerB.id()).validationPassed()).isFalse();
+        assertThat(results.get(answerB.id()).failureReason()).isEqualTo("PROVIDER_UNAVAILABLE");
+        assertThat(answerB.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+        // the attempt is INCOMPLETE (part b pending) → evidence honestly waits
+        verify(evidencePublisher, never()).publishGraded(any(), any(), any());
+        assertThat(attempt.evidenceEmitted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("markAttempt without a VALIDATED scheme refuses every part honestly")
+    void markAttemptRefusesEveryPartWithoutValidatedScheme() {
+        batchFixture();
+        MarkScheme suggested = new MarkScheme(version, "3", "ms-s", "test");
+        TestIds.withId(suggested, UUID.randomUUID());
+        suggested.addPoint(new MarkPoint(suggested, part, "3-a", 0, "iron oxide", 1, List.of(), 0.9));
+        when(markSchemes.findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                version.id(), MarkScheme.ValidationState.VALIDATED))
+                .thenReturn(Optional.empty());
+        when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
+                .thenReturn(Optional.of(suggested));
+
+        Map<UUID, SmartMarkResult> results = service.markAttempt(attempt.id());
+
+        assertThat(results).hasSize(2);
+        assertThat(results.values()).allSatisfy(r -> {
+            assertThat(r.validationPassed()).isFalse();
+            assertThat(r.failureReason()).isEqualTo("SCHEME_NOT_VALIDATED");
+        });
+        assertThat(answer.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+        assertThat(answerB.markingState()).isEqualTo(Answer.MarkingState.PENDING);
+        verify(evidencePublisher, never()).publishGraded(any(), any(), any());
+        assertThat(published).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("THE single-call pin: a two-part attempt costs ONE provider call, both parts marked")
+    void markAttemptSingleCallTopologyEndToEnd() {
+        batchFixture();
+        gateClosed();
+        com.syllabai.infrastructure.llm.FakeLlmProvider chain =
+                com.syllabai.infrastructure.llm.FakeLlmProvider.named("groq")
+                        .respondsWith("""
+                                {"parts": [
+                                  {"part": 1, "confidence": 0.9, "allocations": [
+                                    {"markPointId": "%s", "ref": "1-a", "marksAwarded": 1,
+                                     "evidence": "first answer quoted", "rationale": "earned"},
+                                    {"markPointId": "%s", "ref": "1-a", "marksAwarded": 1,
+                                     "evidence": "first reason quoted", "rationale": "earned"}]},
+                                  {"part": 2, "confidence": 0.8, "allocations": [
+                                    {"markPointId": "%s", "ref": "1-b", "marksAwarded": 0,
+                                     "evidence": "", "rationale": "missing"},
+                                    {"markPointId": "%s", "ref": "1-b", "marksAwarded": 1,
+                                     "evidence": "second reason quoted", "rationale": "earned"}]}
+                                ]}
+                                """
+                                .formatted(
+                                        bothParts.points().get(0).id(),
+                                        bothParts.points().get(1).id(),
+                                        bothParts.points().get(2).id(),
+                                        bothParts.points().get(3).id()));
+        SmartMarkService batched = new SmartMarkService(
+                answers, attempts, questionVersions, markSchemes, smartMarkResults,
+                agreementEvaluations, questionTopics, evidencePublisher,
+                new SmartMarkPipeline(new LlmMarkingCandidateGenerator(chain),
+                        List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                                new MarkSumMarkingValidator())),
+                published::add);
+
+        Map<UUID, SmartMarkResult> results = batched.markAttempt(attempt.id());
+
+        // THE pin: one reasoning round trip for the whole attempt (was K)
+        assertThat(chain.callCount()).isEqualTo(1);
+        assertThat(chain.lastRequest().maxTokens()).isEqualTo(2_400);
+        assertThat(results.get(answer.id()).validationPassed()).isTrue();
+        assertThat(results.get(answer.id()).marksAwarded()).isEqualTo(2);
+        assertThat(results.get(answerB.id()).validationPassed()).isTrue();
+        assertThat(results.get(answerB.id()).marksAwarded()).isEqualTo(1);
+        // both rows carry the FULL batch raw output — self-forensic audit trail
+        assertThat(results.get(answer.id()).rawOutput()).contains("\"parts\"");
+        assertThat(attempt.marksAwarded()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a failed batch call falls back per part — both parts still marked, 1+K calls")
+    void markAttemptBatchFailureFallsBackPerPart() {
+        batchFixture();
+        gateClosed();
+        com.syllabai.infrastructure.llm.FakeLlmProvider chain =
+                com.syllabai.infrastructure.llm.FakeLlmProvider.named("groq")
+                        .failsNext(1, com.syllabai.infrastructure.llm.LlmFailureClass.TIMEOUT)
+                        .respondsInOrder("""
+                                {"confidence": 0.9, "allocations": [
+                                  {"markPointId": "%s", "ref": "1-a", "marksAwarded": 1,
+                                   "evidence": "first answer quoted", "rationale": "earned"},
+                                  {"markPointId": "%s", "ref": "1-a", "marksAwarded": 1,
+                                   "evidence": "first reason quoted", "rationale": "earned"}]}
+                                """.formatted(
+                                        bothParts.points().get(0).id(),
+                                        bothParts.points().get(1).id()),
+                                """
+                                {"confidence": 0.8, "allocations": [
+                                  {"markPointId": "%s", "ref": "1-b", "marksAwarded": 1,
+                                   "evidence": "second answer quoted", "rationale": "earned"},
+                                  {"markPointId": "%s", "ref": "1-b", "marksAwarded": 1,
+                                   "evidence": "second reason quoted", "rationale": "earned"}]}
+                                """.formatted(
+                                        bothParts.points().get(2).id(),
+                                        bothParts.points().get(3).id()));
+        SmartMarkService batched = new SmartMarkService(
+                answers, attempts, questionVersions, markSchemes, smartMarkResults,
+                agreementEvaluations, questionTopics, evidencePublisher,
+                new SmartMarkPipeline(new LlmMarkingCandidateGenerator(chain),
+                        List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                                new MarkSumMarkingValidator())),
+                published::add);
+
+        Map<UUID, SmartMarkResult> results = batched.markAttempt(attempt.id());
+
+        // 1 failed batch call + K per-part recovery calls — availability preserved
+        assertThat(chain.callCount()).isEqualTo(3);
+        assertThat(results.get(answer.id()).validationPassed()).isTrue();
+        assertThat(results.get(answerB.id()).validationPassed()).isTrue();
+        assertThat(attempt.marksAwarded()).isEqualTo(4);
+        // the fallback rows carry their own per-part raw outputs (v3 envelope)
+        assertThat(results.get(answer.id()).rawOutput()).contains("\"allocations\"");
+        assertThat(results.get(answer.id()).rawOutput()).doesNotContain("\"parts\"");
     }
 }

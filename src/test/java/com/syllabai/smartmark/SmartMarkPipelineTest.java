@@ -326,4 +326,177 @@ class SmartMarkPipelineTest {
         assertThat(decision.failureReason()).isEqualTo("PROVIDER_UNAVAILABLE");
         assertThat(pipeline.candidateRawOutput(decision)).isNull();
     }
+
+    // ── runBatch: the attempt-level topology (single call + fallback ladder) ───
+
+    /** a second answered part on the same version/scheme for batch fixtures */
+    private MarkingContext secondPartContext() {
+        QuestionPart partB = new QuestionPart(part.questionVersion(), "b", "part b", "State", 2, 1);
+        TestIds.withId(partB, UUID.randomUUID());
+        part.questionVersion().addPart(partB);
+        MarkPoint pointB1 = new MarkPoint(scheme, partB, "1-b", 0, "hydrogen named", 1,
+                List.of(), 0.9);
+        TestIds.withId(pointB1, UUID.randomUUID());
+        scheme.addPoint(pointB1);
+        Answer answerB = new Answer(answer.attempt(), partB, "an answer naming hydrogen");
+        TestIds.withId(answerB, UUID.randomUUID());
+        return new MarkingContext(answerB, partB, scheme, List.of(pointB1));
+    }
+
+    @Test
+    @DisplayName("runBatch marks every context through ONE batch proposal, index-aligned")
+    void runBatchUsesOneBatchProposal() {
+        MarkingContext first = context();
+        MarkingContext second = secondPartContext();
+        // batch-topology generator: proposeAll is the ONLY path — a per-part
+        // propose call would throw (AssertionError is not a generation failure,
+        // so a fallback would fail the test loudly instead of passing silently)
+        MarkingCandidateGenerator batchOnly = new MarkingCandidateGenerator() {
+            @Override
+            public MarkingCandidate propose(MarkingContext ctx) {
+                throw new AssertionError("batch topology must not propose per part");
+            }
+
+            @Override
+            public List<MarkingCandidate> proposeAll(List<MarkingContext> contexts) {
+                return contexts.stream().map(ctx -> new MarkingCandidate("test-model",
+                        ctx.points().stream()
+                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(),
+                                        p.marks(), "quoted learner text", "earned"))
+                                .toList(), 0.9, "batch raw")).toList();
+            }
+        };
+        SmartMarkPipeline batched = new SmartMarkPipeline(batchOnly,
+                List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                        new MarkSumMarkingValidator()));
+
+        List<SmartMarkPipeline.Decision> decisions = batched.runBatch(List.of(first, second));
+
+        assertThat(decisions.get(0).accepted()).isTrue();
+        assertThat(decisions.get(0).marksAwarded()).isEqualTo(2);   // both part-a points
+        assertThat(decisions.get(0).breakdown()).hasSize(2);
+        assertThat(decisions.get(1).accepted()).isTrue();
+        assertThat(decisions.get(1).marksAwarded()).isEqualTo(1);   // its single point
+        assertThat(decisions.get(1).breakdown()).hasSize(1);
+        assertThat(batched.candidateModelId(decisions.get(0))).isEqualTo("test-model");
+    }
+
+    @Test
+    @DisplayName("runBatch short-circuits blank answers without batching them")
+    void runBatchShortCircuitsBlankWithoutBatchCall() {
+        Answer blank = new Answer(answer.attempt(), part, "   ");
+        TestIds.withId(blank, UUID.randomUUID());
+        MarkingContext blankContext = new MarkingContext(blank, part, scheme,
+                List.of(pointA, pointB));
+        MarkingContext markable = secondPartContext();
+        List<List<MarkingContext>> batched = new java.util.ArrayList<>();
+        MarkingCandidateGenerator recording = new MarkingCandidateGenerator() {
+            @Override
+            public MarkingCandidate propose(MarkingContext ctx) {
+                throw new AssertionError("unexpected per-part propose");
+            }
+
+            @Override
+            public List<MarkingCandidate> proposeAll(List<MarkingContext> contexts) {
+                batched.add(List.copyOf(contexts));
+                return contexts.stream().map(ctx -> new MarkingCandidate("test-model",
+                        ctx.points().stream()
+                                .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), 0,
+                                        "", "nothing earned"))
+                                .toList(), 0.5, "raw")).toList();
+            }
+        };
+        SmartMarkPipeline batchedPipeline = new SmartMarkPipeline(recording,
+                List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                        new MarkSumMarkingValidator()));
+
+        List<SmartMarkPipeline.Decision> decisions =
+                batchedPipeline.runBatch(List.of(blankContext, markable));
+
+        // only the markable context reached the generator; the blank part was
+        // decided deterministically (no LLM call, no cost, no hallucination surface)
+        assertThat(batched).hasSize(1);
+        assertThat(batched.get(0)).containsExactly(markable);
+        assertThat(decisions.get(0).accepted()).isTrue();
+        assertThat(decisions.get(0).marksAwarded()).isZero();
+        assertThat(decisions.get(0).breakdown()).hasSize(2);
+        assertThat(decisions.get(1).accepted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a failed batch call falls back to per-part marking — nothing is lost")
+    void runBatchFallsBackPerPartWhenBatchFails() {
+        MarkingContext first = context();
+        MarkingContext second = secondPartContext();
+        MarkingCandidateGenerator ladder = new MarkingCandidateGenerator() {
+            @Override
+            public MarkingCandidate propose(MarkingContext ctx) {
+                return new MarkingCandidate("test-model", ctx.points().stream()
+                        .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), p.marks(),
+                                "quoted learner text", "earned"))
+                        .toList(), 0.9, "per-part raw");
+            }
+
+            @Override
+            public List<MarkingCandidate> proposeAll(List<MarkingContext> contexts) {
+                throw new CandidateGenerationException(
+                        CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT,
+                        "batch output missing parts array", null, "batch raw");
+            }
+        };
+        SmartMarkPipeline ladderPipeline = new SmartMarkPipeline(ladder,
+                List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                        new MarkSumMarkingValidator()));
+
+        List<SmartMarkPipeline.Decision> decisions =
+                ladderPipeline.runBatch(List.of(first, second));
+
+        // the flaky batch call degraded to exactly the pre-batching behaviour:
+        // both parts still marked through their own per-part runs
+        assertThat(decisions).hasSize(2);
+        assertThat(decisions).allSatisfy(d -> {
+            assertThat(d.accepted()).isTrue();
+            assertThat(ladderPipeline.candidateRawOutput(d)).isEqualTo("per-part raw");
+        });
+    }
+
+    @Test
+    @DisplayName("fallback keeps per-part failure independence — one failed part never blocks the other")
+    void runBatchFallbackKeepsPerPartIndependence() {
+        MarkingContext first = context();
+        MarkingContext second = secondPartContext();
+        MarkingCandidateGenerator mixed = new MarkingCandidateGenerator() {
+            @Override
+            public MarkingCandidate propose(MarkingContext ctx) {
+                if (ctx.answer().answerText().contains("hydrogen")) {
+                    return new MarkingCandidate("test-model", ctx.points().stream()
+                            .map(p -> new MarkingCandidate.Allocation(p.id(), p.ref(), p.marks(),
+                                    "quoted", "earned"))
+                            .toList(), 0.9, "per-part raw");
+                }
+                throw new CandidateGenerationException(
+                        CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,
+                        "chain down for this part", null);
+            }
+
+            @Override
+            public List<MarkingCandidate> proposeAll(List<MarkingContext> contexts) {
+                throw new CandidateGenerationException(
+                        CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,
+                        "chain down for the batch", null);
+            }
+        };
+        SmartMarkPipeline mixedPipeline = new SmartMarkPipeline(mixed,
+                List.of(new BoundsMarkingValidator(), new CoverageMarkingValidator(),
+                        new MarkSumMarkingValidator()));
+
+        List<SmartMarkPipeline.Decision> decisions =
+                mixedPipeline.runBatch(List.of(first, second));
+
+        assertThat(decisions.get(0).accepted()).isFalse();
+        assertThat(decisions.get(0).failureReason()).isEqualTo("PROVIDER_UNAVAILABLE");
+        assertThat(decisions.get(0).marksAwarded()).isZero();
+        assertThat(decisions.get(1).accepted()).isTrue();
+        assertThat(decisions.get(1).marksAwarded()).isEqualTo(1);
+    }
 }

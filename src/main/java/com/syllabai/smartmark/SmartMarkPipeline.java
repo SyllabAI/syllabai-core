@@ -80,7 +80,78 @@ public class SmartMarkPipeline {
                     : Decision.rejected(e.reason().name(),
                             new MarkingCandidate(null, List.of(), null, e.rawOutput()));
         }
+        return decide(candidate, context);
+    }
 
+    /**
+     * Mark a whole attempt's parts and return one Decision per context,
+     * index-aligned with the input. Deterministic short-circuits (no scheme
+     * points, blank answers) never reach the generator; the rest goes through
+     * {@link MarkingCandidateGenerator#proposeAll} — ONE provider call for the
+     * attempt (v4 batch topology) — and each candidate is validated against its
+     * own context exactly as in {@link #run}.
+     *
+     * <p>Fallback ladder: any batch-generation failure (provider unavailable,
+     * truncated, unparseable — the batch refuses as a whole) re-marks the
+     * markable contexts per part through {@link #run}, so one flaky batch call
+     * degrades to exactly the pre-batching behaviour and every part keeps its
+     * independent failure semantics. A generator whose batch result is not
+     * index-aligned (broken implementation, never the shipped one) is treated
+     * the same way: refuse the batch, fall back, never guess.</p>
+     */
+    public List<Decision> runBatch(List<MarkingContext> contexts) {
+        List<Decision> decisions = new java.util.ArrayList<>(
+                java.util.Collections.nCopies(contexts.size(), (Decision) null));
+        List<Integer> markable = new java.util.ArrayList<>();
+        for (int i = 0; i < contexts.size(); i++) {
+            MarkingContext context = contexts.get(i);
+            if (context.points().isEmpty()) {
+                decisions.set(i, Decision.rejected("NO_SCHEME_POINTS", null));
+            } else {
+                String answerText = context.answer().answerText();
+                if (answerText == null || answerText.isBlank()) {
+                    // deterministic short-circuit: no evidence → no marks, no LLM call
+                    decisions.set(i, new Decision(true, 0,
+                            blankBreakdown(context.points()), null, null));
+                } else {
+                    markable.add(i);
+                }
+            }
+        }
+        if (markable.isEmpty()) {
+            return List.copyOf(decisions);
+        }
+
+        List<MarkingContext> batchContexts = markable.stream().map(contexts::get).toList();
+        try {
+            List<MarkingCandidate> candidates = generator.proposeAll(batchContexts);
+            if (candidates.size() != batchContexts.size()) {
+                throw new CandidateGenerationException(
+                        CandidateGenerationException.Reason.UNPARSEABLE_OUTPUT,
+                        "batch generator returned " + candidates.size() + " candidates for "
+                                + batchContexts.size() + " contexts", null);
+            }
+            for (int j = 0; j < markable.size(); j++) {
+                decisions.set(markable.get(j), decide(candidates.get(j), batchContexts.get(j)));
+            }
+            return List.copyOf(decisions);
+        } catch (CandidateGenerationException e) {
+            log.info("batch candidate generation failed ({}); falling back to per-part marking",
+                    e.getMessage());
+            for (int i = 0; i < markable.size(); i++) {
+                decisions.set(markable.get(i), run(batchContexts.get(i)));
+            }
+            return List.copyOf(decisions);
+        }
+    }
+
+    /**
+     * Deterministic validation + breakdown for one candidate against its own
+     * context — the stage after generation, shared byte-for-byte by the
+     * single-part and batch topologies so the go/no-go semantics can never
+     * drift between them.
+     */
+    private Decision decide(MarkingCandidate candidate, MarkingContext context) {
         List<String> violations = new java.util.ArrayList<>();
         for (MarkingValidator validator : validators) {
             violations.addAll(validator.validate(candidate, context));
@@ -93,7 +164,7 @@ public class SmartMarkPipeline {
             return Decision.rejected("VALIDATION_FAILED: " + reason, candidate);
         }
 
-        Map<UUID, MarkPoint> byId = points.stream()
+        Map<UUID, MarkPoint> byId = context.points().stream()
                 .collect(java.util.stream.Collectors.toMap(MarkPoint::id, p -> p));
         List<Map<String, Object>> breakdown = new java.util.ArrayList<>();
         int awarded = 0;

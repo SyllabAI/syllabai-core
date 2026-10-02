@@ -47,9 +47,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li><b>One engine.</b> Student runs mark through
- *       {@link SmartMarkService#markAnswer} unchanged — identical prompts,
- *       validators, result rows, κ pairing and telemetry. The student surface
- *       adds ownership checks, never a second pipeline.</li>
+ *       {@link SmartMarkService#markAttempt} — identical prompts, validators,
+ *       result rows, κ pairing and telemetry as the teacher queue's
+ *       {@link SmartMarkService#markAnswer}, batched: the whole attempt's parts
+ *       are marked in ONE candidate-generation call with per-part fallback to
+ *       the teacher-queue topology. The student surface adds ownership checks,
+ *       never a second pipeline.</li>
  *   <li><b>Reveal-consistent.</b> Smart marking is learner-facing marking, so
  *       the scheme must pass the SAME reveal policy as the mark-scheme reveal
  *       boundary ({@code syllabai.assessment.markscheme-reveal-policy},
@@ -157,10 +160,18 @@ public class StudentSmartMarkService {
 
         List<StudentSmartMarkViews.PartSmartMarkView> parts = new ArrayList<>();
         boolean authoritative = smartMarkService.kappaGatePassed(question.examPaperId());
+        // one batched pass: the SAME engine the teacher queue runs, with the
+        // attempt's parts marked in a single candidate-generation call (the
+        // pipeline's fallback ladder keeps per-part independence on batch failure)
+        Map<UUID, SmartMarkResult> results = smartMarkService.markAttempt(attemptId);
         for (Answer answer : attemptAnswers) {
+            SmartMarkResult result = results.get(answer.id());
+            if (result == null) {
+                throw new IllegalStateException(
+                        "smart mark pass returned no result row for answer " + answer.id());
+            }
             // the SAME engine the teacher queue runs — one pipeline, one
             // calibration dataset, one telemetry stream
-            SmartMarkResult result = smartMarkService.markAnswer(answer.id());
             parts.add(project(answer, result, scheme, authoritative));
         }
         log.info("student smart mark pass: attempt {} ({} parts, authoritative={}) by learner {}",

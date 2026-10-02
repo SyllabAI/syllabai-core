@@ -12,10 +12,13 @@ import com.syllabai.assessment.QuestionTopic;
 import com.syllabai.assessment.QuestionTopicRepository;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.assessment.QuestionVersionRepository;
+import com.syllabai.shared.BadRequestException;
 import com.syllabai.shared.NotFoundException;
 import com.syllabai.shared.events.SmartMarkCompletedEvent;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -165,6 +168,129 @@ public class SmartMarkService {
                 pipeline.candidateModelId(decision), SmartMarkResult.PIPELINE_VERSION,
                 authoritative, Instant.now()));
         return result;
+    }
+
+    /**
+     * Smart-mark EVERY part answer of one attempt in a single pass (the learner
+     * "Smart mark attempt" surface, F-047 learner half): the attempt row lock is
+     * taken once, the question version and VALIDATED scheme are resolved once,
+     * and the pipeline's batch topology marks all parts with ONE candidate-
+     * generation call (per-part fallback preserves the classic topology when
+     * the batch call fails). Result rows, provisional mark application, event
+     * publication and κ gating are byte-identical per part to
+     * {@link #markAnswer} — only the load/generation topology is batched.
+     *
+     * <p>Compared with K × {@code markAnswer} on a K-part attempt: the
+     * version/scheme/answers loads collapse from K rounds to one, the
+     * candidate generation collapses from K reasoning-model round trips to one,
+     * the κ gate is evaluated once instead of per accepted part, and the
+     * attempt total is recomputed once after all parts are applied.</p>
+     *
+     * @return one persisted result row per part answer (accepted or failed),
+     *         keyed by answer id in the attempt's part order
+     * @throws NotFoundException     unknown attempt
+     * @throws BadRequestException   the attempt carries no part answers
+     */
+    @Transactional
+    public Map<UUID, SmartMarkResult> markAttempt(UUID attemptId) {
+        // same serialization point as markAnswer/human marking: the attempt row
+        // lock BEFORE any attempt/answer state enters the persistence context
+        Attempt attempt = attempts.findByIdForUpdate(attemptId)
+                .orElseThrow(() -> new NotFoundException("attempt", attemptId));
+        List<Answer> attemptAnswers =
+                answers.findByAttemptIdOrderByQuestionPartId(attemptId);
+        if (attemptAnswers.isEmpty()) {
+            throw new BadRequestException("attempt carries no part answers");
+        }
+        Question question = attempt.question();
+        QuestionVersion version = questionVersions
+                .findByQuestionIdOrderByVersionDesc(question.id()).stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("question version", question.id()));
+        MarkScheme scheme = markSchemes
+                .findFirstByQuestionVersionIdAndValidationStateOrderByCreatedAtDesc(
+                        version.id(), MarkScheme.ValidationState.VALIDATED)
+                .orElse(null);
+        if (scheme == null) {
+            // honest refusal per part (V34, gap G-2): every part gets its own
+            // SCHEME_NOT_VALIDATED row so the calibration dataset stays complete
+            Map<UUID, SmartMarkResult> refusals = new LinkedHashMap<>();
+            for (Answer answer : attemptAnswers) {
+                refusals.put(answer.id(), refuseUnvalidatedScheme(answer, version.id()));
+            }
+            return refusals;
+        }
+
+        List<MarkingContext> contexts = attemptAnswers.stream()
+                .map(answer -> new MarkingContext(answer, answer.questionPart(), scheme,
+                        scheme.points().stream()
+                                .filter(p -> answer.questionPartId().equals(p.questionPartId()))
+                                .toList()))
+                .toList();
+        List<SmartMarkPipeline.Decision> decisions = pipeline.runBatch(contexts);
+
+        boolean anyAccepted = decisions.stream()
+                .anyMatch(SmartMarkPipeline.Decision::accepted);
+        // κ gate evaluated ONCE per pass (evaluations cannot change mid-transaction,
+        // so per-part recomputation in the markAnswer loop was redundant work)
+        boolean authoritative = anyAccepted && kappaGatePassed(question.examPaperId());
+
+        Map<UUID, SmartMarkResult> results = new LinkedHashMap<>();
+        for (int i = 0; i < attemptAnswers.size(); i++) {
+            Answer answer = attemptAnswers.get(i);
+            MarkingContext context = contexts.get(i);
+            SmartMarkPipeline.Decision decision = decisions.get(i);
+            SmartMarkResult result = smartMarkResults.save(new SmartMarkResult(
+                    answer,
+                    pipeline.candidateModelId(decision),
+                    decision.marksAwarded(),
+                    pipeline.candidateConfidence(decision),
+                    decision.accepted(),
+                    decision.breakdown(),
+                    decision.failureReason(),
+                    pipeline.candidateRawOutput(decision),
+                    scheme.id(),
+                    scheme.validationState().name()));
+            if (decision.accepted()) {
+                answer.smartMarked(decision.marksAwarded());
+                attempt.smartMarked();
+                answers.save(answer);
+            }
+            events.publishEvent(new SmartMarkCompletedEvent(
+                    answer.id(), attempt.id(), attempt.learnerId(), question.id(),
+                    decision.marksAwarded(), MarkingValidator.pointMarkCeiling(context),
+                    decision.accepted(), decision.failureReason(),
+                    pipeline.candidateModelId(decision), SmartMarkResult.PIPELINE_VERSION,
+                    authoritative && decision.accepted(), Instant.now()));
+            results.put(answer.id(), result);
+        }
+
+        if (anyAccepted) {
+            // one recompute after every part is applied — the serial loop's
+            // per-part recomputes all observed the same final sum
+            recomputeAttemptTotal(attempt);
+            if (authoritative) {
+                // fire only when the attempt's marking is COMPLETE (no PENDING
+                // part left) — a rejected part stays PENDING and honestly withholds
+                // evidence, exactly like the serial path's completing-part check
+                boolean complete = answers
+                        .findByAttemptIdOrderByQuestionPartId(attempt.id()).stream()
+                        .noneMatch(a -> a.markingState() == Answer.MarkingState.PENDING);
+                if (complete) {
+                    List<QuestionTopic> secondary = questionTopics.findByQuestionId(question.id());
+                    evidencePublisher.publishGraded(attempt, question, secondary);
+                    log.info("smart mark batch authoritative (κ gate passed) — evidence "
+                            + "fired for attempt {}", attempt.id());
+                } else {
+                    log.info("smart mark batch authoritative (κ gate passed) but attempt {} "
+                            + "still has PENDING parts — evidence waits for the completing mark",
+                            attempt.id());
+                }
+            }
+        }
+        log.info("smart mark batch pass: attempt {} ({} parts, authoritative={})",
+                attemptId, attemptAnswers.size(), authoritative);
+        return results;
     }
 
     /**

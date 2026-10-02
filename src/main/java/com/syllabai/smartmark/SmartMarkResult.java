@@ -34,10 +34,12 @@ public class SmartMarkResult {
      * 1.2.1 = scaled completion budget + self-forensic truncated refusals
      * (d2849fc, G-4 round watch item: the flat 800-token cap deterministically
      * starved the heaviest compound points — same model and prompt now complete;
-     * refusal rows carry the raw output). Pairing/threshold semantics unchanged
-     * throughout the 1.2.x line.
+     * refusal rows carry the raw output). 1.3.0 = attempt-batch topology
+     * (single-call marking, prompt v4): the student pass marks every part of an
+     * attempt in ONE provider call with a per-part fallback ladder; per-point
+     * decision semantics, validators and κ pairing are unchanged throughout.
      */
-    public static final String PIPELINE_VERSION = "1.2.1";
+    public static final String PIPELINE_VERSION = "1.3.0";
 
     @Id
     @Column(name = "id")
