@@ -18,9 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
  * misconception lists (Master Spec §6.3).
  *
  * <p>Tree depth is bounded by the syllabus hierarchy (subject→unit→topic→subtopic,
- * 4–5 levels), so recursive descent issues at most one children-query per node —
- * acceptable for Cycle-1 graph sizes; revisit with a batched CTE if the KG grows
- * past ~10k nodes.</p>
+ * 4–5 levels); since the batched builder below, a whole tree costs three bulk
+ * queries (subtree + PART_OF edges [+ misconception family] + the root row),
+ * not one children-query per node.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -41,14 +41,66 @@ public class KnowledgeGraphService {
     /**
      * Nested PART_OF tree under a root node (typically a SUBJECT node linked from
      * the curriculum module).
+     *
+     * <p>CLA latency follow-up (audit 2026-10-02): the CLA serving path reads
+     * the plain subject tree 2–3× per ask (the resolver spine once per context
+     * kind — NOTE_SECTION twice — plus the framing/evidence pass in
+     * ClaService), and the public tree endpoint once per read, yet the tree
+     * changes only through curriculum ingest and teacher validation waves. A
+     * 30-second per-root TTL snapshot (the {@link #structureNodes()} pattern)
+     * collapses those repeats: within one ask the resolver and ClaService now
+     * share a hit, and repeat asks on the same subject ride the same
+     * generation — the per-ask tree cost drops from 6–9 queries to ~0 warm.
+     *
+     * <p>What does NOT ride the cache: every load-bearing §1.2 validation gate
+     * re-runs on FRESH node reads after resolution ({@code nodes.findById} in
+     * the resolver spine), so an anchor is never admitted on snapshot age
+     * alone. What does: ≤30s-late candidate scanning — the note-anchor and
+     * spec-structure candidate filters read validationStatus off the tree. A
+     * just-un-validated node can linger ≤30s as a candidate, and the spine's
+     * fresh gate refuses it there (fail-closed direction preserved); a
+     * just-validated node stays invisible ≤30s (availability blip only).
+     *
+     * <p>Cache shape: a bounded concurrent map keyed by root id, one immutable
+     * generation per entry, wholesale clear past the bound (subject roots are
+     * few and stable — the bound is a memory guard, not an eviction policy).
+     * Never tunable, never shared across instances; a failed build (unknown
+     * root → NotFound) is never cached. Concurrent missers may both build —
+     * the read model is idempotent and the loser's copy is simply discarded.</p>
      */
     public NodeView tree(UUID rootId) {
-        return buildTree(node(rootId), false);
+        TreeSnapshot snapshot = treeCache.get(rootId);
+        long now = System.nanoTime();
+        if (snapshot != null && now - snapshot.nanos() < TREE_CACHE_TTL_NANOS) {
+            return snapshot.root();
+        }
+        if (treeCache.size() >= TREE_CACHE_MAX_ENTRIES) {
+            treeCache.clear();   // wholesale: a rebuild is one subtree read
+        }
+        NodeView fresh = buildTree(node(rootId), false);
+        treeCache.put(rootId, new TreeSnapshot(fresh, now));
+        return fresh;
     }
+
+    /** CLA follow-up: in-process TTL for {@link #tree(UUID)} — 30s, wholesale expiry. */
+    private static final long TREE_CACHE_TTL_NANOS = 30_000_000_000L;
+
+    /** Memory guard, not an eviction policy: subject roots are few and stable. */
+    private static final int TREE_CACHE_MAX_ENTRIES = 16;
+
+    /** One immutable cache generation: the assembled tree + when it was read. */
+    private record TreeSnapshot(NodeView root, long nanos) {
+    }
+
+    private final java.util.concurrent.ConcurrentHashMap<UUID, TreeSnapshot> treeCache =
+            new ConcurrentHashMap<>();
 
     /**
      * Same tree with misconception nodes folded in as children of the nodes they
-     * attach to. Since V15 the fold covers two attachment shapes: TOPIC/SUBTOPIC
+     * attach to. Not cached — the folded variant is not on the CLA path and the
+     * learner/class surfaces re-project it per request anyway.
+     *
+     * <p>Since V15 the fold covers two attachment shapes: TOPIC/SUBTOPIC
      * nodes (V6 contract: MISCONCEPTION_OF into the topic) and CONCEPT nodes of
      * the T-C11 settled graph, whose misconceptions attach via REMEDIATED_BY /
      * WRONG_ANSWER_PATTERN as well — 13 of the 15 settled misconceptions carry no
@@ -173,7 +225,7 @@ public class KnowledgeGraphService {
         return fresh;
     }
 
-    /** M3: in-process TTL for {@link #structureNodes()} — 30s, wholesale expiry. */
+    /** M3 tranche 1: in-process TTL for {@link #structureNodes()} — 30s, wholesale expiry. */
     private static final long STRUCTURE_CACHE_TTL_NANOS = 30_000_000_000L;
 
     /** One immutable cache generation: the node list + when it was read. */

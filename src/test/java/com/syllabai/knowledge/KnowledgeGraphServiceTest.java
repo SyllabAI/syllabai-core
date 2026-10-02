@@ -1,10 +1,14 @@
 package com.syllabai.knowledge;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.shared.NotFoundException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -92,6 +96,82 @@ class KnowledgeGraphServiceTest {
         assertThat(plain.children().get(0).children()).extracting(NodeView::code)
                 .containsExactly("C1", "T1", "T2");
         assertThat(plain.children().get(0).children().get(0).children()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("tree rides the 30s TTL snapshot: repeat reads cost zero DB and share one immutable generation")
+    void treeRidesTtlSnapshotWithinWindow() {
+        KnowledgeNode root = node("S1", NodeType.SUBJECT);
+        KnowledgeNode unit = node("U1", NodeType.UNIT);
+        when(nodes.findById(root.id())).thenReturn(java.util.Optional.of(root));
+        when(graph.findSubtree(root.id())).thenReturn(List.of(root, unit));
+        KnowledgeEdge partUnit = mock(KnowledgeEdge.class);
+        stubEdge(partUnit, unit, root, RelationType.PART_OF);
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(partUnit));
+
+        NodeView first = service.tree(root.id());
+        NodeView second = service.tree(root.id());
+
+        // one shared immutable generation — the CLA resolver spine and ClaService's
+        // framing pass now hit the same snapshot within a single ask
+        assertThat(second).isSameAs(first);
+        assertThat(second.children()).extracting(NodeView::code).containsExactly("U1");
+        verify(nodes, times(1)).findById(root.id());
+        verify(graph, times(1)).findSubtree(root.id());
+        verify(edges, times(1)).findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection());
+    }
+
+    @Test
+    @DisplayName("the tree snapshot is keyed per root: two subjects never cross-pollute")
+    void treeCacheIsKeyedPerRoot() {
+        KnowledgeNode rootA = node("S1", NodeType.SUBJECT);
+        KnowledgeNode unitA = node("U1", NodeType.UNIT);
+        KnowledgeNode rootB = node("S2", NodeType.SUBJECT);
+        KnowledgeNode unitB = node("U2", NodeType.UNIT);
+        when(nodes.findById(rootA.id())).thenReturn(java.util.Optional.of(rootA));
+        when(nodes.findById(rootB.id())).thenReturn(java.util.Optional.of(rootB));
+        when(graph.findSubtree(rootA.id())).thenReturn(List.of(rootA, unitA));
+        when(graph.findSubtree(rootB.id())).thenReturn(List.of(rootB, unitB));
+        KnowledgeEdge partA = mock(KnowledgeEdge.class);
+        stubEdge(partA, unitA, rootA, RelationType.PART_OF);
+        KnowledgeEdge partB = mock(KnowledgeEdge.class);
+        stubEdge(partB, unitB, rootB, RelationType.PART_OF);
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(partA, partB));
+
+        NodeView firstA = service.tree(rootA.id());
+        NodeView firstB = service.tree(rootB.id());
+        NodeView secondA = service.tree(rootA.id());
+
+        assertThat(secondA).isSameAs(firstA);
+        assertThat(firstA.children()).extracting(NodeView::code).containsExactly("U1");
+        assertThat(firstB.children()).extracting(NodeView::code).containsExactly("U2");
+        verify(graph, times(1)).findSubtree(rootA.id());
+        verify(graph, times(1)).findSubtree(rootB.id());
+    }
+
+    @Test
+    @DisplayName("a failed tree build (unknown root) is never cached — the next call rebuilds")
+    void treeBuildFailureNotCached() {
+        KnowledgeNode root = node("S1", NodeType.SUBJECT);
+        KnowledgeNode unit = node("U1", NodeType.UNIT);
+        when(nodes.findById(root.id())).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> service.tree(root.id()))
+                .isInstanceOf(NotFoundException.class);
+
+        // root appears (ingest wave lands) — the same key must build fresh, not
+        // replay the failure
+        when(nodes.findById(root.id())).thenReturn(java.util.Optional.of(root));
+        when(graph.findSubtree(root.id())).thenReturn(List.of(root, unit));
+        KnowledgeEdge partUnit = mock(KnowledgeEdge.class);
+        stubEdge(partUnit, unit, root, RelationType.PART_OF);
+        when(edges.findPartOfEdgesWithin(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(partUnit));
+
+        NodeView tree = service.tree(root.id());
+        assertThat(tree.children()).extracting(NodeView::code).containsExactly("U1");
     }
 
     private void stubEdge(KnowledgeEdge e, KnowledgeNode source, KnowledgeNode target,
