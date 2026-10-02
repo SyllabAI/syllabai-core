@@ -20,6 +20,15 @@ import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions;
  * {@link GoogleGenAiTextEmbeddingModel} instances — RETRIEVAL_DOCUMENT for indexing
  * and RETRIEVAL_QUERY for queries — because task type is fixed per model instance.
  *
+ * <p>Query-side latency/quota follow-up (audit 2026-10-02): every tutor ask,
+ * CLA ask and content-search hit paid one Gemini {@code embedQuery} HTTP round
+ * trip for a vector that is a pure function of (model, task type, text).
+ * {@link #embedQuery(String)} therefore rides a {@link QueryEmbeddingCache}
+ * (10-min TTL, bounded, cloned arrays, failures never cached) — a repeat query
+ * costs zero HTTP and zero free-tier quota. Document-side embedding is
+ * deliberately uncached: indexing texts are unique per chunk, a cache there
+ * would be pure waste on the backfill path.
+ *
  * <p>Constructed only by {@link EmbeddingConfig} when a key is present; all Spring AI
  * embedding autoconfiguration stays excluded (application.yml), so this manual
  * construction mirrors {@code LlmChainConfig} for the chat chain.</p>
@@ -47,6 +56,7 @@ class GeminiEmbeddingProvider implements EmbeddingProvider {
 
     private final EmbeddingModel documentModel;
     private final EmbeddingModel queryModel;
+    private final QueryEmbeddingCache queryCache = new QueryEmbeddingCache();
     private final String model;
     private final int dimension;
     private final int timeoutSeconds;
@@ -91,7 +101,9 @@ class GeminiEmbeddingProvider implements EmbeddingProvider {
 
     @Override
     public float[] embedQuery(String text) {
-        return callWithTimeout(() -> queryModel.embed(text));
+        // the callable runs only on a cache miss — failures propagate before any
+        // put, so a flaky Gemini call can never poison a key
+        return queryCache.getOrEmbed(text, () -> callWithTimeout(() -> queryModel.embed(text)));
     }
 
     @Override
