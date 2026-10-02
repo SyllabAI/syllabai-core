@@ -120,7 +120,7 @@ class QueryEmbeddingCacheTest {
             earlyCalls.incrementAndGet();
             return new float[]{0f};
         });
-        assertThat(earlyCalls).hasValue(1);   // hot within the bound
+        assertThat(earlyCalls).hasValue(0);   // hit: the loop's embed is reused — callable skipped
 
         // this miss trips size >= MAX_ENTRIES: everything already cached is dropped,
         // and the triggering entry is put AFTER the clear (so it survives)
@@ -129,14 +129,14 @@ class QueryEmbeddingCacheTest {
             earlyCalls.incrementAndGet();
             return new float[]{0f};
         });
-        assertThat(earlyCalls).hasValue(2);   // dropped wholesale → re-embeds
+        assertThat(earlyCalls).hasValue(1);   // dropped wholesale → re-embeds
 
         AtomicInteger overflowCalls = new AtomicInteger();
         cache.getOrEmbed("overflow", () -> {
             overflowCalls.incrementAndGet();
             return new float[]{0f};
         });
-        assertThat(overflowCalls).hasValue(1);   // the triggering entry itself still hits
+        assertThat(overflowCalls).hasValue(0);   // the triggering entry itself still hits
     }
 
     @Test
