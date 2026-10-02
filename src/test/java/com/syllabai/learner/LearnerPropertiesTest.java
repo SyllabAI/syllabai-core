@@ -31,7 +31,7 @@ class LearnerPropertiesTest {
         assertThat(blank.shortAnswerGuess()).isEqualTo(0.05);
         assertThat(blank.structuredGuess()).isEqualTo(0.01);
 
-        LearnerProperties defaults = new LearnerProperties(null, null, null, null);
+        LearnerProperties defaults = new LearnerProperties(null, null, null, null, null);
         assertThat(defaults.bkt()).isEqualTo(blank);
     }
 
@@ -102,10 +102,10 @@ class LearnerPropertiesTest {
     }
 
     @Test
-    @DisplayName("flashcard ladder (T-C53): the 4-arg compat shape carries the shipped default; malformed ladders degrade to it")
+    @DisplayName("flashcard ladder (T-C53): a null fifth component carries the shipped default; malformed ladders degrade to it")
     void flashcardLadderDefaults() {
-        // the pre-T-C53 4-arg shape (every existing call site) = the hub-parity ladder
-        LearnerProperties defaults = new LearnerProperties(null, null, null, null);
+        // null fifth component = the hub-parity ladder (the compact ctor normalizes)
+        LearnerProperties defaults = new LearnerProperties(null, null, null, null, null);
         assertThat(defaults.flashcardReview().intervalDays())
                 .containsExactly(1, 2, 4, 8, 16, 32);
 

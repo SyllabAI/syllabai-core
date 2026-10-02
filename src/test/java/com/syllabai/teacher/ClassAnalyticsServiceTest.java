@@ -61,7 +61,7 @@ class ClassAnalyticsServiceTest {
     private final ServableQuestionService servableQuestions =
             mock(ServableQuestionService.class);
 
-    private final LearnerProperties learnerProperties = new LearnerProperties(null, null, null, null);
+    private final LearnerProperties learnerProperties = new LearnerProperties(null, null, null, null, null);
     private final RecommendationProperties recommendationProperties =
             new RecommendationProperties(0.45, 0.2, 0.5, 2, 8, 2, 2, 14);
 

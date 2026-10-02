@@ -71,7 +71,7 @@ class NextBestActionServiceTest {
 
     private final NextBestActionService service = new NextBestActionService(
             graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-            new LearnerProperties(null, null, null, null),
+            new LearnerProperties(null, null, null, null, null),
             new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
             answers, servableQuestions, ConceptDependencyGraph.empty(), engagementReader);
 
@@ -547,7 +547,7 @@ class NextBestActionServiceTest {
     void validatedPrerequisiteChainNominatesRemediation() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -576,7 +576,7 @@ class NextBestActionServiceTest {
     void measuredStrongPrerequisiteOverridesGraph() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -600,7 +600,7 @@ class NextBestActionServiceTest {
     void graphWithoutLearnerEvidenceNeverActs() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -613,7 +613,7 @@ class NextBestActionServiceTest {
     void validatedRemediationSurfacesCorrectiveAction() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -639,7 +639,7 @@ class NextBestActionServiceTest {
     void belowThresholdMisconceptionNoRemediation() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -659,7 +659,7 @@ class NextBestActionServiceTest {
                 codes());
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, mixed, engagementReader);
         // the tree carries every code the frozen edges touch, so any leakage would surface
@@ -705,7 +705,7 @@ class NextBestActionServiceTest {
     void graphWithNoMatchingCodesLeavesBaselineUnchanged() {
         NextBestActionService withGraph = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenTree();   // the IAL-coded tree — no T-C11 code matches
@@ -722,7 +722,7 @@ class NextBestActionServiceTest {
     void graphEndpointsOutsideSubtreeIgnored() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         // the tree carries BEC but NOT CON-COVALENT-BOND (it lives under another root)
@@ -753,7 +753,7 @@ class NextBestActionServiceTest {
     void learnerIsolationSameGraphDifferentEvidence() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         when(graph.treeWithMisconceptions(G_ROOT)).thenReturn(settledSliceTree());
@@ -785,7 +785,7 @@ class NextBestActionServiceTest {
     void deterministicWithPopulatedGraph() {
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settledSliceGraph(), engagementReader);
         givenSettledSliceNoEvidence();
@@ -820,7 +820,7 @@ class NextBestActionServiceTest {
         }
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, ConceptDependencyGraph.of(raw, allCodes), engagementReader);
         NodeView unit = node(G_UNIT, "4CH1", "UNIT", "Unit", dependents);
@@ -850,7 +850,7 @@ class NextBestActionServiceTest {
         assertThat(settled.validatedEdgeCount()).isEqualTo(272);
         NextBestActionService graphService = new NextBestActionService(
                 graph, learnerModel, reviewSchedules, new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null),
+                new LearnerProperties(null, null, null, null, null),
                 new RecommendationProperties(0, 0, 0, 0, 0, 0, 0, 0),
                 answers, servableQuestions, settled, engagementReader);
         givenSettledSliceNoEvidence();

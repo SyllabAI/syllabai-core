@@ -51,7 +51,7 @@ class LearnerModelServiceTest {
     private final LearnerModelService service = new LearnerModelService(
             skillStates, misconceptionStates, attempts, new BktEngine(), new BdtEngine(),
             new EbbinghausDecayService(),
-            new LearnerProperties(null, null, null, null), published::add);
+            new LearnerProperties(null, null, null, null, null), published::add);
 
     private AssessmentEvidenceRecordedEvent evidence(boolean correct,
                                                      List<UUID> expressed,
@@ -301,7 +301,7 @@ class LearnerModelServiceTest {
                 .thenReturn(Optional.empty());
         return new LearnerModelService(skillStates, misconceptionStates, attempts,
                 new BktEngine(), new BdtEngine(), new EbbinghausDecayService(),
-                new LearnerProperties(null, null, null, null), published::add);
+                new LearnerProperties(null, null, null, null, null), published::add);
     }
 
     @Test

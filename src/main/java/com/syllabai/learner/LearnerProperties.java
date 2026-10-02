@@ -8,6 +8,13 @@ import java.util.List;
  * Learner-model configuration (prefix {@code syllabai.learner}). Values default to
  * the Paper B research-design numbers (Master Spec §11); overrides are versioned
  * through the model_versions registry.
+ *
+ * <p>Binding note: this is a {@code @ConfigurationProperties} record —
+ * constructor binding requires the single canonical constructor, so NO
+ * compatibility overload exists (a second constructor breaks context boot
+ * with "No default constructor found"). Callers pass {@code null} as the
+ * fifth argument for the shipped flashcard ladder; the compact constructor
+ * normalizes it.</p>
  */
 @org.springframework.boot.context.properties.ConfigurationProperties(prefix = "syllabai.learner")
 public record LearnerProperties(
@@ -190,14 +197,5 @@ public record LearnerProperties(
         if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5, 180);
         if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
         if (flashcardReview == null) flashcardReview = new FlashcardReview(null);
-    }
-
-    /**
-     * Pre-T-C53 four-arg compatibility shape (the LearnerStateView
-     * convention): keeps the ~20 existing test call sites compiling with an
-     * honest default flashcard ladder.
-     */
-    public LearnerProperties(Bkt bkt, Decay decay, Bdt bdt, DecayJob decayJob) {
-        this(bkt, decay, bdt, decayJob, null);
     }
 }

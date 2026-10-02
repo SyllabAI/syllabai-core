@@ -38,6 +38,7 @@ class LearnerKnowledgeGraphServiceTest {
             null,
             new LearnerProperties.Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6),
             new LearnerProperties.Bdt(0.3, 0.7, 0.1, 0.5, 180),
+            null,
             null);
 
     private final LearnerKnowledgeGraphService service = new LearnerKnowledgeGraphService(
