@@ -30,7 +30,10 @@ public class ResearchCalibrationController {
     /**
      * The calibration report: Brier, ECE and ten equal-width predicted bins over the
      * BKT_UPDATED stream (see {@link LearnerModelCalibrationService} for what is
-     * predicted, what is observed, and the emission mapping).
+     * predicted, what is observed, and the emission mapping), plus the per-format
+     * segments (C4 protocol §2's mandatory format axis — the pooled sampleCount is
+     * always the sum of the segment counts). Citing rules live in the master pack's
+     * CALIBRATION_REVIEW_PROTOCOL.md; the wire format carries everything.
      *
      * @param nodeId optional knowledge-graph node filter — one node's calibration curve
      */

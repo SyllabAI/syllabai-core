@@ -174,4 +174,114 @@ class LearnerModelCalibrationServiceTest {
         assertThat(report.brier()).isZero();
         assertThat(report.ece()).isZero();
     }
+
+    // ─── the format cut (C4 protocol §6, first implementation ask) ───────────
+
+    private static LearnerModelCalibrationService.FormatSegment segment(
+            LearnerModelCalibrationService.CalibrationReport report, String key) {
+        return report.segments().stream()
+                .filter(s -> s.segment().equals(key))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    @Test
+    @DisplayName("the format cut: segments partition the contract rows and recompute "
+            + "per-format stats on the same emission mapping")
+    void formatSegmentsPartitionAndRecompute() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(fullStream());
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(null);
+
+        // fixed taxonomy order, empty segments included — diffable across time
+        assertThat(report.segments())
+                .extracting(LearnerModelCalibrationService.FormatSegment::segment)
+                .containsExactly("MCQ_SINGLE(2-3)", "MCQ_SINGLE(4)", "MCQ_SINGLE(5+)",
+                        "MCQ_SINGLE(malformed)", "SHORT_ANSWER", "STRUCTURED", "UNTYPED");
+
+        // partition property: the pooled sampleCount is the sum of the segment counts
+        assertThat(report.segments().stream()
+                .mapToLong(LearnerModelCalibrationService.FormatSegment::sampleCount).sum())
+                .isEqualTo(report.sampleCount());
+
+        // STRUCTURED (4 rows: 0.95/0.93/0.91 on NODE_A + 0.80 on NODE_OTHER), hand-derived:
+        // mapped 0.8555 / 0.8377 / 0.8199 / 0.722; brier mean
+        // (0.02088025+0.02634129+0.67223601+0.077284)/4; bins 9 (n=3, observed 2/3) and 8
+        // (n=1, observed 1) → ECE = 3/4·|0.8377−2/3| + 1/4·|0.722−1| = 0.197775
+        var structured = segment(report, "STRUCTURED");
+        assertThat(structured.sampleCount()).isEqualTo(4);
+        assertThat(structured.brier()).isCloseTo(0.1991853875, within(1e-9));
+        assertThat(structured.ece()).isCloseTo(0.197775, within(1e-9));
+
+        // MCQ_SINGLE(4) (2 rows), hand-derived: mapped 0.4775 / 0.458, both latent in
+        // [0.3,0.4) → single bin, ECE = |0.46775 − 0.5| = 0.03225
+        var mcq4 = segment(report, "MCQ_SINGLE(4)");
+        assertThat(mcq4.sampleCount()).isEqualTo(2);
+        assertThat(mcq4.brier()).isCloseTo(0.260885125, within(1e-9));
+        assertThat(mcq4.ece()).isCloseTo(0.03225, within(1e-9));
+        assertThat(mcq4.bins().get(3).count()).isEqualTo(2);
+        assertThat(mcq4.bins().get(3).meanPredicted()).isCloseTo(0.46775, within(1e-9));
+
+        // UNTYPED (the paper-path row): mapped 0.575, whole segment is bin 5
+        var untyped = segment(report, "UNTYPED");
+        assertThat(untyped.sampleCount()).isEqualTo(1);
+        assertThat(untyped.brier()).isCloseTo(0.180625, within(1e-9));
+        assertThat(untyped.ece()).isCloseTo(0.425, within(1e-9));
+        assertThat(untyped.bins().get(5).calibrationError()).isCloseTo(-0.425, within(1e-9));
+
+        // empty segments render honest zeros — the protocol's coverage rule keys on these
+        var shortAnswer = segment(report, "SHORT_ANSWER");
+        assertThat(shortAnswer.sampleCount()).isZero();
+        assertThat(shortAnswer.brier()).isZero();
+        assertThat(shortAnswer.ece()).isZero();
+        assertThat(shortAnswer.bins()).hasSize(10).allSatisfy(
+                b -> assertThat(b.count()).isZero());
+    }
+
+    @Test
+    @DisplayName("MCQ optionCount buckets {2-3, 4, 5+, malformed}; unrecognized or blank "
+            + "format names fold into UNTYPED — the fold never mixes different pricing")
+    void mcqBucketAndUntypedPins() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(List.of(
+                        bktRow(NODE_A, 0.60, true, "MCQ_SINGLE", 2),
+                        bktRow(NODE_A, 0.55, false, "MCQ_SINGLE", 3),
+                        bktRow(NODE_A, 0.70, true, "MCQ_SINGLE", 5),
+                        bktRow(NODE_A, 0.40, true, "MCQ_SINGLE", 1),  // C3 guard degrades to paper path
+                        bktRow(NODE_A, 0.44, true, "MCQ_SINGLE", 0),  // absent/zero count → malformed
+                        bktRow(NODE_A, 0.66, true, "TRUE_FALSE", 0),  // unrecognized → paper pricing
+                        bktRow(NODE_A, 0.52, false, "  ", 0)));       // blank → UNTYPED
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(null);
+
+        assertThat(report.sampleCount()).isEqualTo(7);
+        assertThat(segment(report, "MCQ_SINGLE(2-3)").sampleCount()).isEqualTo(2);
+        assertThat(segment(report, "MCQ_SINGLE(4)").sampleCount()).isZero();
+        assertThat(segment(report, "MCQ_SINGLE(5+)").sampleCount()).isEqualTo(1);
+        assertThat(segment(report, "MCQ_SINGLE(malformed)").sampleCount()).isEqualTo(2);
+        assertThat(segment(report, "SHORT_ANSWER").sampleCount()).isZero();
+        assertThat(segment(report, "STRUCTURED").sampleCount()).isZero();
+        assertThat(segment(report, "UNTYPED").sampleCount()).isEqualTo(2);
+        assertThat(report.segments().stream()
+                .mapToLong(LearnerModelCalibrationService.FormatSegment::sampleCount).sum())
+                .isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("the nodeId filter cuts the segments too — a node slice is its own report")
+    void nodeIdFilterCutsSegments() {
+        when(repository.findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type.BKT_UPDATED))
+                .thenReturn(fullStream());
+
+        LearnerModelCalibrationService.CalibrationReport report = service.report(NODE_OTHER);
+
+        assertThat(report.sampleCount()).isEqualTo(1);
+        assertThat(segment(report, "STRUCTURED").sampleCount()).isEqualTo(1);
+        assertThat(segment(report, "MCQ_SINGLE(4)").sampleCount()).isZero();
+        assertThat(segment(report, "UNTYPED").sampleCount()).isZero();
+        assertThat(report.segments().stream()
+                .mapToLong(LearnerModelCalibrationService.FormatSegment::sampleCount).sum())
+                .isEqualTo(1);
+    }
 }
