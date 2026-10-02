@@ -118,7 +118,7 @@ class ContentCitationFlowIT {
         Subject subject = subjects.save(new Subject(cv, code, "Chemistry (" + code + ")"));
         ExamPaper paper = examPapers.save(new ExamPaper(subject.id(), "IT paper " + code,
                 "Edexcel", "IGCSE",
-                null, null, code + "/1C",
+                null, "January 2012", code + "/1C",
                 kind == Document.Kind.QUESTION_PAPER ? documentId : null,
                 kind == Document.Kind.MARK_SCHEME ? documentId : null,
                 ExamPaper.Provenance.PAST_PAPER, "it-fixture", null));
@@ -163,6 +163,13 @@ class ContentCitationFlowIT {
         assertThat(header.pageCount()).isEqualTo(ms.dto().pageCount());
         assertThat(header.page()).isNull(); // header shape: no page, no text
         assertThat(header.text()).isNull();
+        // F-022 tranche 2: the paper identity rides the header (the T-011 join
+        // by business document id) — the key the hub maps onto the real PDF
+        assertThat(header.paper()).isNotNull();
+        assertThat(header.paper().role()).isEqualTo("MS");
+        assertThat(header.paper().paperCode()).isEqualTo("4CH0-CTA/1C");
+        assertThat(header.paper().sessionLabel()).isEqualTo("January 2012");
+        assertThat(header.paper().paperId()).isNotNull();
 
         // page 16 carries the Q7(a) halogens mark points in the shared fixture
         ContentReaderController.CitationDocumentView page = controller.get(row, 16);
@@ -170,6 +177,7 @@ class ContentCitationFlowIT {
         assertThat(page.text()).isNotBlank();
         assertThat(page.text()).contains("Chlorine");
         assertThat(page.title()).isEqualTo("input.pdf"); // identity fields ride along
+        assertThat(page.paper().role()).isEqualTo("MS"); // ...the paper identity too
 
         // page bounds are honest 404s, never clamped or empty-200s
         assertThatThrownBy(() -> controller.get(row, 0))
@@ -217,8 +225,48 @@ class ContentCitationFlowIT {
         ContentReaderController.CitationDocumentView header = controller.get(row, null);
         assertThat(header.kind()).isEqualTo("TEXTBOOK");
         assertThat(header.title()).isEqualTo("it-knowledge.pdf");
+        assertThat(header.paper()).isNull(); // knowledge layer: no paper identity, ever
         ContentReaderController.CitationDocumentView page = controller.get(row, 1);
         assertThat(page.page()).isEqualTo(1);
         assertThat(page.text()).isEqualTo("knowledge layer page text");
+    }
+
+    @Test
+    @DisplayName("a citable QP row no exam paper links serves with paper = null (the honest absence)")
+    void citablePaperRowWithoutPaperServesNullPaperRef() throws Exception {
+        loginAsStudent();
+        // hand-built QP (own checksum — never collides with the shared fixtures,
+        // whose idempotent re-ingest would couple tests through the same row)
+        String checksum = "it-citation-orphan-qp-" + UUID.randomUUID();
+        String engine = "it-fixture";
+        String engineVersion = "1";
+        CanonicalDocumentDto dto = new CanonicalDocumentDto(
+                CanonicalDocumentValidator.derivedDocumentId(checksum, engine, engineVersion),
+                "1.0", 1,
+                new CanonicalDocumentDto.SourceInfo("it://citation-orphan-qp", checksum,
+                        "SHA-256", "application/pdf", "orphan-qp.pdf"),
+                1, List.of(new CanonicalDocumentDto.PageInfo(1, 100.0, 100.0)),
+                List.of(),
+                List.of(new CanonicalDocumentDto.TextBlockElement("qp-1", "text", 1, null,
+                        "orphan question paper page text", 1, 0.99, null, null, engine,
+                        engineVersion, null)),
+                List.of(), List.of(), List.of(),
+                new CanonicalDocumentDto.ProvenanceInfo(engine, engineVersion,
+                        "2026-10-02T00:00:00Z", null, null, "1.0"),
+                null);
+
+        ContentIngestionService.IngestionResult result =
+                ingestion.ingest(dto, JSON.writeValueAsString(dto), Document.Kind.QUESTION_PAPER,
+                        null);
+        UUID row = result.id();
+
+        // row-VALIDATED without any exam paper row: the row-VALIDATED branch of
+        // existsCitable serves it — and the paper identity is honestly ABSENT,
+        // not fabricated (the hub's corpus matcher treats null as "no PDF link")
+        jdbc.update("update documents set validation_state = 'VALIDATED' where id = ?", row);
+
+        ContentReaderController.CitationDocumentView header = controller.get(row, null);
+        assertThat(header.kind()).isEqualTo("QUESTION_PAPER");
+        assertThat(header.paper()).isNull();
     }
 }
