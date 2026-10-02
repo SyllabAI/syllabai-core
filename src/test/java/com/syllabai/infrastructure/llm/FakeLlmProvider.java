@@ -49,6 +49,8 @@ public final class FakeLlmProvider implements LlmProvider {
     /** Failure thrown when no scripted failure remains (null = succeed). */
     private LlmProviderException defaultFailure;
     private LlmResponse response;
+    /** Response queue: each entry is consumed by one generate() call. */
+    private final List<LlmResponse> responseQueue = new ArrayList<>();
     private List<String> invocationOrder;
     private LlmRequest lastRequest;
 
@@ -96,6 +98,20 @@ public final class FakeLlmProvider implements LlmProvider {
     /** Full success response — for tests asserting provider/model identity. */
     public FakeLlmProvider respondsWith(LlmResponse response) {
         this.response = response;
+        return this;
+    }
+
+    /**
+     * Per-call response scripting: the Nth generate() returns the Nth text
+     * (provider/model identity default to this fake); once the queue is
+     * exhausted the configured default response applies. Failures scripted via
+     * {@link #failsNext} are still emitted first — a queued response is
+     * consumed only by a call that actually succeeds.
+     */
+    public FakeLlmProvider respondsInOrder(String... texts) {
+        for (String text : texts) {
+            responseQueue.add(new LlmResponse(text, name, "fake-model", 5, 10, 10));
+        }
         return this;
     }
 
@@ -200,7 +216,7 @@ public final class FakeLlmProvider implements LlmProvider {
             throw failure;
         }
         health.recordSuccess();
-        return response;
+        return responseQueue.isEmpty() ? response : responseQueue.remove(0);
     }
 
     @Override public LlmProviderHealth health() {

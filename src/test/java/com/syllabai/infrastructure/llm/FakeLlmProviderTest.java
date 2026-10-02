@@ -32,6 +32,19 @@ class FakeLlmProviderTest {
     }
 
     @Test
+    @DisplayName("respondsInOrder hands out one scripted response per call, then the default")
+    void perCallResponseQueue() {
+        FakeLlmProvider provider = FakeLlmProvider.named("groq")
+                .respondsInOrder("first", "second")
+                .respondsWith("default");
+
+        assertThat(provider.generate(REQUEST).text()).isEqualTo("first");
+        assertThat(provider.generate(REQUEST).text()).isEqualTo("second");
+        assertThat(provider.generate(REQUEST).text()).isEqualTo("default");
+        assertThat(provider.callCount()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("a scripted failure class is emitted with the adapter message contract")
     void classifiedFailure() {
         FakeLlmProvider provider = FakeLlmProvider.named("gemini")

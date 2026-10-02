@@ -108,7 +108,8 @@ class StudentSmartMarkServiceTest {
         when(markSchemes.findFirstByQuestionVersionIdOrderByCreatedAtDesc(version.id()))
                 .thenReturn(Optional.of(scheme));
         when(smartMarkService.kappaGatePassed(any())).thenReturn(false);
-        when(smartMarkService.markAnswer(answerA.id())).thenReturn(acceptedResult());
+        when(smartMarkService.markAttempt(attempt.id()))
+                .thenReturn(Map.of(answerA.id(), acceptedResult()));
         when(llm.available()).thenReturn(true);
         when(llm.generate(any())).thenReturn(new LlmResponse(
                 "Here is why.", "groq", "test-model", 10L, 10, 10));
@@ -134,11 +135,11 @@ class StudentSmartMarkServiceTest {
     }
 
     @Test
-    @DisplayName("smart-mark runs the teacher-lane engine per part and projects point text")
+    @DisplayName("smart-mark runs the teacher-lane engine as one batched pass and projects point text")
     void smartMarkAttemptsRunsSharedEngine() {
         var view = service("VALIDATED_ONLY").smartMarkAttempt(LEARNER, attempt.id());
 
-        verify(smartMarkService).markAnswer(answerA.id());
+        verify(smartMarkService).markAttempt(attempt.id());
         assertThat(view.attemptId()).isEqualTo(attempt.id());
         assertThat(view.schemeValidationState()).isEqualTo("VALIDATED");
         assertThat(view.parts()).hasSize(1);
@@ -154,9 +155,9 @@ class StudentSmartMarkServiceTest {
         assertThat(part.breakdown().get(0).evidence()).isEqualTo("sodium chloride");
         assertThat(part.breakdown().get(1).awarded()).isFalse();
         assertThat(part.breakdown().get(1).marksAwarded()).isZero();
-        // one engine: the student pass routed through the same markAnswer the
-        // teacher queue calls (event publication lives inside the real service)
-        verify(smartMarkService).markAnswer(answerA.id());
+        // one engine: the student pass routed through the same markAttempt the
+        // batched pipeline runs (event publication lives inside the real service)
+        verify(smartMarkService).markAttempt(attempt.id());
     }
 
     @Test
@@ -197,7 +198,8 @@ class StudentSmartMarkServiceTest {
                         Map.entry("rationale", "squeaky pop earned; reactants and splint missed"))),
                 null, "{}");
         TestIds.withId(partial, UUID.randomUUID());
-        when(smartMarkService.markAnswer(answerA.id())).thenReturn(partial);
+        when(smartMarkService.markAttempt(attempt.id()))
+                .thenReturn(Map.of(answerA.id(), partial));
 
         var view = service("VALIDATED_ONLY").smartMarkAttempt(LEARNER, attempt.id());
 
@@ -220,7 +222,7 @@ class StudentSmartMarkServiceTest {
         assertThatThrownBy(() -> service("VALIDATED_ONLY")
                 .smartMarkAttempt(UUID.randomUUID(), attempt.id()))
                 .isInstanceOf(NotFoundException.class);
-        verify(smartMarkService, never()).markAnswer(any());
+        verify(smartMarkService, never()).markAttempt(any());
     }
 
     @Test
@@ -267,7 +269,7 @@ class StudentSmartMarkServiceTest {
                 .smartMarkAttempt(LEARNER, attempt.id()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("settled");
-        verify(smartMarkService, never()).markAnswer(any());
+        verify(smartMarkService, never()).markAttempt(any());
     }
 
     @Test
@@ -281,7 +283,7 @@ class StudentSmartMarkServiceTest {
                 .smartMarkAttempt(LEARNER, attempt.id()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("teacher validation");
-        verify(smartMarkService, never()).markAnswer(any());
+        verify(smartMarkService, never()).markAttempt(any());
 
         var view = service("INCLUDE_SUGGESTED").smartMarkAttempt(LEARNER, attempt.id());
         assertThat(view.schemeValidationState()).isEqualTo("SUGGESTED");
