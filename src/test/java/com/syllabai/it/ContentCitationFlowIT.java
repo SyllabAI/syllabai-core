@@ -197,7 +197,7 @@ class ContentCitationFlowIT {
                 List.of(new CanonicalDocumentDto.TextBlockElement("kb-1", "text", 1, null,
                         "knowledge layer page text", 1, 0.99, null, null, engine,
                         engineVersion, null)),
-                List.of(), List.of(),
+                List.of(), List.of(), List.of(),
                 new CanonicalDocumentDto.ProvenanceInfo(engine, engineVersion,
                         "2026-10-02T00:00:00Z", null, null, "1.0"),
                 null);

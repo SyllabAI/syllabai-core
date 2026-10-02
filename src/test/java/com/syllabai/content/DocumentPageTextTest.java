@@ -25,13 +25,13 @@ class DocumentPageTextTest {
     private static TableElement table(String elementId, int page, Integer readingOrder,
                                       String content) {
         return new TableElement(elementId, "table", page, null, content, readingOrder,
-                List.of(), 1, 1, "e", "1", null);
+                null, List.of(), 1, 1, "e", "1", null);
     }
 
     private static EquationElement equation(String elementId, int page, Integer readingOrder,
                                             String content) {
         return new EquationElement(elementId, "equation", page, null, content, readingOrder,
-                null, "e", "1", null);
+                null, null, "e", "1", null);
     }
 
     private static CanonicalDocumentDto doc(List<TextBlockElement> textBlocks,
