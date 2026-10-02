@@ -14,7 +14,9 @@ import java.util.Map;
  * T-C13 arm A (spec §2): the production semantic arm — the REAL serving path
  * {@code ContentVectorRetriever → ContentRetrievalService →
  * ChunkVectorRepository.search} (pgvector cosine {@code <=>} over the V11
- * {@code vector(768)} column, T-C07 scope EXISTS predicate, cosine floor 0.15,
+ * {@code vector(768)} column, T-C07 scope EXISTS predicate, cosine floor =
+ * {@code ContentVectorRetriever#MIN_COSINE} (T-C42-calibrated 0.50; the
+ * archived run-004-a records were taken at the pre-calibration 0.15),
  * kind-agnostic, NoReranker) executed against a REAL Postgres migrated by
  * Flyway and loaded with the frozen snapshot corpus, with the frozen
  * backfill artifact applied (BENCH_EMBED_ARTIFACT).

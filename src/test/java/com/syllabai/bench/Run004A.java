@@ -28,8 +28,10 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  *
  * <p>Executor: the PRODUCTION vector serving path ({@code ContentRetrievalService}
  * → {@code ChunkVectorRepository.searchServingEligible}: pgvector cosine over V11 vector(768),
- * T-C07 scope predicate; {@code ContentVectorRetriever} cosine floor 0.15,
- * kind-agnostic) against a REAL Postgres migrated with the actual Flyway
+ * T-C07 scope predicate; {@code ContentVectorRetriever} cosine floor =
+ * {@code MIN_COSINE} (T-C42-calibrated 0.50; the archived run-004-a records
+ * were taken pre-calibration at 0.15), kind-agnostic) against a REAL Postgres
+ * migrated with the actual Flyway
  * migrations and loaded with the frozen snapshot corpus, with the frozen
  * embedding backfill artifact (BENCH_EMBED_ARTIFACT, sessions 92/94)
  * applied and verified fail-closed first. No scorer is reimplemented; the
@@ -249,7 +251,8 @@ public final class Run004A {
         results.put("arm", "A semantic — PRODUCTION vector serving path (ContentRetrievalService → "
                 + "ChunkVectorRepository.searchServingEligible: pgvector 1-(embedding <=> q) cosine over V11 "
                 + "vector(768), T-C07 scope EXISTS predicate + T-C05/T-C20 VALIDATED-only serving gate; "
-                + "ContentVectorRetriever cosine floor 0.15, kind-agnostic) "
+                + "ContentVectorRetriever cosine floor = MIN_COSINE at run time (T-C42-calibrated "
+                + "0.50; archived run-004-a records predate it at 0.15), kind-agnostic) "
                 + "— chunk+query vectors replayed from the frozen artifact "
                 + manifest.path("run_id").asText() + ", zero API calls at run time, NoReranker");
         results.put("arm_status", "RUNNABLE — frozen backfill artifact applied (" + applied + "/"
@@ -286,8 +289,9 @@ public final class Run004A {
                         + "(run-001 B-proxy validated_only discipline) — is retained as the independent "
                         + "cross-check and is expected to AGREE with the served view post-T-C20 (the "
                         + "historical run-004-a record predates the gate and carried the boundary finding)",
-                "cosine_floor", "hits below the production ContentVectorRetriever MIN_COSINE 0.15 are "
-                        + "dropped before ranking (production truth) — empty result lists are honest zeros",
+                "cosine_floor", "hits below the production ContentVectorRetriever MIN_COSINE "
+                        + "(T-C42: 0.50; archived pre-T-C42 records: 0.15) are dropped before ranking "
+                        + "(production truth) — empty result lists are honest zeros",
                 "spec_resolution_axis", hvPresent
                         ? "SCORED for arm A on BOTH views (see spec_resolution_hv): the snapshot "
                         + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
@@ -852,7 +856,7 @@ public final class Run004A {
                                 + "chunk→spec mapping rows in the snapshot (concept_attachments = 0; T-C06/F-168 "
                                 + "substrate pending). Recorded as a named data gap, never fabricated.\n"))
                 .append("- Zero-result queries: ").append(zeroResultQueries)
-                .append("/120 (all top-20 hits below the production cosine floor 0.15 — honest empties, ")
+                .append("/120 (all top-20 hits below the production cosine floor — honest empties, ")
                 .append("scored as real zeros).\n")
                 .append("- Compliant-starved queries: ").append(compliantStarved)
                 .append(" (served non-empty but every hit sits on a non-VALIDATED paper — expected 0 ")
@@ -861,7 +865,8 @@ public final class Run004A {
         md.append("## Reading\n\n")
                 .append("- Arm A drives the PRODUCTION vector serving path (ContentRetrievalService → ")
                 .append("ChunkVectorRepository.searchServingEligible pgvector cosine; ")
-                .append("ContentVectorRetriever floor 0.15, kind-agnostic) — no scorer was reimplemented; ")
+                .append("ContentVectorRetriever floor = MIN_COSINE at run time (T-C42: 0.50), "
+                        + "kind-agnostic) — no scorer was reimplemented; ")
                 .append("the retrieval surface is the T-C20 serving-eligible gate. The only ")
                 .append("stubbed surface is the embedding CALL itself, replayed from the frozen artifact ")
                 .append("through the production EmbeddingProvider port (compute-once-freeze-forever).\n")
