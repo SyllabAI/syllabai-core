@@ -15,7 +15,6 @@ import com.syllabai.learner.FlashcardRatingRepository;
 import com.syllabai.learner.FlashcardRatingTrailController;
 import com.syllabai.learner.SkillStateRepository;
 import com.syllabai.learner.dto.FlashcardRatingTrailView;
-import com.syllabai.learner.dto.FlashcardRatingView;
 import com.syllabai.shared.BadRequestException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -166,7 +165,7 @@ class FlashcardRatingTrailFlowIT {
         pace();
         ratingsController.record(learner, new FlashcardRatingRequest("fl_w3", "still-learning", NODE_B));
         pace();
-        FlashcardRatingView last = ratingsController.record(learner,
+        ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_w1", "know", NODE_A));
 
         FlashcardRatingTrailView walked = walk(learner, 3);
@@ -183,14 +182,15 @@ class FlashcardRatingTrailFlowIT {
             assertThat(e.occurredAt()).isEqualTo(expected.get(i).occurredAt());
             assertThat(e.cardId()).isEqualTo(expected.get(i).cardId());
         }
-        // newest first: the last write leads the page. The walked value
-        // round-tripped through Postgres (timestamptz keeps MICROseconds);
-        // the in-memory POST return still carries nanos — compare at the
-        // stored precision (the cursor path is unaffected: TrailCursor
-        // encodes the DB-read instant, so both cursor sides are micro)
+        // newest first: the last write leads the page — compared against
+        // the ROUND-TRIPPED read, because Postgres timestamptz ROUNDS to
+        // microseconds and the in-memory POST return is not the stored
+        // value; the walk serves the stored trail (the cursor path is
+        // unaffected either way: TrailCursor encodes the DB-read instant,
+        // so both cursor sides carry the stored micros)
         assertThat(walked.events().get(0).cardId()).isEqualTo("fl_w1");
         assertThat(walked.events().get(0).occurredAt())
-                .isEqualTo(last.occurredAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+                .isEqualTo(expected.get(0).occurredAt());
         // wire vocabulary + resolved anchor echo
         assertThat(walked.events().get(0).rating()).isEqualTo("know");
         assertThat(walked.events().get(0).subtopicCode()).isEqualTo(NODE_A);
