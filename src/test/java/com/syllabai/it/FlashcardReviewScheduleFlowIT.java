@@ -194,6 +194,43 @@ class FlashcardReviewScheduleFlowIT {
     }
 
     @Test
+    @DisplayName("T-C66 multi-course readiness: one queue derives across two courses' anchors, both resolved, honesty pin holds")
+    void multiCourseTrailDerivesOneQueue() throws InterruptedException {
+        // a second course's anchor (course-prefixed, core charset) — the
+        // shape the hub's T-C66 eligibility manifest guarantees before it
+        // ever sends a non-pilot course's ratings; the feed's read path is
+        // course-agnostic full-trail derivation, so a widened hub gate must
+        // not need any core change
+        KnowledgeNode physicsAnchor = knowledgeNodes.save(new KnowledgeNode(
+                "4PH1-S1-a", NodeType.TOPIC, "Forces and motion", null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
+
+        UUID learner = newLearner();
+        ratingsController.record(learner,
+                new FlashcardRatingRequest("fl_chem_due", "still-learning", SUBTOPIC_CODE));
+        pace();
+        ratingsController.record(learner,
+                new FlashcardRatingRequest("fl_phys_known", "know", "4PH1-S1-a"));
+        pace();
+
+        FlashcardReviewScheduleView feed = scheduleController.schedule(learner);
+        assertThat(feed.cards()).hasSize(2); // ONE queue, both courses
+        // due cards first (stalest dueAt first): the chemistry still-learning
+        // card leads; the physics know card is scheduled behind it
+        assertThat(feed.cards().get(0).cardId()).isEqualTo("fl_chem_due");
+        assertThat(feed.cards().get(0).subtopicCode()).isEqualTo("4CH1-S1-a");
+        assertThat(feed.cards().get(1).subtopicCode()).isEqualTo("4PH1-S1-a");
+        assertThat(feed.cards().get(1).nodeId()).isEqualTo(physicsAnchor.id());
+        assertThat(feed.cards().get(1).intervalDays()).isEqualTo(1);
+        assertThat(feed.summary().due()).isEqualTo(1);
+        assertThat(feed.summary().scheduled()).isEqualTo(1);
+
+        // THE HONESTY PIN, multi-course edition: ratings from any course are
+        // timing evidence only — zero SkillState rows
+        assertThat(skillStates.findByLearnerIdOrderByLastPracticedAtDesc(learner)).isEmpty();
+    }
+
+    @Test
     @DisplayName("learner isolation: another learner's trail never appears in my feed")
     void learnerIsolation() {
         UUID a = newLearner();

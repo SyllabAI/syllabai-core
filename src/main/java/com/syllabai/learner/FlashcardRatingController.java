@@ -46,6 +46,24 @@ import org.springframework.web.bind.annotation.RestController;
  * SkillState / misconception / review writes — self-report is exposure,
  * history and stats only; pinned by FlashcardRatingFlowIT).</p>
  *
+ * <p>MULTI-COURSE ANCHOR CONTRACT (T-C66 — read before commissioning the
+ * next curriculum): this endpoint is course-agnostic BY DESIGN — there is
+ * no pilot gate here to widen. Which courses actually send ratings is
+ * decided hub-side by the registry-derived core-sync eligibility manifest
+ * (syllabai-hub {@code src/lib/flashcard-sync-eligibility.ts}): a course
+ * may sync only once its curriculum is ingested HERE (the curriculumCode
+ * bridge) AND its deck anchors are core-safe — matching this request's
+ * charset pattern and course-prefixed, so an anchor can never be ambiguous
+ * across courses (bare numeric codes like "1.1"/"3.5" are shared by
+ * several corpus courses and would attribute into whichever node claimed
+ * the code first). The graph enforces its half at the DB:
+ * {@code uq_knowledge_node_code} (V2) means a second course claiming an
+ * existing code fails closed at ingestion, and unknown codes 404 above —
+ * the two backstops behind the hub contract. Pinned by
+ * FlashcardRatingFlowIT (disjoint multi-course attribution + duplicate-code
+ * rejection) and FlashcardReviewScheduleFlowIT (one queue derived across
+ * two courses' anchors, honesty pin holding).</p>
+ *
  * <p>Rate limiting: deliberately NOT in the R8 LLM tier — ratings are cheap
  * authenticated writes with zero LLM cost (a full 30-card deck flip is 30
  * rows); the auth tier and general authenticated posture cover abuse.</p>

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -46,6 +47,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *       stays empty after ratings, and the state view's skillStates stay
  *       empty while flashcardRatings carry the evidence.</li>
  * </ul>
+ *
+ * <p>T-C66 additions (the widened hub gate's core-side receipts): the
+ * ingest is course-agnostic BY DESIGN, so a second course's anchors are
+ * seeded here and pinned to attribute DISJOINTLY (the node follows the
+ * resolved anchor code, never the card id or the learner), and the graph
+ * itself is pinned fail-closed against duplicate node codes — the DB-level
+ * backstop (uq_knowledge_node_code, V2) that keeps one code from ever
+ * naming two courses' nodes.</p>
  */
 @SpringBootTest
 @ActiveProfiles("it")
@@ -173,6 +182,54 @@ class FlashcardRatingFlowIT {
         assertThatThrownBy(() -> ratingsController.record(learner,
                 new FlashcardRatingRequest("fl_x3", "banana", SUBTOPIC_CODE)))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("T-C66: a second course's anchors attribute disjointly — the node follows the resolved anchor code")
+    void multiCourseAnchorsStayDisjoint() {
+        // a second ingested curriculum (course-safe anchors: course-prefixed,
+        // core charset) — exactly what the hub's T-C66 eligibility manifest
+        // requires before it will ever send a non-pilot course's ratings
+        knowledgeNodes.save(new KnowledgeNode(
+                "4PH1", NodeType.SUBJECT, "Physics (IGCSE)", null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
+        KnowledgeNode physicsAnchor = knowledgeNodes.save(new KnowledgeNode(
+                "4PH1-S1-a", NodeType.TOPIC, "Forces and motion", null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it"));
+
+        UUID learner = newLearner();
+        FlashcardRatingView chem = ratingsController.record(learner,
+                new FlashcardRatingRequest("fl_chemCard", "know", SUBTOPIC_CODE));
+        FlashcardRatingView phys = ratingsController.record(learner,
+                new FlashcardRatingRequest("fl_physCard", "still-learning", "4PH1-S1-a"));
+
+        // attribution is per-resolved-anchor: two courses, two nodes, one trail
+        assertThat(chem.subtopicCode()).isEqualTo("4CH1-S1-a");
+        assertThat(phys.subtopicCode()).isEqualTo("4PH1-S1-a");
+        assertThat(phys.nodeId()).isEqualTo(physicsAnchor.id());
+        assertThat(chem.nodeId()).isNotEqualTo(physicsAnchor.id());
+
+        // the learner-state view carries both courses' evidence, each under
+        // its own resolved node (the slice attributes via nodeId — its
+        // subtopicCode echo is null by contract)
+        LearnerStateView state = stateController.state(learner);
+        assertThat(state.flashcardRatings()).hasSize(2);
+        assertThat(state.flashcardRatings())
+                .extracting(FlashcardRatingView::nodeId)
+                .containsExactlyInAnyOrder(subtopicNodeId, physicsAnchor.id());
+    }
+
+    @Test
+    @DisplayName("T-C66: the graph is fail-closed against duplicate node codes — one code can never name two courses' nodes")
+    void duplicateNodeCodeIsRejectedByTheGraph() {
+        // the SAME code the @BeforeAll fixture already seeded for 4CH1: a
+        // second course (or a re-ingestion) claiming it must fail at the DB
+        // (uq_knowledge_node_code, V2) — the backstop that makes the hub's
+        // course-prefixed-anchor contract enforceable end to end
+        assertThatThrownBy(() -> knowledgeNodes.saveAndFlush(new KnowledgeNode(
+                SUBTOPIC_CODE, NodeType.TOPIC, "A second course's claim on 4CH1-S1-a", null,
+                KnowledgeNode.ValidationStatus.VALIDATED, "it-fixture", "it")))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
