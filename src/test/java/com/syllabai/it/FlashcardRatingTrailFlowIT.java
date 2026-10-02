@@ -183,9 +183,14 @@ class FlashcardRatingTrailFlowIT {
             assertThat(e.occurredAt()).isEqualTo(expected.get(i).occurredAt());
             assertThat(e.cardId()).isEqualTo(expected.get(i).cardId());
         }
-        // newest first: the last write leads the page
+        // newest first: the last write leads the page. The walked value
+        // round-tripped through Postgres (timestamptz keeps MICROseconds);
+        // the in-memory POST return still carries nanos — compare at the
+        // stored precision (the cursor path is unaffected: TrailCursor
+        // encodes the DB-read instant, so both cursor sides are micro)
         assertThat(walked.events().get(0).cardId()).isEqualTo("fl_w1");
-        assertThat(walked.events().get(0).occurredAt()).isEqualTo(last.occurredAt());
+        assertThat(walked.events().get(0).occurredAt())
+                .isEqualTo(last.occurredAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
         // wire vocabulary + resolved anchor echo
         assertThat(walked.events().get(0).rating()).isEqualTo("know");
         assertThat(walked.events().get(0).subtopicCode()).isEqualTo(NODE_A);
