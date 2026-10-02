@@ -93,6 +93,36 @@ public interface KnowledgeNodeRepository extends JpaRepository<KnowledgeNode, UU
     List<Object[]> findPrerequisiteClosure(@Param("nodeId") UUID nodeId);
 
     /**
+     * Batched transitive prerequisite closures for several origin nodes (M3
+     * tranche 2, audit 2026-10-02): the same REQUIRES_PREREQUISITE walk as
+     * {@link #findPrerequisiteClosure(UUID)} with the origin id carried
+     * through the recursion — ONE pass for all matched topics instead of one
+     * CTE per topic. Rows are (origin_id, node_id, depth), ordered origin
+     * first so each per-origin slice keeps the single-node contract (deepest
+     * first, then node id); MAX(depth) per (origin, node) exactly as the
+     * single query. Callers pass structure-surface node ids (always existing
+     * rows), so the per-node existence check of the single form is not
+     * repeated here.
+     */
+    @Query(value = """
+            WITH RECURSIVE prereq AS (
+                SELECT e.source_node_id AS origin_id, e.target_node_id AS node_id, 1 AS depth
+                FROM knowledge_edges e
+                WHERE e.source_node_id IN (:nodeIds) AND e.relation_type = 'REQUIRES_PREREQUISITE'
+                UNION
+                SELECT p.origin_id, e.target_node_id, p.depth + 1
+                FROM knowledge_edges e
+                JOIN prereq p ON e.source_node_id = p.node_id
+                WHERE e.relation_type = 'REQUIRES_PREREQUISITE' AND p.depth < 10
+            )
+            SELECT origin_id, node_id, MAX(depth) AS depth
+            FROM prereq
+            GROUP BY origin_id, node_id
+            ORDER BY origin_id, depth DESC, node_id
+            """, nativeQuery = true)
+    List<Object[]> findPrerequisiteClosureRows(@Param("nodeIds") Collection<UUID> nodeIds);
+
+    /**
      * Misconception nodes attached to a topic (via MISCONCEPTION_OF edges into the topic).
      */
     @Query(value = """

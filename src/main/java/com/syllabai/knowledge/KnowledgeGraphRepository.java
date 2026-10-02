@@ -1,6 +1,8 @@
 package com.syllabai.knowledge;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -19,11 +21,27 @@ public interface KnowledgeGraphRepository {
     /** Transitive prerequisite closure with hop depth (deepest first). */
     List<PrerequisiteWithDepth> findPrerequisiteClosure(UUID nodeId);
 
+    /**
+     * Batched transitive prerequisite closures for several origin nodes (M3
+     * tranche 2), keyed by origin id (missing key = no prerequisites).
+     * Within-origin order matches {@link #findPrerequisiteClosure(UUID)}
+     * (deepest first, then node id). Caller supplies structure-surface node
+     * ids — no per-origin existence check.
+     */
+    Map<UUID, List<PrerequisiteWithDepth>> findPrerequisiteClosures(Collection<UUID> nodeIds);
+
     /** The full subtree under a node (inclusive), via PART_OF edges. */
     List<KnowledgeNode> findSubtree(UUID nodeId);
 
     /** Misconception nodes attached to a topic node. */
     List<KnowledgeNode> findMisconceptions(UUID topicNodeId);
+
+    /**
+     * Batched misconception attachments for several topic nodes (M3 tranche
+     * 2), keyed by topic id (missing key = none attached) — the IN form of
+     * {@link #findMisconceptions(UUID)}.
+     */
+    Map<UUID, List<KnowledgeNode>> findMisconceptionsForTopics(Collection<UUID> topicNodeIds);
 
     /**
      * Misconception nodes associated with a node through any misconception-family

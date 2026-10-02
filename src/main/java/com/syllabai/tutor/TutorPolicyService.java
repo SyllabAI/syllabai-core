@@ -2,7 +2,7 @@ package com.syllabai.tutor;
 
 import com.syllabai.diagnostic.StruggleInference;
 import com.syllabai.diagnostic.StruggleInferenceRepository;
-import com.syllabai.learner.LearnerModelService;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.shared.events.TutorInterventionSelectedEvent;
 import java.time.Instant;
 import java.util.List;
@@ -44,16 +44,23 @@ public class TutorPolicyService {
     static final double INTERVENTION_THRESHOLD = 0.65;
     private static final double ACTIVE_MISCONCEPTION_THRESHOLD = 0.50;
     private final StruggleInferenceRepository inferences;
-    private final LearnerModelService learnerModel;
     private final ApplicationEventPublisher events;
 
-    public TutorPolicyService(StruggleInferenceRepository inferences, LearnerModelService learnerModel,
+    public TutorPolicyService(StruggleInferenceRepository inferences,
                               ApplicationEventPublisher events) {
-        this.inferences = inferences; this.learnerModel = learnerModel; this.events = events;
+        this.inferences = inferences; this.events = events;
     }
 
+    /**
+     * M3 tranche 2 (audit 2026-10-02): the learner's misconception readings
+     * are resolved ONCE per ask by the caller (tutor context assembly, CLA)
+     * and propagated here — this service no longer owns a learner-model read
+     * of its own. {@code readings} is the learner's FULL reading list (not
+     * scope-filtered); empty for anonymous requests (never consulted).
+     */
     public InterventionPlan select(UUID learnerId, List<KnowledgeRetriever.KnowledgeContext.MatchedTopic> topics,
-                                   List<KnowledgeRetriever.KnowledgeContext.MisconceptionSignal> misconceptions) {
+                                   List<KnowledgeRetriever.KnowledgeContext.MisconceptionSignal> misconceptions,
+                                   List<MisconceptionReading> readings) {
         if (learnerId == null) return plan(InterventionType.EXPLANATION, "anonymous request",
                 List.of("Explain the concept from the supplied sources."));
         Set<UUID> topicIds = topics.stream().map(KnowledgeRetriever.KnowledgeContext.MatchedTopic::nodeId).collect(Collectors.toSet());
@@ -72,7 +79,7 @@ public class TutorPolicyService {
         else {
             // MED-2/ADR-032: gate on the staleness-relaxed probability, not the
             // raw anchored posterior — stale evidence loses prescribing force
-            boolean activeMisconception = learnerModel.misconceptionReadings(learnerId).stream()
+            boolean activeMisconception = readings.stream()
                     .anyMatch(r -> r.effective() >= ACTIVE_MISCONCEPTION_THRESHOLD
                             && misconceptions.stream().anyMatch(s -> s.nodeId().equals(r.state().misconceptionNodeId())));
             selected = activeMisconception
