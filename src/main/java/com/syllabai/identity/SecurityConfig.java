@@ -85,6 +85,9 @@ public class SecurityConfig {
                                 "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/teacher/**").hasAnyRole("TEACHER", "ADMIN")
+                        // research aggregates span ALL learners (S2/ADR-033) — teacher+
+                        // here, re-gated at the controller method level as well
+                        .requestMatchers("/api/v1/research/**").hasAnyRole("TEACHER", "ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
                         (request, response, authException) ->

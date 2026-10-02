@@ -32,6 +32,17 @@ import java.util.UUID;
  * @param confidence       learner-reported confidence (1–5, nullable)
  * @param selfDoubtFlag    learner self-doubt flag (Paper B §3.5, struggle type 4 signal)
  * @param timedCondition   true when answered under timed conditions (Paper B §16)
+ * @param questionType     the question's format ({@code Question.Type} name —
+ *                        MCQ_SINGLE / SHORT_ANSWER / STRUCTURED); never null on
+ *                        publisher-emitted events. Drives format-aware BKT emission
+ *                        pricing (S2/ADR-033): guess is priced per format, so the
+ *                        four-option-MCQ paper constant is no longer silently
+ *                        applied to structured answers.
+ * @param optionCount      the number of options the learner chose from — the LIVE
+ *                        count for MCQ questions (1/optionCount is the guess prior),
+ *                        0 for non-MCQ formats. Guarded downstream: MCQ events with
+ *                        a count below 2 resolve to the paper default 0.25 (S2
+ *                        challenge C3 — 1/1 would make wrong answers RAISE mastery).
  * @param misconceptionIds misconception nodes <em>expressed</em> by the chosen
  *                        distractor (empty when the answer is correct or the chosen
  *                        option is untagged — strengthens the belief, Paper B §3.4)
@@ -57,5 +68,7 @@ public record AssessmentEvidenceRecordedEvent(
         List<UUID> misconceptionIds,
         List<UUID> observedMisconceptionIds,
         String provenance,
+        String questionType,
+        int optionCount,
         Instant occurredAt) {
 }
