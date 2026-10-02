@@ -11,9 +11,12 @@ import org.springframework.stereotype.Component;
  * the content API, or "Specification — Topic 3 (U1-T3)" with a link into the
  * KG API. Never a vague "according to the syllabus".
  *
- * <p>Deep links currently target the teacher content API (the only document
- * read surface today); the learner-facing citation view arrives with the
- * tutor UI (T-025).</p>
+ * <p>Deep links target the learner-accessible citation surface
+ * ({@code /api/v1/content/documents/{row}?page=N} — L5): the audience the
+ * citations are written for can actually follow them. The corpus-law
+ * validation gates ({@code DocumentRepository.existsCitable}) make the link
+ * honest for every role — a document nothing serves is an honest 404 — and
+ * the teacher canonical/debug surface stays on the teacher API.</p>
  */
 @Component
 public class SimpleCitationResolver implements CitationResolver {
@@ -64,7 +67,7 @@ public class SimpleCitationResolver implements CitationResolver {
             // honest null link, never a fabricated path
             return null;
         }
-        String link = "/api/v1/teacher/content/documents/" + item.documentRowId();
+        String link = "/api/v1/content/documents/" + item.documentRowId();
         return item.pageStart() == null ? link : link + "?page=" + item.pageStart();
     }
 }

@@ -35,7 +35,7 @@ class SimpleCitationResolverTest {
         assertThat(citations.get(0).sourceType()).isEqualTo("MARK_SCHEME");
         assertThat(citations.get(0).documentId()).isEqualTo("ms-1");
         assertThat(citations.get(0).deepLink())
-                .isEqualTo("/api/v1/teacher/content/documents/" + docRow + "?page=6");
+                .isEqualTo("/api/v1/content/documents/" + docRow + "?page=6");
 
         assertThat(citations.get(1).label()).isEqualTo("Question paper — pp2–3");
         assertThat(citations.get(1).page()).isEqualTo(2);
@@ -66,7 +66,7 @@ class SimpleCitationResolverTest {
 
         assertThat(citation.label()).isEqualTo("Specification");
         assertThat(citation.page()).isNull();
-        assertThat(citation.deepLink()).isEqualTo("/api/v1/teacher/content/documents/"
+        assertThat(citation.deepLink()).isEqualTo("/api/v1/content/documents/"
                 + noPage.documentRowId());
     }
 }
