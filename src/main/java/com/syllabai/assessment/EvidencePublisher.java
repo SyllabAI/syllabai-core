@@ -65,6 +65,11 @@ public class EvidencePublisher {
     private void emit(Attempt attempt, Question question, List<QuestionTopic> secondaryTopics,
                       boolean correct, int marksAwarded,
                       List<UUID> expressedIds, List<UUID> observedIds) {
+        // null-safe type read (C3 posture at the type level): a real Question entity
+        // defaults its type to MCQ_SINGLE, but this publisher is the last line of
+        // defense for the submission path — an unexpected null must degrade to the
+        // untyped paper-default emission, never 500 the attempt
+        Question.Type type = question.type();
         events.publishEvent(new AssessmentEvidenceRecordedEvent(
                 attempt.id(), attempt.learnerId(), question.id(),
                 topicNodeIds(question, secondaryTopics),
@@ -73,7 +78,14 @@ public class EvidencePublisher {
                 attempt.responseTimeMs(), attempt.confidenceLevel(),
                 attempt.selfDoubtFlag(), attempt.timedCondition(),
                 expressedIds, observedIds,
-                attempt.provenance(), Instant.now()));
+                attempt.provenance(),
+                // S2/ADR-033: the emission context rides the evidence event so the
+                // learner model (and the calibration instrument) can price guess per
+                // format. MCQ carries the LIVE option count (options are materialized
+                // on the grading path); non-MCQ formats carry 0.
+                type == null ? null : type.name(),
+                type == Question.Type.MCQ_SINGLE ? question.options().size() : 0,
+                Instant.now()));
     }
 
     /**

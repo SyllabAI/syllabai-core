@@ -76,7 +76,10 @@ public class LearnerModelService {
     }
 
     private void updateMastery(AssessmentEvidenceRecordedEvent event) {
-        var bktParams = properties.bkt().toParams();
+        // S2/ADR-033: guess is priced per question format (MCQ 1/optionCount,
+        // SHORT_ANSWER / STRUCTURED lenient priors, untyped → paper default) —
+        // the 0.25 paper constant was silently a four-option-MCQ emission model.
+        var bktParams = properties.bkt().toParams(event.questionType(), event.optionCount());
         Instant when = event.occurredAt();
         // spec points (T-C18 mapping) ride the SAME evidence class as topics:
         // one marked attempt is one BKT update per node it honestly tests —

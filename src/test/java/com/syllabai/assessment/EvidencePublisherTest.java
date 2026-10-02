@@ -130,4 +130,35 @@ class EvidencePublisherTest {
 
         assertThat(published).hasSize(1);   // the duplicate submit emitted nothing
     }
+
+    @Test
+    @DisplayName("the evidence event carries the format context (S2/ADR-033) — STRUCTURED with optionCount 0")
+    void gradedEventCarriesFormatContext() {
+        attempt.recordTotalMarks(6, 6);
+
+        assertThat(publisher.publishGraded(attempt, question, List.of())).isTrue();
+
+        AssessmentEvidenceRecordedEvent event = (AssessmentEvidenceRecordedEvent) published.get(0);
+        assertThat(event.questionType()).isEqualTo("STRUCTURED");
+        assertThat(event.optionCount()).isZero();   // non-MCQ formats carry no option count
+    }
+
+    @Test
+    @DisplayName("MCQ events carry the LIVE option count (0 when options are unmaterialized — the C3 fallback case)")
+    void mcqEventCarriesLiveOptionCount() {
+        Question mcq = new Question("q-mcq", Question.Type.MCQ_SINGLE, "stem", 1, 3, 60,
+                "Choose", UUID.randomUUID(), Question.Provenance.PAST_PAPER);
+        TestIds.withId(mcq, UUID.randomUUID());
+        Attempt mcqAttempt = new Attempt(UUID.randomUUID(), mcq, null, true, null,
+                5000L, 4, false, false, "test");
+
+        publisher.publishMcq(mcqAttempt, mcq, List.of(), List.of(), List.of());
+
+        AssessmentEvidenceRecordedEvent event = (AssessmentEvidenceRecordedEvent) published.get(0);
+        assertThat(event.questionType()).isEqualTo("MCQ_SINGLE");
+        // empty/unmaterialized options in this unit context — the production grading
+        // path materializes them, and the resolver's C3 guard treats a count below 2
+        // as the paper default, so a malformed item can never 500 the submission
+        assertThat(event.optionCount()).isZero();
+    }
 }

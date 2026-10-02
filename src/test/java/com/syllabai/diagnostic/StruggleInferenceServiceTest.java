@@ -60,7 +60,7 @@ class StruggleInferenceServiceTest {
         return new AssessmentEvidenceRecordedEvent(
                 UUID.randomUUID(), learnerId, UUID.randomUUID(), List.of(topicId), List.of(),
                 correctness, 1, correctness ? 1 : 0, 30_000L, 3, selfDoubt, timed,
-                List.of(), List.of(), "unit-test", now);
+                List.of(), List.of(), "unit-test", null, 0, now);
     }
 
     private SkillState skill(UUID nodeId, double mastery, Double fluencyGap) {

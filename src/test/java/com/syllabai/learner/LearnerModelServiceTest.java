@@ -55,7 +55,7 @@ class LearnerModelServiceTest {
                                                      List<UUID> observed) {
         return new AssessmentEvidenceRecordedEvent(
                 ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(SPEC_POINT_1, SPEC_POINT_2), correct, 1, correct ? 1 : 0,
-                1000L, 3, false, false, expressed, observed, "test", WHEN);
+                1000L, 3, false, false, expressed, observed, "test", null, 0, WHEN);
     }
 
     @Test
@@ -169,7 +169,7 @@ class LearnerModelServiceTest {
 
         AssessmentEvidenceRecordedEvent event = new AssessmentEvidenceRecordedEvent(
                 ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(NODE), true, 1, 1,
-                1000L, 3, false, false, List.of(), List.of(), "test", WHEN);
+                1000L, 3, false, false, List.of(), List.of(), "test", null, 0, WHEN);
         service.onAssessmentEvidence(event);
 
         ArgumentCaptor<List<SkillState>> saved = ArgumentCaptor.captor();
@@ -195,5 +195,91 @@ class LearnerModelServiceTest {
         assertThat(event.expressed()).isTrue();
         assertThat(event.priorProbability()).isCloseTo(0.3, within(1e-9));
         assertThat(event.posteriorProbability()).isCloseTo(0.75, within(1e-9));
+    }
+
+    // ── S2/ADR-033: format-aware emission pins ─────────────────────────────────
+    // First-attempt (gap-0) updates whose constants are hand-derived from the
+    // BktEngine update formula; the typedEvidence helper emits a single-node
+    // event with an explicit format so the resolver, not the paper constant,
+    // decides the guess.
+
+    private AssessmentEvidenceRecordedEvent typedEvidence(boolean correct,
+                                                          String questionType,
+                                                          int optionCount) {
+        return new AssessmentEvidenceRecordedEvent(
+                ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(), correct, 1, correct ? 1 : 0,
+                1000L, 3, false, false, List.of(), List.of(), "test", questionType, optionCount, WHEN);
+    }
+
+    private LearnerModelService serviceOverState(double seedMastery) {
+        SkillState state = new SkillState(LEARNER, NODE, seedMastery, WHEN);
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE)).thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+        return new LearnerModelService(skillStates, misconceptionStates, attempts,
+                new BktEngine(), new BdtEngine(),
+                new LearnerProperties(null, null, null, null), published::add);
+    }
+
+    @Test
+    @DisplayName("structured-correct is no longer under-credited: l0 0.1 reads 0.9182, not 0.3571 (2.57x)")
+    void structuredCorrectIsFullyCredited() {
+        serviceOverState(0.1).onAssessmentEvidence(typedEvidence(true, "STRUCTURED", 0));
+
+        assertThat(published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow().posteriorMastery())
+                .isCloseTo(0.9181818181818182, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("five-option MCQ: correct from l0 0.1 reads exactly 0.4 (guess 1/5)")
+    void fiveOptionMcqReadsExactlyFortyPercent() {
+        serviceOverState(0.1).onAssessmentEvidence(typedEvidence(true, "MCQ_SINGLE", 5));
+
+        assertThat(published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow().posteriorMastery())
+                .isCloseTo(0.4, within(1e-12));
+    }
+
+    @Test
+    @DisplayName("a wrong structured answer is no longer over-forgiven: prior 0.5 drops to 0.1826, not 0.2059")
+    void wrongStructuredIsNotOverForgiven() {
+        serviceOverState(0.5).onAssessmentEvidence(typedEvidence(false, "STRUCTURED", 0));
+
+        assertThat(published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow().posteriorMastery())
+                .isCloseTo(0.18256880733944955, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("untyped wrong answers keep the exact legacy over-forgiveness (0.2059) — strict refinement")
+    void untypedWrongKeepsLegacyPath() {
+        serviceOverState(0.5).onAssessmentEvidence(typedEvidence(false, null, 0));
+
+        assertThat(published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow().posteriorMastery())
+                .isCloseTo(0.2058823529411765, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("C3 at the behaviour level: a malformed 1-option MCQ degrades to the paper path, never inverts")
+    void malformedMcqCountDegradesInsteadOfInverting() {
+        // guess would be 1/1 = 1.0 unguarded: the wrong-path posterior becomes
+        // p·slip/(p·slip + (1−p)·0) = 1.0 — a WRONG answer driving mastery to 1.
+        serviceOverState(0.5).onAssessmentEvidence(typedEvidence(false, "MCQ_SINGLE", 1));
+
+        assertThat(published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow().posteriorMastery())
+                .isCloseTo(0.2058823529411765, within(1e-9));   // the paper-default wrong path
     }
 }

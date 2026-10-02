@@ -44,7 +44,7 @@ class TelemetryServiceTest {
         return new AssessmentEvidenceRecordedEvent(
                 ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(), false, 1, 0,
                 1000L, 3, selfDoubt, false,
-                List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", WHEN);
+                List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", null, 0, WHEN);
     }
 
     @Test
@@ -70,7 +70,7 @@ class TelemetryServiceTest {
         service.onAssessmentEvidence(new AssessmentEvidenceRecordedEvent(
                 ATTEMPT, LEARNER, QUESTION, List.of(NODE), List.of(), false, 1, 0,
                 1000L, null, false, false,
-                List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", WHEN));
+                List.of(MISCONCEPTION), List.of(MISCONCEPTION), "test", null, 0, WHEN));
 
         verify(events).save(saved.capture());
         TelemetryEvent row = saved.getValue();

@@ -14,16 +14,88 @@ public record LearnerProperties(
         Bdt bdt,
         DecayJob decayJob) {
 
-    public record Bkt(double l0, double slip, double guess, double learnRate) {
+    /**
+     * BKT emission parameters (Master Spec §11 / Paper B research design).
+     *
+     * <p>Research-design parameters, versioned through the {@code model_versions}
+     * registry and configurable via {@code syllabai.learner.bkt.*} — never hard-coded
+     * in domain logic. S2/ADR-033: guess is priced per question format — the paper's
+     * {@code guess} of 0.25 is exactly the FOUR-OPTION MCQ base, not a universal
+     * constant.</p>
+     *
+     * @param l0               initial knowledge probability P(L₀)
+     * @param slip             probability of a wrong answer despite knowing (global —
+     *                         mistakes happen in every format; ADR-033 declined
+     *                         format-aware slip at Cycle-1 volume)
+     * @param guess            default guess prior — used for MCQ_SINGLE when the option
+     *                         count is unusable (S2 challenge C3 guard) and for
+     *                         null/blank/unknown formats, so legacy untyped evidence
+     *                         keeps its exact historical behaviour
+     * @param learnRate        probability of transitioning unlearned→learned per opportunity
+     * @param shortAnswerGuess guess prior for SHORT_ANSWER (provisional 0.05 — S2
+     *                         challenge C5: revisit at the first calibration report)
+     * @param structuredGuess  guess prior for STRUCTURED (0.01: a multi-part worked
+     *                         answer earning FULL marks by blind luck is near-impossible;
+     *                         the 0.25 paper constant under-credited structured learners
+     *                         2.57× per correct answer)
+     */
+    public record Bkt(double l0, double slip, double guess, double learnRate,
+                      double shortAnswerGuess, double structuredGuess) {
         public Bkt {
             if (l0 <= 0) l0 = 0.1;
             if (slip <= 0) slip = 0.1;
             if (guess <= 0) guess = 0.25;
             if (learnRate <= 0) learnRate = 0.1;
+            if (shortAnswerGuess <= 0) shortAnswerGuess = 0.05;
+            if (structuredGuess <= 0) structuredGuess = 0.01;
         }
 
         public com.syllabai.learner.bkt.BktParams toParams() {
-            return new com.syllabai.learner.bkt.BktParams(l0, slip, guess, learnRate);
+            return toParams(null, 0);
+        }
+
+        /**
+         * Format-aware emission resolution (S2/ADR-033): guess is priced per question
+         * format; slip, l₀ and T stay global.
+         *
+         * <p>Resolution: {@code MCQ_SINGLE} with a usable option count →
+         * {@code 1/optionCount} (the paper's 0.25 is exactly N=4, so four-option MCQs
+         * are bit-identical to the legacy path); {@code SHORT_ANSWER} →
+         * {@code shortAnswerGuess}; {@code STRUCTURED} → {@code structuredGuess};
+         * null/blank/unknown format → the paper default 0.25 — a strict refinement,
+         * never a behaviour change for untyped events.</p>
+         *
+         * <p>Domain guards (S2 challenge C3): an MCQ count below 2 resolves to the
+         * paper default — {@code 1/1 = 1.0} would make wrong answers RAISE mastery
+         * ({@code BktEngine}'s wrong-path evidence divides by {@code (1−guess)}), and
+         * {@code 1/0} would 500 the submission inside {@code BktParams}' probability
+         * validation. Malformed option counts are a data-quality tail (teacher-authored
+         * and ingested items), not a configuration error, so the guard degrades to the
+         * legacy prior instead of failing the attempt. The resolved guess is also
+         * clamped strictly below {@code 1 − slip}: at guess ≥ 1 − slip a wrong answer
+         * stops being evidence of anything (posterior = prior), and above it wrong
+         * answers RAISE mastery — a misconfigured knob must degrade, never invert the
+         * update.</p>
+         *
+         * @param questionType the {@code Question.Type} name carried on the evidence
+         *                     event (nullable — untyped/legacy events resolve to the
+         *                     paper default)
+         * @param optionCount  the live option count for MCQ events, 0 otherwise
+         */
+        public com.syllabai.learner.bkt.BktParams toParams(String questionType, int optionCount) {
+            double resolved;
+            if ("MCQ_SINGLE".equals(questionType)) {
+                resolved = optionCount >= 2 ? 1.0 / optionCount : guess;
+            } else if ("SHORT_ANSWER".equals(questionType)) {
+                resolved = shortAnswerGuess;
+            } else if ("STRUCTURED".equals(questionType)) {
+                resolved = structuredGuess;
+            } else {
+                resolved = guess;
+            }
+            // clamp strictly below 1 − slip (see javadoc): degrade, never invert
+            resolved = Math.min(resolved, 1.0 - slip - 1e-9);
+            return new com.syllabai.learner.bkt.BktParams(l0, slip, resolved, learnRate);
         }
     }
 
@@ -84,7 +156,7 @@ public record LearnerProperties(
     }
 
     public LearnerProperties {
-        if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1);
+        if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1, 0.05, 0.01);
         if (decay == null) decay = new Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6);
         if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5, 180);
         if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
