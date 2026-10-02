@@ -2,6 +2,7 @@ package com.syllabai.tutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -51,13 +52,17 @@ class GraphKnowledgeRetrieverTest {
                         "Formulae, Equations and Amount of Substance"),
                 node(bondingId, "IALCHEM2018-U1-T3", "Bonding and Structure"),
                 node(energeticsId, "IALCHEM2018-U2-T6", "Energetics")));
-        when(graph.prerequisiteChain(bondingId)).thenReturn(List.of(
-                new PrerequisiteView(molesId, "IALCHEM2018-U1-T1", "TOPIC",
-                        "Formulae, Equations and Amount of Substance", 1)));
-        when(graph.misconceptions(bondingId)).thenReturn(List.of(
-                new NodeView(moleMisconceptionId, "MIS-T1.1-01", "MISCONCEPTION",
-                        "Moles and grams are interchangeable", null, "UNVALIDATED", null, null,
-                        List.of())));
+        // M3 tranche 2: the pedagogical context arrives BATCHED (keyed by
+        // matched topic) — the retriever no longer makes per-topic calls
+        when(graph.prerequisiteChains(any())).thenReturn(java.util.Map.of(
+                bondingId, List.of(
+                        new PrerequisiteView(molesId, "IALCHEM2018-U1-T1", "TOPIC",
+                                "Formulae, Equations and Amount of Substance", 1))));
+        when(graph.misconceptionsForTopics(any())).thenReturn(java.util.Map.of(
+                bondingId, List.of(
+                        new NodeView(moleMisconceptionId, "MIS-T1.1-01", "MISCONCEPTION",
+                                "Moles and grams are interchangeable", null, "UNVALIDATED", null, null,
+                                List.of()))));
     }
 
     @Test

@@ -3,6 +3,8 @@ package com.syllabai.tutor;
 import com.syllabai.curriculum.CurriculumScope;
 import com.syllabai.knowledge.KnowledgeGraphService;
 import com.syllabai.knowledge.KnowledgeNode;
+import com.syllabai.knowledge.dto.NodeView;
+import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext.MatchedTopic;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext.MisconceptionSignal;
 import com.syllabai.tutor.KnowledgeRetriever.KnowledgeContext.PrerequisiteLink;
@@ -121,14 +123,26 @@ public class GraphKnowledgeRetriever implements KnowledgeRetriever {
                 .map(m -> new MatchedTopic(m.node.id(), m.node.code(), m.node.title(), m.specificity))
                 .toList();
 
+        // M3 tranche 2 (audit 2026-10-02): the pedagogical context of ALL
+        // matched topics is gathered in two batched reads (one recursive-CTE
+        // pass + one node fetch, one misconception-edge query) — the per-topic
+        // loop used to cost five queries per matched topic (existence check,
+        // CTE, node fetch, existence check, edge query). Output order is
+        // unchanged: ranked-topic order outside, per-topic query order inside.
+        List<UUID> topicIds = ranked.stream().map(MatchedTopic::nodeId).toList();
+        Map<UUID, List<PrerequisiteView>> chains = topicIds.isEmpty()
+                ? Map.of() : graph.prerequisiteChains(topicIds);
+        Map<UUID, List<NodeView>> misconceptionsByTopic = topicIds.isEmpty()
+                ? Map.of() : graph.misconceptionsForTopics(topicIds);
+
         List<PrerequisiteLink> prerequisites = new ArrayList<>();
         List<MisconceptionSignal> misconceptions = new ArrayList<>();
         for (MatchedTopic topic : ranked) {
-            for (var withDepth : graph.prerequisiteChain(topic.nodeId())) {
+            for (PrerequisiteView withDepth : chains.getOrDefault(topic.nodeId(), List.of())) {
                 prerequisites.add(new PrerequisiteLink(topic.nodeId(),
                         withDepth.id(), withDepth.title(), withDepth.depth()));
             }
-            for (var misconception : graph.misconceptions(topic.nodeId())) {
+            for (NodeView misconception : misconceptionsByTopic.getOrDefault(topic.nodeId(), List.of())) {
                 misconceptions.add(new MisconceptionSignal(topic.nodeId(),
                         misconception.id(), misconception.title()));
             }

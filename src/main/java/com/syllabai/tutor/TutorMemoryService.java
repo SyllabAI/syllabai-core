@@ -1,6 +1,5 @@
 package com.syllabai.tutor;
 
-import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
 import com.syllabai.learner.SkillState;
@@ -24,7 +23,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Design contract:</p>
  * <ul>
- *   <li>deterministic — three repository reads and string building, no LLM,
+ *   <li>deterministic — two repository reads and string building, no LLM,
  *       no invented narrative: the MODEL weaves continuity from these facts,
  *       it never gets invented ones;</li>
  *   <li>matched-topic scoped — the digest answers "what have we done on
@@ -53,28 +52,30 @@ public class TutorMemoryService {
 
     private final TutorTopicEngagementRepository engagements;
     private final ReviewScheduleRepository reviews;
-    private final LearnerModelService learnerModel;
 
     public TutorMemoryService(TutorTopicEngagementRepository engagements,
-                              ReviewScheduleRepository reviews,
-                              LearnerModelService learnerModel) {
+                              ReviewScheduleRepository reviews) {
         this.engagements = engagements;
         this.reviews = reviews;
-        this.learnerModel = learnerModel;
     }
 
     /**
      * The digest for this ask, or null when the learner has no prior
      * engagement, practice or review signal on any matched topic.
      *
-     * @param learnerId asking learner (null = anonymous preview ⇒ no digest)
-     * @param topics    the deterministic intent matcher's matched topics,
-     *                  most specific first (input order preserved, capped)
+     * @param learnerId   asking learner (null = anonymous preview ⇒ no digest)
+     * @param topics      the deterministic intent matcher's matched topics,
+     *                    most specific first (input order preserved, capped)
+     * @param skillStates the learner's FULL skill-state list, already read for
+     *                    this ask by the context assembler (M3 tranche 2: the
+     *                    digest used to re-read it itself — the 3rd skillStates-
+     *                    class read per ask); null treated as empty
      */
-    public String digest(UUID learnerId, List<TopicRef> topics) {
+    public String digest(UUID learnerId, List<TopicRef> topics, List<SkillState> skillStates) {
         if (learnerId == null || topics == null || topics.isEmpty()) {
             return null;
         }
+        List<SkillState> states = skillStates == null ? List.of() : skillStates;
         List<TopicRef> scoped = topics.stream().limit(MAX_TOPICS).toList();
         List<UUID> nodeIds = scoped.stream().map(TopicRef::nodeId).toList();
 
@@ -90,7 +91,7 @@ public class TutorMemoryService {
             pendingReviews.putIfAbsent(review.nodeId(), review);
         }
         Map<UUID, SkillState> skills = new HashMap<>();
-        for (SkillState state : learnerModel.skillStates(learnerId)) {
+        for (SkillState state : states) {
             if (nodeIds.contains(state.nodeId())) {
                 skills.putIfAbsent(state.nodeId(), state);
             }

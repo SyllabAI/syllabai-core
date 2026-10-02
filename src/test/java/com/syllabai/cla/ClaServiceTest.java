@@ -26,6 +26,7 @@ import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
+import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.MisconceptionState;
 import com.syllabai.learner.SkillState;
@@ -90,6 +91,7 @@ class ClaServiceTest {
             mock(com.syllabai.content.DocumentChunkRepository.class);
     private final TutorGenerator generator = mock(TutorGenerator.class);
     private final CitationResolver citationResolver = mock(CitationResolver.class);
+    private final LearnerModelService learnerModel = mock(LearnerModelService.class);
     private final TutorPolicyService policy = mock(TutorPolicyService.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
@@ -107,8 +109,8 @@ class ClaServiceTest {
     void setUp() {
         service = new ClaService(resolver, tools, graph, knowledgeNodes, subjects, markSchemes,
                 questionVersions, questionParts, attempts, answers, vectorRetriever,
-                new ReciprocalRankFusion(60), reranker, generator, citationResolver, policy,
-                events, documents, documentChunks, 12, 6);
+                new ReciprocalRankFusion(60), reranker, generator, citationResolver,
+                learnerModel, policy, events, documents, documentChunks, 12, 6);
 
         context = new ResourceContext(ResourceContext.Kind.KG_TOPIC, TOPIC, TOPIC, ROOT, "4CH1",
                 "IALCHEM2018-U1-T3", "Bonding and structure",
@@ -152,7 +154,7 @@ class ClaServiceTest {
                 new ToolResultWith<>(ClaToolRegistry.Tool.GET_LEARNER_STATE, "args",
                         new OwnLearnerState(List.of(), List.of())));
 
-        when(policy.select(eq(LEARNER), anyList(), anyList())).thenReturn(
+        when(policy.select(eq(LEARNER), anyList(), anyList(), anyList())).thenReturn(
                 new TutorPolicyService.InterventionPlan(
                         TutorPolicyService.InterventionType.EXPLANATION,
                         "no high-confidence diagnostic signal",

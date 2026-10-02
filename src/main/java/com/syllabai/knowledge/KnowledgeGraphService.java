@@ -4,7 +4,9 @@ import com.syllabai.knowledge.dto.NodeView;
 import com.syllabai.knowledge.dto.PrerequisiteView;
 import com.syllabai.shared.NotFoundException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -67,10 +69,43 @@ public class KnowledgeGraphService {
                 .toList();
     }
 
+    /**
+     * Batched prerequisite chains for several origin nodes (M3 tranche 2,
+     * audit 2026-10-02): ONE recursive-CTE pass + ONE node fetch for the whole
+     * matched-topic set instead of a three-query chain per topic. Keyed by
+     * origin id (missing key = no prerequisites); within-origin order matches
+     * {@link #prerequisiteChain(UUID)} exactly.
+     */
+    public Map<UUID, List<PrerequisiteView>> prerequisiteChains(Collection<UUID> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<PrerequisiteView>> result = new LinkedHashMap<>();
+        graph.findPrerequisiteClosures(nodeIds).forEach((origin, closure) ->
+                result.put(origin, closure.stream().map(PrerequisiteView::from).toList()));
+        return result;
+    }
+
     public List<NodeView> misconceptions(UUID topicNodeId) {
         return graph.findMisconceptions(topicNodeId).stream()
                 .map(NodeView::flat)
                 .toList();
+    }
+
+    /**
+     * Batched misconception attachments for several topic nodes (M3 tranche
+     * 2): one edge query for all matched topics instead of one per topic.
+     * Keyed by topic id (missing key = none attached); within-topic content
+     * matches {@link #misconceptions(UUID)}.
+     */
+    public Map<UUID, List<NodeView>> misconceptionsForTopics(Collection<UUID> topicNodeIds) {
+        if (topicNodeIds == null || topicNodeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<NodeView>> result = new LinkedHashMap<>();
+        graph.findMisconceptionsForTopics(topicNodeIds).forEach((topic, mis) ->
+                result.put(topic, mis.stream().map(NodeView::flat).toList()));
+        return result;
     }
 
     public KnowledgeNode node(UUID id) {

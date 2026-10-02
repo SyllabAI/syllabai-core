@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.syllabai.learner.LearnerModelService;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
 import com.syllabai.learner.SkillState;
@@ -29,9 +28,10 @@ class TutorMemoryServiceTest {
     private final TutorTopicEngagementRepository engagements =
             mock(TutorTopicEngagementRepository.class);
     private final ReviewScheduleRepository reviews = mock(ReviewScheduleRepository.class);
-    private final LearnerModelService learnerModel = mock(LearnerModelService.class);
+    // M3 tranche 2: the service no longer owns a learner-model read — skill
+    // states are propagated by the caller (compile-level pin: no field to mock)
     private final TutorMemoryService service =
-            new TutorMemoryService(engagements, reviews, learnerModel);
+            new TutorMemoryService(engagements, reviews);
 
     private final UUID learner = UUID.randomUUID();
     private final UUID moles = UUID.randomUUID();
@@ -60,11 +60,10 @@ class TutorMemoryServiceTest {
         molesState.recordAttempt(true, 0.3, twoDaysAgo);
         molesState.recordAttempt(true, 0.5, twoDaysAgo);
         molesState.recordAttempt(false, 0.4, twoDaysAgo);
-        when(learnerModel.skillStates(learner)).thenReturn(List.of(molesState));
 
         String digest = service.digest(learner, List.of(
                 new TutorMemoryService.TopicRef(moles, "Moles"),
-                new TutorMemoryService.TopicRef(bonding, "Bonding")));
+                new TutorMemoryService.TopicRef(bonding, "Bonding")), List.of(molesState));
 
         assertThat(digest).isNotNull();
         String molesLine = digest.lines().filter(l -> l.contains("'Moles'")).findFirst().orElse("");
@@ -85,9 +84,9 @@ class TutorMemoryServiceTest {
         when(engagements.findByLearnerIdAndNodeIdIn(learner, List.of(moles))).thenReturn(List.of());
         when(reviews.findByLearnerIdAndNodeIdInAndStatus(learner, List.of(moles),
                 ReviewSchedule.Status.PENDING)).thenReturn(List.of());
-        when(learnerModel.skillStates(learner)).thenReturn(List.of());
 
-        assertThat(service.digest(learner, List.of(new TutorMemoryService.TopicRef(moles, "Moles"))))
+        assertThat(service.digest(learner, List.of(new TutorMemoryService.TopicRef(moles, "Moles")),
+                List.of()))
                 .isNull();
     }
 
@@ -99,10 +98,9 @@ class TutorMemoryServiceTest {
                 ReviewSchedule.Status.PENDING)).thenReturn(List.of());
         SkillState state = new SkillState(learner, moles, 0.1, Instant.now().minusSeconds(3600));
         state.recordAttempt(true, 0.3, Instant.now().minusSeconds(3600));
-        when(learnerModel.skillStates(learner)).thenReturn(List.of(state));
 
         String digest = service.digest(learner,
-                List.of(new TutorMemoryService.TopicRef(moles, "Moles")));
+                List.of(new TutorMemoryService.TopicRef(moles, "Moles")), List.of(state));
         assertThat(digest).contains("practiced 1 time(s), 1 correct");
         assertThat(digest).contains("earlier today");
         assertThat(digest).doesNotContain("earlier tutor ask");
@@ -112,10 +110,11 @@ class TutorMemoryServiceTest {
     @Test
     @DisplayName("anonymous preview and empty topic lists never digest")
     void anonymousAndEmptySafe() {
-        assertThat(service.digest(null, List.of(new TutorMemoryService.TopicRef(moles, "Moles"))))
+        assertThat(service.digest(null, List.of(new TutorMemoryService.TopicRef(moles, "Moles")),
+                List.of()))
                 .isNull();
-        assertThat(service.digest(learner, List.of())).isNull();
-        assertThat(service.digest(learner, null)).isNull();
+        assertThat(service.digest(learner, List.of(), List.of())).isNull();
+        assertThat(service.digest(learner, null, List.of())).isNull();
     }
 
     @Test
@@ -133,11 +132,10 @@ class TutorMemoryServiceTest {
                         Instant.now().minusSeconds(24 * 3600))).toList());
         when(reviews.findByLearnerIdAndNodeIdInAndStatus(learner, queried,
                 ReviewSchedule.Status.PENDING)).thenReturn(List.of());
-        when(learnerModel.skillStates(learner)).thenReturn(List.of());
 
         String digest = service.digest(learner, List.of(a, b, c, d).stream()
                 .map(node -> new TutorMemoryService.TopicRef(node, "Topic " + node))
-                .toList());
+                .toList(), List.of());
 
         // the 4th topic never renders — the block stays scannable
         assertThat(digest.lines()).hasSize(3);

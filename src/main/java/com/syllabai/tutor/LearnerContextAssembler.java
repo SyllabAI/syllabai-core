@@ -1,6 +1,7 @@
 package com.syllabai.tutor;
 
 import com.syllabai.learner.LearnerModelService;
+import com.syllabai.learner.MisconceptionReading;
 import com.syllabai.learner.SkillState;
 import java.util.List;
 import java.util.Locale;
@@ -57,8 +58,17 @@ public class LearnerContextAssembler implements ContextAssembler {
                 .collect(Collectors.toSet());
         knowledge.prerequisites().forEach(p -> relevantNodes.add(p.nodeId()));
 
+        // M3 tranche 2 (audit 2026-10-02): the learner model is read ONCE per
+        // assemble — skillStates and misconceptionReadings used to be fetched
+        // twice each (brief + memory digest / policy) — and propagated to every
+        // consumer below. Byte-identical inputs to all three.
+        List<SkillState> states = learnerId == null ? List.of()
+                : learnerModel.skillStates(learnerId);
+        List<MisconceptionReading> readings = learnerId == null ? List.of()
+                : learnerModel.misconceptionReadings(learnerId);
+
         String learnerBrief = learnerId == null ? ANONYMOUS
-                : learnerBrief(learnerId, relevantNodes, knowledge);
+                : learnerBrief(states, readings, relevantNodes, knowledge);
         // s140 episodic memory: the cross-session digest is matched-topic
         // scoped — same topics the brief above reports state for. Null when
         // the learner has no history on any of them (block omitted) or on
@@ -67,23 +77,22 @@ public class LearnerContextAssembler implements ContextAssembler {
                 : memory.digest(learnerId, knowledge.topics().stream()
                         .map(topic -> new TutorMemoryService.TopicRef(
                                 topic.nodeId(), topic.title()))
-                        .toList());
+                        .toList(), states);
         TutorPolicyService.InterventionPlan plan = policy == null
                 ? new TutorPolicyService.InterventionPlan(
                         TutorPolicyService.InterventionType.EXPLANATION,
                         "policy not supplied",
                         List.of("Explain from the supplied evidence."))
-                : policy.select(learnerId, knowledge.topics(), knowledge.misconceptions());
+                : policy.select(learnerId, knowledge.topics(), knowledge.misconceptions(), readings);
         return new TutorContext(learnerBrief, memoryBrief, knowledgeBrief(knowledge),
                 List.copyOf(evidence), plan);
     }
 
-    private String learnerBrief(UUID learnerId, Set<UUID> relevantNodes,
+    private String learnerBrief(List<SkillState> states, List<MisconceptionReading> readings,
+                                Set<UUID> relevantNodes,
                                 KnowledgeRetriever.KnowledgeContext knowledge) {
-        // M3 (audit 2026-10-02): one learner-model read per assemble — both
-        // maps below derive from the SAME skillStates list, which used to be
-        // fetched twice per ask (mastery map + fluency-gap map)
-        List<SkillState> states = learnerModel.skillStates(learnerId);
+        // M3 (audit 2026-10-02): both maps below derive from the SAME
+        // skillStates list, now passed in by assemble instead of re-read here
         Map<UUID, Double> masteryByNode = states.stream()
                 .filter(s -> relevantNodes.isEmpty() || relevantNodes.contains(s.nodeId()))
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.mastery(), (a, b) -> a));
@@ -91,7 +100,7 @@ public class LearnerContextAssembler implements ContextAssembler {
                 .filter(s -> relevantNodes.contains(s.nodeId()) && s.proceduralFluencyGap() != null)
                 .collect(Collectors.toMap(s -> s.nodeId(), s -> s.proceduralFluencyGap(), (a, b) -> a));
         // MED-2/ADR-032: membership on the staleness-relaxed probability
-        Set<UUID> activeMisconceptions = learnerModel.misconceptionReadings(learnerId).stream()
+        Set<UUID> activeMisconceptions = readings.stream()
                 .filter(r -> r.effective() >= ACTIVE_MISCONCEPTION_THRESHOLD)
                 .map(r -> r.state().misconceptionNodeId()).collect(Collectors.toSet());
         List<KnowledgeRetriever.KnowledgeContext.MisconceptionSignal> relevantMisconceptions =
