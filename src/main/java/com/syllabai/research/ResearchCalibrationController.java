@@ -12,10 +12,13 @@ import org.springframework.web.bind.annotation.RestController;
  * learner model over the BKT_UPDATED telemetry stream. Aggregates span ALL learners
  * and are never student-visible; the route is gated TEACHER/ADMIN in SecurityConfig
  * and re-gated here at method level (defense in depth, matching the teacher
- * surfaces' posture). The small-cell question (suppress bins with n &lt; k — a
- * nodeId-filtered band of 1–2 rows could otherwise be cross-read against class
- * surfaces to infer an individual) is recorded in the ADR as an explicit follow-up
- * decision; the report carries counts, never learner identifiers, in the meantime.
+ * surfaces' posture). The small-cell question (ADR-033 challenge C7's three-way
+ * choice: ADMIN-only, class-scoped, or k-anonymity) was DECIDED 2026-10-02 for
+ * k-anonymity enforced by the API: every cell with fewer than 5 distinct learners
+ * renders its statistics null ({@code suppressed: true}) while all counts stay
+ * visible — the unit is the learner, not the row, because one marked attempt
+ * updates every node it honestly tests. The report carries counts, never learner
+ * identifiers.
  */
 @RestController
 @RequestMapping("/api/v1/research/learner-model")

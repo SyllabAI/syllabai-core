@@ -3,9 +3,11 @@ package com.syllabai.research;
 import com.syllabai.learner.LearnerProperties;
 import com.syllabai.learner.bkt.BktParams;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +78,35 @@ import org.springframework.transaction.annotation.Transactional;
  * The axes are cut separately — no format×gap cross-tab yet; add one only when
  * a review needs it.</p>
  *
+ * <p><b>Small-cell suppression on the wire (C7 resolution, k-anonymity).</b> The
+ * research endpoint spans all learners and is nodeId-filterable, so a band of a
+ * few rows could be cross-read against class surfaces to infer an individual
+ * (ADR-033 challenge C7's three-way choice: ADMIN-only, class-scoped, or
+ * k-anonymity). Decided 2026-10-02: <b>k-anonymity enforced by the API</b>.
+ * ADMIN-only narrows the audience without closing the vector (an admin holds
+ * every class surface and is exactly the nodeId-slice forensics user);
+ * class-scoping would destroy the measurement (calibration is a property of the
+ * model, not of a class) while generating the tiniest cells in the system. The
+ * rule: any cell of the report — the pooled headline, a pooled bin, a format or
+ * gap segment, a bin within a segment — whose <b>distinct learners number fewer
+ * than {@link #MIN_REPORTABLE_LEARNERS}</b> renders its statistics as
+ * {@code null} with {@code suppressed: true}; counts stay visible everywhere
+ * (sampleCount, learnerCount, bin counts, skippedRows) so the partition
+ * invariants, the coverage rule, and the audit of WHY a cell is hidden all
+ * survive: counts stay, outcomes go. The unit is the learner, not the row — one
+ * marked attempt updates every node it honestly tests, so a single learner can
+ * place several rows in one bin and a row-count floor would pass a 6-row/
+ * 2-learner cell; the row's {@code learnerId} (non-null by the telemetry
+ * contract) makes the true unit countable. The n &lt; 5 row floor of the C4
+ * protocol's §4.2 stays as the coarser citation guard. k = 5 is a code constant,
+ * deliberately not configuration — a privacy floor an environment variable could
+ * silently lower would not be a floor. Empty cells (count 0) keep the established
+ * honest-zero rendering and are distinct from suppressed ones (count &gt; 0,
+ * nulls). A reportable segment's aggregate Brier/ECE still includes its
+ * suppressed bins' contributions (excluding them would select-bias the
+ * statistic); only the fine-grained cells hide. The nodeId-filtered slice
+ * inherits the rule unchanged (same code path).</p>
+ *
  * <p><b>Known limits, stated here on purpose.</b> Samples are node-outcomes, not
  * independent learners (one marked attempt updates every node it honestly tests) —
  * the report is descriptive, not i.i.d. statistics, and carries no confidence
@@ -88,6 +119,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class LearnerModelCalibrationService {
 
     static final int BIN_COUNT = 10;
+
+    /**
+     * The C7 suppression floor: a report cell aggregates at least this many DISTINCT
+     * learners before its statistics leave the wire. Chosen k = 5 per the C4
+     * protocol's §4.2 small-cell floor (which it upgrades from a citation rule to an
+     * enforced one); deliberately a constant, not configuration — a privacy floor
+     * that can be silently lowered by an environment variable is not a floor.
+     * Moving it is a reviewed code change with the ADR ledger updated.
+     */
+    static final int MIN_REPORTABLE_LEARNERS = 5;
 
     private final TelemetryEventRepository events;
     private final LearnerProperties properties;
@@ -171,8 +212,13 @@ public class LearnerModelCalibrationService {
     }
 
     /**
-     * One equal-width bin of the [0, 1] latent-forecast range. All means are 0.0 on
-     * empty bins — a zero count is the honest signal, never an average of nothing.
+     * One equal-width bin of the [0, 1] latent-forecast range, in one of three
+     * states. <b>Empty</b> ({@code count == 0}): all means 0.0 — a zero count is the
+     * honest signal, never an average of nothing. <b>Suppressed</b> (C7: count &gt; 0
+     * but fewer than {@link #MIN_REPORTABLE_LEARNERS} distinct learners): all means
+     * {@code null} — the cell's outcomes hide, its traffic stays visible.
+     * <b>Reportable</b>: the full statistics. A {@code null} mean must never be
+     * read as zero, and a zero mean on a zero count must never be read as data.
      *
      * @param meanLatentPredicted mean raw latent forecast (decayedPrior) in this bin
      * @param meanPredicted       mean EMISSION-mapped prediction — the headline the
@@ -182,46 +228,58 @@ public class LearnerModelCalibrationService {
      * @param calibrationError    signed: meanPredicted − observedAccuracy
      */
     public record Bin(int index, double lowerBound, double upperBound,
-                      long count, double meanLatentPredicted, double meanPredicted,
-                      double observedAccuracy, double meanBrier, double calibrationError) {
+                      long count, Double meanLatentPredicted, Double meanPredicted,
+                      Double observedAccuracy, Double meanBrier, Double calibrationError) {
     }
 
     /**
      * One slice of the stream along the format axis (C4 protocol §2), with the same
-     * statistics the pooled report carries, computed within the slice. An empty
-     * segment renders with sampleCount 0 and honest zeros — it is part of the
-     * report precisely so a review can say "no evidence" instead of guessing.
+     * statistics the pooled report carries, computed within the slice. Three states:
+     * empty ({@code sampleCount == 0}, honest zeros, {@code suppressed == false} —
+     * an empty segment is no evidence, never hidden evidence), suppressed (C7:
+     * {@code learnerCount} in (0, {@link #MIN_REPORTABLE_LEARNERS}) — statistics
+     * {@code null}, traffic visible), reportable (full statistics).
      *
      * @param segment     the fixed taxonomy key ({@link #SEGMENT_ORDER})
-     * @param sampleCount rows in this segment (segments partition the contract rows)
-     * @param brier       mean (predicted − outcome)² within the segment
-     * @param ece         Σ (count/n)·|meanPredicted − observed| within the segment
-     * @param bins        all ten equal-width bins, including empty ones
+     * @param sampleCount rows in this segment (segments partition the contract rows;
+     *                    visible even when suppressed, so the partition invariant holds)
+     * @param brier       mean (predicted − outcome)² within the segment; null when suppressed
+     * @param ece         Σ (count/n)·|meanPredicted − observed| within the segment;
+     *                    null when suppressed
+     * @param bins        all ten equal-width bins, including empty and suppressed ones
+     * @param learnerCount distinct learners behind those rows — the C7 unit; visible
+     *                    even when suppressed, so the suppression is auditable
+     * @param suppressed  true when 0 &lt; learnerCount &lt; MIN_REPORTABLE_LEARNERS
      */
-    public record FormatSegment(String segment, long sampleCount, double brier, double ece,
-                                List<Bin> bins) {
+    public record FormatSegment(String segment, long sampleCount, Double brier, Double ece,
+                                List<Bin> bins, long learnerCount, boolean suppressed) {
     }
 
     /**
      * One slice of the stream along the gap axis (C4 protocol §2), with the same
      * statistics the pooled report carries plus {@code meanAnchor} — the mean raw
-     * ADR-031 anchor ({@code priorMastery}) over the slice's rows carrying one.
-     * Within the zero-gap stratum the anchor mean is the raw side of the
-     * bit-identity leg: it should sit at the decayed latent mean for first-practice
-     * rows and just above it for same-day rows (sub-day decay); a wider divergence
-     * is the decay-path regression alarm. An empty segment renders with sampleCount
-     * 0 and honest zeros — it is part of the report precisely so a review can say
-     * "no evidence" instead of guessing.
+     * ADR-031 anchor ({@code priorMastery}) over the slice's rows. Within the
+     * zero-gap stratum the anchor mean is the raw side of the bit-identity leg: it
+     * should sit at the decayed latent mean for first-practice rows and just above
+     * it for same-day rows (sub-day decay); a wider divergence is the decay-path
+     * regression alarm. Same three states as the format segments: empty (honest
+     * zeros), suppressed (C7 — statistics null, traffic visible), reportable.
      *
      * @param segment     the fixed taxonomy key ({@link #GAP_ORDER})
-     * @param sampleCount rows in this segment (segments partition the contract rows)
-     * @param brier       mean (predicted − outcome)² within the segment
-     * @param ece         Σ (count/n)·|meanPredicted − observed| within the segment
-     * @param meanAnchor  mean raw anchor ({@code priorMastery}) over the segment's rows
-     * @param bins        all ten equal-width bins, including empty ones
+     * @param sampleCount rows in this segment (segments partition the contract rows;
+     *                    visible even when suppressed, so the partition invariant holds)
+     * @param brier       mean (predicted − outcome)² within the segment; null when suppressed
+     * @param ece         Σ (count/n)·|meanPredicted − observed| within the segment;
+     *                    null when suppressed
+     * @param meanAnchor  mean raw anchor ({@code priorMastery}) over the segment's rows;
+     *                    null when suppressed
+     * @param bins        all ten equal-width bins, including empty and suppressed ones
+     * @param learnerCount distinct learners behind those rows — the C7 unit
+     * @param suppressed  true when 0 &lt; learnerCount &lt; MIN_REPORTABLE_LEARNERS
      */
-    public record GapSegment(String segment, long sampleCount, double brier, double ece,
-                             double meanAnchor, List<Bin> bins) {
+    public record GapSegment(String segment, long sampleCount, Double brier, Double ece,
+                             Double meanAnchor, List<Bin> bins, long learnerCount,
+                             boolean suppressed) {
     }
 
     /**
@@ -233,16 +291,22 @@ public class LearnerModelCalibrationService {
      * @param brier       mean (predicted − outcome)² over all sampled rows, on the
      *                    emission-mapped prediction
      * @param ece         expected calibration error Σ (count/n)·|meanPredicted − observed|
-     * @param bins        all ten equal-width bins, including empty ones
+     * @param bins        all ten equal-width bins, including empty and suppressed ones
      * @param segments    the per-format slices, in fixed {@link #SEGMENT_ORDER} order —
      *                    their sampleCounts always sum to {@code sampleCount}
      * @param gapSegments the per-gap-band slices, in fixed {@link #GAP_ORDER} order —
      *                    their sampleCounts also always sum to {@code sampleCount}
+     * @param learnerCount distinct learners behind the sampled rows — the C7 unit;
+     *                     the honest quantifier of the node-outcomes-not-learners caveat
+     * @param suppressed  true when the whole report's distinct learners are fewer
+     *                    than {@link #MIN_REPORTABLE_LEARNERS} (headline statistics
+     *                    null; the per-bin suppression applies independently)
      */
     public record CalibrationReport(long sampleCount, long skippedRows,
-                                    double brier, double ece, List<Bin> bins,
+                                    Double brier, Double ece, List<Bin> bins,
                                     List<FormatSegment> segments,
-                                    List<GapSegment> gapSegments) {
+                                    List<GapSegment> gapSegments,
+                                    long learnerCount, boolean suppressed) {
     }
 
     /**
@@ -293,27 +357,41 @@ public class LearnerModelCalibrationService {
             double brier = (predicted - outcome) * (predicted - outcome);
             int bin = Math.min(BIN_COUNT - 1, Math.max(0, (int) Math.floor(latent * BIN_COUNT)));
             Double anchor = doubleValue(payload.get("priorMastery"));
-            pooled.add(latent, predicted, outcome, brier, bin, anchor);
+            pooled.add(latent, predicted, outcome, brier, bin, anchor, row.learnerId());
             bySegment.get(segmentKey(type, optionCount))
-                    .add(latent, predicted, outcome, brier, bin, anchor);
+                    .add(latent, predicted, outcome, brier, bin, anchor, row.learnerId());
             byGap.get(gapSegmentKey(payload.get("gapDays")))
-                    .add(latent, predicted, outcome, brier, bin, anchor);
+                    .add(latent, predicted, outcome, brier, bin, anchor, row.learnerId());
         }
 
         List<FormatSegment> segments = new ArrayList<>(SEGMENT_ORDER.size());
         for (String key : SEGMENT_ORDER) {
-            segments.add(new FormatSegment(key, bySegment.get(key).n,
-                    bySegment.get(key).brier(), bySegment.get(key).ece(),
-                    bySegment.get(key).bins()));
+            Accum a = bySegment.get(key);
+            boolean suppressed = a.learnerCount() > 0
+                    && a.learnerCount() < MIN_REPORTABLE_LEARNERS;
+            segments.add(new FormatSegment(key, a.n,
+                    suppressed ? null : a.brier(),
+                    suppressed ? null : a.ece(),
+                    a.bins(), a.learnerCount(), suppressed));
         }
         List<GapSegment> gapSegments = new ArrayList<>(GAP_ORDER.size());
         for (String key : GAP_ORDER) {
-            Accum gap = byGap.get(key);
-            gapSegments.add(new GapSegment(key, gap.n, gap.brier(), gap.ece(),
-                    gap.anchor(), gap.bins()));
+            Accum a = byGap.get(key);
+            boolean suppressed = a.learnerCount() > 0
+                    && a.learnerCount() < MIN_REPORTABLE_LEARNERS;
+            gapSegments.add(new GapSegment(key, a.n,
+                    suppressed ? null : a.brier(),
+                    suppressed ? null : a.ece(),
+                    suppressed ? null : a.anchor(),
+                    a.bins(), a.learnerCount(), suppressed));
         }
-        return new CalibrationReport(pooled.n, skipped, pooled.brier(), pooled.ece(),
-                pooled.bins(), List.copyOf(segments), List.copyOf(gapSegments));
+        boolean pooledSuppressed = pooled.learnerCount() > 0
+                && pooled.learnerCount() < MIN_REPORTABLE_LEARNERS;
+        return new CalibrationReport(pooled.n, skipped,
+                pooledSuppressed ? null : pooled.brier(),
+                pooledSuppressed ? null : pooled.ece(),
+                pooled.bins(), List.copyOf(segments), List.copyOf(gapSegments),
+                pooled.learnerCount(), pooledSuppressed);
     }
 
     /** Row accumulator for one population (pooled, a format segment, or a gap band). */
@@ -327,9 +405,17 @@ public class LearnerModelCalibrationService {
         private final double[] binBrierSum = new double[BIN_COUNT];
         private double anchorSum;
         private long anchorN;
+        private final Set<UUID> learners = new HashSet<>();
+        private final List<Set<UUID>> binLearners = new ArrayList<>(BIN_COUNT);
+
+        private Accum() {
+            for (int i = 0; i < BIN_COUNT; i++) {
+                binLearners.add(new HashSet<>());
+            }
+        }
 
         private void add(double latent, double predicted, double outcome, double brier,
-                         int bin, Double anchor) {
+                         int bin, Double anchor, UUID learnerId) {
             n++;
             brierSum += brier;
             binCount[bin]++;
@@ -341,6 +427,12 @@ public class LearnerModelCalibrationService {
                 anchorSum += anchor;
                 anchorN++;
             }
+            learners.add(learnerId);
+            binLearners.get(bin).add(learnerId);
+        }
+
+        private long learnerCount() {
+            return learners.size();
         }
 
         /** Mean raw anchor over the rows carrying one — the bit-identity leg's raw side. */
@@ -369,15 +461,24 @@ public class LearnerModelCalibrationService {
             List<Bin> bins = new ArrayList<>(BIN_COUNT);
             for (int i = 0; i < BIN_COUNT; i++) {
                 long count = binCount[i];
-                double meanPredicted = count == 0 ? 0.0 : predictedSum[i] / count;
-                double observed = count == 0 ? 0.0 : outcomeSum[i] / count;
-                bins.add(new Bin(i, i / (double) BIN_COUNT, (i + 1) / (double) BIN_COUNT,
-                        count,
-                        count == 0 ? 0.0 : latentSum[i] / count,
-                        meanPredicted,
-                        observed,
-                        count == 0 ? 0.0 : binBrierSum[i] / count,
-                        meanPredicted - observed));
+                double lower = i / (double) BIN_COUNT;
+                double upper = (i + 1) / (double) BIN_COUNT;
+                if (count == 0) {
+                    // empty: the established honest-zero rendering — no evidence, not
+                    // hidden evidence (distinct from C7 suppression by the zero count)
+                    bins.add(new Bin(i, lower, upper, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
+                } else if (binLearners.get(i).size() < MIN_REPORTABLE_LEARNERS) {
+                    // suppressed (C7): the cell's outcomes hide, its traffic stays
+                    bins.add(new Bin(i, lower, upper, count, null, null, null, null, null));
+                } else {
+                    double meanPredicted = predictedSum[i] / count;
+                    bins.add(new Bin(i, lower, upper, count,
+                            latentSum[i] / count,
+                            meanPredicted,
+                            outcomeSum[i] / count,
+                            binBrierSum[i] / count,
+                            meanPredicted - outcomeSum[i] / count));
+                }
             }
             return bins;
         }
