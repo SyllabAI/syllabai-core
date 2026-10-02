@@ -18,6 +18,21 @@ public interface ExamPaperRepository extends JpaRepository<ExamPaper, UUID> {
 
     Optional<ExamPaper> findByPaperCodeAndSessionLabel(String paperCode, String sessionLabel);
 
+    /**
+     * F-022 tranche 2 (the paper-PDF join): the exam paper a QP/MS citation
+     * document belongs to, by the paper's BUSINESS document id (what
+     * {@code exam_papers.question_paper_document_id / mark_scheme_document_id}
+     * store — not the per-version row id). Newest row wins in the (theoretically
+     * impossible, defensively bounded) case of several papers linking one id.
+     */
+    @Query("""
+            select p from ExamPaper p
+            where p.questionPaperDocumentId = :documentId
+               or p.markSchemeDocumentId = :documentId
+            order by p.createdAt desc
+            """)
+    List<ExamPaper> findAllByLinkedDocumentId(@Param("documentId") String documentId);
+
     @Query("""
             select p from ExamPaper p
             where p.validationState = com.syllabai.assessment.ExamPaper$ValidationState.SUGGESTED
