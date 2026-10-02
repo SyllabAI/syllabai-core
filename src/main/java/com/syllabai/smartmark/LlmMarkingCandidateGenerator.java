@@ -7,6 +7,7 @@ import com.syllabai.assessment.MarkPoint;
 import com.syllabai.assessment.MarkScheme;
 import com.syllabai.infrastructure.llm.LlmProvider;
 import com.syllabai.infrastructure.llm.LlmProviderException;
+import com.syllabai.infrastructure.llm.LlmReasoningEffort;
 import com.syllabai.infrastructure.llm.LlmRequest;
 import com.syllabai.infrastructure.llm.LlmResponse;
 import java.util.ArrayList;
@@ -102,7 +103,10 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
         try {
             response = chain.generate(LlmRequest.withOptions(
                     systemPrompt(), userPrompt(context), 0.1,
-                    completionBudget(context.points())));
+                    completionBudget(context.points()))
+                    // marking is rubric-shaped extraction, not open-ended reasoning —
+                    // LOW keeps the thinking budget (and wall clock) bounded
+                    .withReasoningEffort(LlmReasoningEffort.LOW));
         } catch (LlmProviderException e) {
             throw new CandidateGenerationException(
                     CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,
@@ -143,7 +147,9 @@ public class LlmMarkingCandidateGenerator implements MarkingCandidateGenerator {
         try {
             response = chain.generate(LlmRequest.withOptions(
                     batchSystemPrompt(), batchUserPrompt(contexts), 0.1,
-                    batchCompletionBudget(contexts)));
+                    batchCompletionBudget(contexts))
+                    // same extraction-shaped contract as the per-part path
+                    .withReasoningEffort(LlmReasoningEffort.LOW));
         } catch (LlmProviderException e) {
             throw new CandidateGenerationException(
                     CandidateGenerationException.Reason.PROVIDER_UNAVAILABLE,

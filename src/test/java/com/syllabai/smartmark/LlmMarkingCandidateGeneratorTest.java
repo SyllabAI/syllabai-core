@@ -11,6 +11,7 @@ import com.syllabai.assessment.QuestionPart;
 import com.syllabai.assessment.QuestionVersion;
 import com.syllabai.TestIds;
 import com.syllabai.infrastructure.llm.FakeLlmProvider;
+import com.syllabai.infrastructure.llm.LlmReasoningEffort;
 import com.syllabai.infrastructure.llm.LlmResponse;
 import java.util.List;
 import java.util.UUID;
@@ -163,6 +164,8 @@ class LlmMarkingCandidateGeneratorTest {
 
         assertThat(chain.lastRequest().maxTokens()).isEqualTo(2_800);
         assertThat(chain.lastRequest().temperature()).isEqualTo(0.1);
+        // marking = rubric-shaped extraction: the request asks for bounded thinking
+        assertThat(chain.lastRequest().reasoningEffort()).isEqualTo(LlmReasoningEffort.LOW);
     }
 
     @Test
@@ -285,6 +288,7 @@ class LlmMarkingCandidateGeneratorTest {
         assertThat(chain.lastRequest().maxTokens()).isEqualTo(2_800);
         assertThat(chain.lastRequest().temperature()).isEqualTo(0.1);
         assertThat(chain.lastRequest().systemPrompt()).contains("\"parts\"");
+        assertThat(chain.lastRequest().reasoningEffort()).isEqualTo(LlmReasoningEffort.LOW);
 
         assertThat(candidates).hasSize(2);
         assertThat(candidates.get(0).allocations()).hasSize(1);
