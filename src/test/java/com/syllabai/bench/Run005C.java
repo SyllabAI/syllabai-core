@@ -184,6 +184,28 @@ public final class Run005C {
         int applied = Run004A.applyChunkVectors(jdbc, artifactDir, snapshot);
         Run004A.assertStoredState(jdbc, artifactDir);
 
+        // ── 2b. paired embed_rev stamp (the 2026-09-28 cut-over mirror) ──────
+        // The frozen artifact IS the rev2 corpus; the bench loader's inserts
+        // land at the V33 default embed_rev=1, and BOTH serving arms gate at
+        // ChunkVectorRepository.CURRENT_EMBED_REV — without this paired stamp
+        // a post-flip replay reproduces the T-C23 empty funnel in miniature
+        // (every chunk invisible, 120/120 zero-result). Production mirror:
+        // evidence/serving-rev2-restamp-cutover-2026-09-28 (in-window restamp,
+        // serving set provably identical across the boundary).
+        int revNow = com.syllabai.content.ChunkVectorRepository.CURRENT_EMBED_REV;
+        int restamped = jdbc.update(
+                "update document_chunks set embed_rev = ? where embed_rev <> ? and embedding is not null",
+                revNow, revNow);
+        int atRev = jdbc.queryForObject(
+                "select count(*) from document_chunks where embed_rev = ? and embedding is not null",
+                Integer.class, revNow);
+        if (atRev != dbChunks) {
+            throw new IllegalStateException("paired rev stamp incomplete: " + atRev
+                    + " chunks at embed_rev=" + revNow + " != " + dbChunks + " (fail-closed)");
+        }
+        log("paired embed_rev stamp: " + restamped + " chunks -> rev " + revNow
+                + " (all " + atRev + " embedded chunks now serving-eligible by rev)");
+
         // ── 3. the production fabric: explicit arms + shipped fusion ─────────
         EmbeddingProvider frozen = Run004A.frozenQueryProvider(artifactDir, gold);
         ContentVectorRetriever vectorRetriever = ArmA.productionRetriever(
