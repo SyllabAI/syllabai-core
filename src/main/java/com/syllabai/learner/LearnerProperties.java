@@ -1,6 +1,8 @@
 package com.syllabai.learner;
 
+import com.syllabai.learner.flashcard.FlashcardReviewParams;
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Learner-model configuration (prefix {@code syllabai.learner}). Values default to
@@ -12,7 +14,8 @@ public record LearnerProperties(
         Bkt bkt,
         Decay decay,
         Bdt bdt,
-        DecayJob decayJob) {
+        DecayJob decayJob,
+        FlashcardReview flashcardReview) {
 
     /**
      * BKT emission parameters (Master Spec §11 / Paper B research design).
@@ -155,10 +158,46 @@ public record LearnerProperties(
         }
     }
 
+    /**
+     * Flashcard review ladder (T-C53 — the V47 trail's reserved scheduler):
+     * expanding Ebbinghaus intervals (days) by consecutive-"know" streak,
+     * mirrored bit-for-bit from the hub's shipped lib/flashcard-review.ts
+     * (tranche 4.8). Registry-seeded as {@code learner.flashcard-review} (V59);
+     * the schedule derived from it is computed at read and never persisted
+     * (ADR-031) and drives TIMING only — never mastery (the honesty pin).
+     *
+     * @param intervalDays the ladder; the last entry is the maintenance cap
+     *                     (any streak ≥ ladder length maps to it). Lenient:
+     *                     null/empty/malformed falls back to the shipped
+     *                     default, matching the Bkt/Decay/Bdt convention.
+     */
+    public record FlashcardReview(List<Integer> intervalDays) {
+        public FlashcardReview {
+            if (intervalDays == null || intervalDays.isEmpty()
+                    || intervalDays.stream().anyMatch(d -> d == null || d <= 0)) {
+                intervalDays = FlashcardReviewParams.DEFAULT_INTERVAL_DAYS;
+            }
+        }
+
+        public FlashcardReviewParams toParams() {
+            return new FlashcardReviewParams(intervalDays);
+        }
+    }
+
     public LearnerProperties {
         if (bkt == null) bkt = new Bkt(0.1, 0.1, 0.25, 0.1, 0.05, 0.01);
         if (decay == null) decay = new Decay(30, 90, 365, 0.45, 0.8, 0.1, 0.6);
         if (bdt == null) bdt = new Bdt(0.3, 0.7, 0.1, 0.5, 180);
         if (decayJob == null) decayJob = new DecayJob(false, "0 */15 * * * *", 3, Duration.ofDays(2));
+        if (flashcardReview == null) flashcardReview = new FlashcardReview(null);
+    }
+
+    /**
+     * Pre-T-C53 four-arg compatibility shape (the LearnerStateView
+     * convention): keeps the ~20 existing test call sites compiling with an
+     * honest default flashcard ladder.
+     */
+    public LearnerProperties(Bkt bkt, Decay decay, Bdt bdt, DecayJob decayJob) {
+        this(bkt, decay, bdt, decayJob, null);
     }
 }
