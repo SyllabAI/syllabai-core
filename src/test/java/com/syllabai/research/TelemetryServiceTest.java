@@ -91,19 +91,26 @@ class TelemetryServiceTest {
     }
 
     @Test
-    @DisplayName("BKT updates append BKT_UPDATED with prior/posterior")
+    @DisplayName("BKT updates append BKT_UPDATED with prior/posterior, the decayed forecast, gap and format context")
     void bktUpdated() {
         service.onMasteryUpdated(new MasteryUpdatedEvent(
-                LEARNER, ATTEMPT, NODE, 0.1131, 0.3832, true, 1, 1, WHEN));
+                LEARNER, ATTEMPT, NODE, 0.9, 0.8331, true, 1, 1,
+                0.5496, 180L, "MCQ_SINGLE", 4, WHEN));
 
         verify(events).save(saved.capture());
         TelemetryEvent row = saved.getValue();
         assertThat(row.type()).isEqualTo(TelemetryEvent.Type.BKT_UPDATED);
         assertThat(row.payload())
                 .containsEntry("nodeId", NODE.toString())
-                .containsEntry("priorMastery", 0.1131)
-                .containsEntry("posteriorMastery", 0.3832)
-                .containsEntry("correctness", true);
+                .containsEntry("priorMastery", 0.9)
+                .containsEntry("posteriorMastery", 0.8331)
+                .containsEntry("correctness", true)
+                // S2 challenge C1: the pre-attempt forecast + gap ride beside the anchor
+                .containsEntry("decayedPrior", 0.5496)
+                .containsEntry("gapDays", 180L)
+                // C2: the emission context — the report prices the predicted emission per row
+                .containsEntry("questionType", "MCQ_SINGLE")
+                .containsEntry("optionCount", 4);
     }
 
     @Test

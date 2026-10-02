@@ -11,10 +11,12 @@ import static org.mockito.Mockito.when;
 import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.bkt.BktEngine;
+import com.syllabai.learner.decay.EbbinghausDecayService;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
 import com.syllabai.shared.events.MasteryUpdatedEvent;
 import com.syllabai.shared.events.MisconceptionUpdatedEvent;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +50,7 @@ class LearnerModelServiceTest {
     private final List<Object> published = new ArrayList<>();
     private final LearnerModelService service = new LearnerModelService(
             skillStates, misconceptionStates, attempts, new BktEngine(), new BdtEngine(),
+            new EbbinghausDecayService(),
             new LearnerProperties(null, null, null, null), published::add);
 
     private AssessmentEvidenceRecordedEvent evidence(boolean correct,
@@ -132,6 +135,86 @@ class LearnerModelServiceTest {
         assertThat(event.priorMastery()).isCloseTo(0.1131, within(1e-9));
         assertThat(event.posteriorMastery()).isCloseTo(0.3832, within(1e-4));
         assertThat(event.correctness()).isTrue();
+        // C1: at zero gap the computed forecast equals the anchor — the legacy
+        // same-day behaviour is bit-preserved
+        assertThat(event.decayedPrior()).isCloseTo(0.1131, within(1e-9));
+        assertThat(event.gapDays()).isZero();
+    }
+
+    @Test
+    @DisplayName("C1: the update prior is the DECAYED anchor — 180-day return at anchor 0.9 updates from 0.5496, not 0.9")
+    void longGapUpdatesFromTheDecayedForecast() {
+        // anchor 0.9 sits in the high band (>= 0.8) so τ = 365 days:
+        // decayed = 0.9·e^(−180/365) = 0.5496293150633604 (hand-derived)
+        SkillState state = new SkillState(LEARNER, NODE, 0.9,
+                WHEN.minus(180, ChronoUnit.DAYS));
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE))
+                .thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, List.of(), List.of()));
+
+        MasteryUpdatedEvent event = published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow();
+        // the anchor itself is untouched in the telemetry (S1 forensics keep working)
+        assertThat(event.priorMastery()).isCloseTo(0.9, within(1e-9));
+        // the forecast the update consumed is the computed, never-persisted decay
+        assertThat(event.decayedPrior()).isCloseTo(0.5496293150633604, within(1e-9));
+        assertThat(event.gapDays()).isEqualTo(180L);
+        // posterior: 0.5496·0.9/(0.5496·0.9 + 0.4504·0.25) = 0.8146, + T → 0.8331 —
+        // NOT the legacy 0.9731, which erased the gap entirely
+        assertThat(event.posteriorMastery())
+                .isCloseTo(0.8331298589765962, within(1e-9));
+        assertThat(state.mastery()).isCloseTo(0.8331298589765962, within(1e-9));
+        assertThat(state.lastPracticedAt()).isEqualTo(WHEN);
+    }
+
+    @Test
+    @DisplayName("C1: the decay floor keeps the update prior at l0 — a decade-gone 0.15 anchor updates from 0.1")
+    void decayFloorKeepsPriorAtAboveL0() {
+        // anchor 0.15 is low band (< 0.45) so τ = 30 days; 3650 days → curve ≈ 0,
+        // the floor lifts the forecast to 0.1 (= l0: the learner has been exposed)
+        SkillState state = new SkillState(LEARNER, NODE, 0.15,
+                WHEN.minus(3650, ChronoUnit.DAYS));
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE))
+                .thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, List.of(), List.of()));
+
+        MasteryUpdatedEvent event = published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow();
+        assertThat(event.decayedPrior()).isCloseTo(0.1, within(1e-9));
+        // correct from 0.1 with the paper path: 0.3571 (same as a fresh learner —
+        // ten years of silence costs everything above l0)
+        assertThat(event.posteriorMastery())
+                .isCloseTo(0.3571428571428572, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("C1: clock skew (evidence older than the anchor) clamps to the anchor — never a gain")
+    void futureTimestampClampsToTheAnchor() {
+        SkillState state = new SkillState(LEARNER, NODE, 0.77,
+                WHEN.plus(1, ChronoUnit.HOURS));
+        when(skillStates.findByLearnerIdAndNodeId(LEARNER, NODE))
+                .thenReturn(Optional.of(state));
+        when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.onAssessmentEvidence(evidence(true, List.of(), List.of()));
+
+        MasteryUpdatedEvent event = published.stream()
+                .filter(e -> e instanceof MasteryUpdatedEvent)
+                .map(e -> (MasteryUpdatedEvent) e)
+                .findFirst().orElseThrow();
+        assertThat(event.decayedPrior()).isCloseTo(0.77, within(1e-9));
+        assertThat(event.gapDays()).isZero();
     }
 
     @Test
@@ -217,7 +300,7 @@ class LearnerModelServiceTest {
         when(misconceptionStates.findByLearnerIdAndMisconceptionNodeId(any(), any()))
                 .thenReturn(Optional.empty());
         return new LearnerModelService(skillStates, misconceptionStates, attempts,
-                new BktEngine(), new BdtEngine(),
+                new BktEngine(), new BdtEngine(), new EbbinghausDecayService(),
                 new LearnerProperties(null, null, null, null), published::add);
     }
 

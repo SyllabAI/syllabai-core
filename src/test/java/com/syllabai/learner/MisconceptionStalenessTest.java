@@ -31,6 +31,7 @@ class MisconceptionStalenessTest {
 
     private final LearnerModelService service = new LearnerModelService(
             mock(SkillStateRepository.class), misconceptionStates, null, null, new BdtEngine(),
+            new com.syllabai.learner.decay.EbbinghausDecayService(),
             new LearnerProperties(null, null, null, null), events);
 
     private static final double PRIOR = 0.3;

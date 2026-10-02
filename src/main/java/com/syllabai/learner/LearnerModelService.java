@@ -3,9 +3,11 @@ package com.syllabai.learner;
 import com.syllabai.assessment.AttemptRepository;
 import com.syllabai.learner.bdt.BdtEngine;
 import com.syllabai.learner.bkt.BktEngine;
+import com.syllabai.learner.decay.EbbinghausDecayService;
 import com.syllabai.shared.events.AssessmentEvidenceRecordedEvent;
 import com.syllabai.shared.events.MasteryUpdatedEvent;
 import com.syllabai.shared.events.MisconceptionUpdatedEvent;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +44,7 @@ public class LearnerModelService {
     private final AttemptRepository attempts;
     private final BktEngine bktEngine;
     private final BdtEngine bdtEngine;
+    private final EbbinghausDecayService decayService;
     private final LearnerProperties properties;
     private final ApplicationEventPublisher events;
 
@@ -50,6 +53,7 @@ public class LearnerModelService {
                                AttemptRepository attempts,
                                BktEngine bktEngine,
                                BdtEngine bdtEngine,
+                               EbbinghausDecayService decayService,
                                LearnerProperties properties,
                                ApplicationEventPublisher events) {
         this.skillStates = skillStates;
@@ -57,6 +61,7 @@ public class LearnerModelService {
         this.attempts = attempts;
         this.bktEngine = bktEngine;
         this.bdtEngine = bdtEngine;
+        this.decayService = decayService;
         this.properties = properties;
         this.events = events;
     }
@@ -80,6 +85,7 @@ public class LearnerModelService {
         // SHORT_ANSWER / STRUCTURED lenient priors, untyped → paper default) —
         // the 0.25 paper constant was silently a four-option-MCQ emission model.
         var bktParams = properties.bkt().toParams(event.questionType(), event.optionCount());
+        var decayParams = properties.decay().toParams();
         Instant when = event.occurredAt();
         // spec points (T-C18 mapping) ride the SAME evidence class as topics:
         // one marked attempt is one BKT update per node it honestly tests —
@@ -96,14 +102,33 @@ public class LearnerModelService {
             SkillState state = skillStates
                     .findByLearnerIdAndNodeId(event.learnerId(), node)
                     .orElseGet(() -> new SkillState(event.learnerId(), node, bktParams.l0(), when));
-            double prior = state.mastery();
+            // S2 challenge C1 (ADR-033): the update prior is the COMPUTED, never-persisted
+            // pre-attempt forecast — the anchor decayed over the practice gap — not the raw
+            // anchor. Updating from the un-decayed anchor erased the gap: correct after 180
+            // days read identically to correct after 10 seconds, retention evidence never
+            // entered the trajectory, and the write path's prior contradicted the decayed
+            // forecast every read surface shows for the same learner-node instant.
+            // Fully ADR-031-consistent: the decayed value is consumed here and never
+            // written — the posterior becomes the new anchor; τ stays frozen on P₀
+            // (EbbinghausDecayService bands on the value passed), and the decay floor
+            // keeps the prior at or above l₀ (the learner has demonstrably been exposed).
+            double stored = state.mastery();   // ADR-031 anchor P₀
+            Instant lastPracticed = state.lastPracticedAt();
+            double prior = lastPracticed == null
+                    ? stored
+                    : decayService.decayed(stored, lastPracticed, when, decayParams);
             double posterior = bktEngine.update(prior, event.correctness(), bktParams);
             state.recordAttempt(event.correctness(), posterior, when);
             toSave.add(state);
             events.publishEvent(new MasteryUpdatedEvent(
                     event.learnerId(), event.attemptId(), node,
-                    prior, state.mastery(), event.correctness(),
-                    state.attempts(), state.correctCount(), when));
+                    stored, posterior, event.correctness(),
+                    state.attempts(), state.correctCount(),
+                    prior,
+                    lastPracticed == null ? 0L
+                            : Math.max(0, Duration.between(lastPracticed, when).toDays()),
+                    event.questionType(), event.optionCount(),
+                    when));
         }
         skillStates.saveAll(toSave);
         log.debug("BKT updated for learner {} on {} node(s) (topics + spec points): correct={}",

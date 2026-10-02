@@ -85,6 +85,15 @@ public class TelemetryService {
         payload.put("correctness", event.correctness());
         payload.put("attempts", event.attempts());
         payload.put("correctCount", event.correctCount());
+        // S2 challenge C1 (ADR-033): the pre-attempt forecast the update actually
+        // consumed (decayed anchor) rides beside the raw anchor, plus the practice
+        // gap — the calibration instrument scores the forecast, and the gap axis
+        // is what will ever make the τ-band retunes gateable. C2: the emission
+        // context lets the report price the predicted emission per row.
+        payload.put("decayedPrior", event.decayedPrior());
+        payload.put("gapDays", event.gapDays());
+        payload.put("questionType", event.questionType());
+        payload.put("optionCount", event.optionCount());
         events.save(new TelemetryEvent(
                 event.learnerId(), TelemetryEvent.Type.BKT_UPDATED, payload, event.occurredAt()));
         log.debug("BKT_UPDATED telemetry appended for learner {} node {}",
