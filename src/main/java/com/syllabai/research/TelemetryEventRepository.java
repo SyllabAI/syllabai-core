@@ -8,4 +8,7 @@ import java.util.List;
 public interface TelemetryEventRepository extends JpaRepository<TelemetryEvent, UUID> {
 
     List<TelemetryEvent> findByLearnerIdOrderByOccurredAtDesc(UUID learnerId, Pageable pageable);
+
+    /** full stream of one event type in emission order (calibration instrument, S2/ADR-033) */
+    List<TelemetryEvent> findByTypeOrderByOccurredAtAsc(TelemetryEvent.Type type);
 }
