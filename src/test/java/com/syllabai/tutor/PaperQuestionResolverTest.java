@@ -304,14 +304,16 @@ class PaperQuestionResolverTest {
     @DisplayName("multi-part mark scheme: a three-part question's answer chunks ALL pin on a "
             + "mark-scheme-seeking ask (QP stem yields its slot; the 2026-10-03 live finding)")
     void multiPartMsPinsAllPartsWhenSeeking() {
-        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JAN", 2023, 9,
+        // production parse shape for "... paper 1c ...": FetchQueryParser binds the
+        // BARE_UNIT "1C" into parsed.unit (PAPER_CODE needs the 4CH1/1C full form)
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2023, 9,
                 null, true, "give me the answer paper 1c january 2023 question 9");
         when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
                 .thenReturn(new FetchResult(parsed, true, false, List.of()));
         UUID qpRow = UUID.randomUUID();
         UUID msRow = UUID.randomUUID();
         when(chunks.findRowIdsByPaperIdentity("JAN", 2023,
-                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
+                List.of("4CH1/1C", "4CH0/1C")))
                 .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
         Document qp = document(qpRow, "qp-doc-23", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
         Document ms = document(msRow, "ms-doc-23", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
@@ -352,9 +354,10 @@ class PaperQuestionResolverTest {
                 .thenReturn(new FetchResult(parsed, true, false, List.of()));
         UUID qpRow = UUID.randomUUID();
         UUID msRow = UUID.randomUUID();
+        // "paper 2" hint → home unit then regional variant → these paper codes
         when(chunks.findRowIdsByPaperIdentity("JUN", 2019,
-                List.of("4CH1/1C", "4CH1/1CR", "4CH0/1C", "4CH0/1CR")))
-                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+                List.of("4CH1/2C", "4CH1/2CR", "4CH0/2C", "4CH0/2CR")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/2C"}, new Object[]{msRow, "4CH1/2C"}));
         Document qp = document(qpRow, "qp-doc-19", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
         Document ms = document(msRow, "ms-doc-19", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
         when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
@@ -409,7 +412,7 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve(
                 "give me the answer of jan 2022 question 4 paper 1", SCOPE);
 
-        assertThat(pinned).hasSize(3);   // card + 2 QP; the SUGGESTED MS is invisible
+        assertThat(pinned).hasSize(2);   // card + 1 QP (seeking stem cap); the SUGGESTED MS is invisible
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
         assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(msRow);
@@ -469,8 +472,10 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve(
                 "give me the answer of jan 2022 question 4 paper 1", SCOPE);
 
-        assertThat(pinned).hasSize(4);
+        assertThat(pinned).hasSize(3);   // seeking: QP 1 (first stem chunk) + MS 2
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(0).chunkIndex()).isEqualTo(4);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
         assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
     }
 
