@@ -107,6 +107,23 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * guard is now three-way: reranker × weights × floor are mutually exclusive,
  * fail-closed.</p>
  *
+ * <p>Arm-composition mode (T-C72, charter tranche 6): {@code BENCH_NOTES_KIND_ARM}
+ * (positive integer, default absent) adds a THIRD fusion input — the dedicated
+ * EXTERNAL_NOTES kind-arm ({@link NotesArmRetrieval}): arm A's production vector
+ * SQL shape (same {@code <=>} operator, embedding column and embed_rev stamp)
+ * kind-scoped over the same embedded corpus, LIMIT K, fully ordered (distance
+ * ASC, then the deterministic {@code document_id, chunk_index} tiebreak — the
+ * g2-024 ORDER-BY tie noise cannot leak through the new arm). The existing
+ * arms' lists are byte-unchanged; the boundary applies exactly as shipped
+ * (pre-fusion), so the compliant view's central VALIDATED gate excludes the
+ * kind-arm's SUGGESTED-paper refs exactly as recorded — while the SERVED pool
+ * grows by construction (every kind-arm ref enters the union; the T-C67
+ * superset invariant and its §8(d) monotonicity theorem stay structurally
+ * alive). The default (absent) path stays byte-identical by construction: the
+ * arm list stays the recorded two-provider list. The one-lever guard is now
+ * FOUR-way: reranker × weights × floor × kind-arm are mutually exclusive,
+ * fail-closed.</p>
+ *
  * <p>Determinism contract (spec §6): no clocks in scoring (BENCH_RUN_DATE pins
  * the date; latency is an ops-axis field, measured outside scoring and never
  * mixed into rankings), the artifact is verified against the exact frozen
@@ -162,7 +179,8 @@ public final class Run005C {
         Map<EvidenceItem.EvidenceSource, Double> fusionWeights =
                 fusionWeightsForSpec(env("BENCH_FUSION_WEIGHTS", ""));
         int notesFloor = NotesFloorRetrieval.floorForSpec(env("BENCH_NOTES_FLOOR", ""));
-        requireSingleLever(armDReranker, fusionWeights, notesFloor);
+        int notesKindArm = NotesArmRetrieval.kindArmForSpec(env("BENCH_NOTES_KIND_ARM", ""));
+        requireSingleLever(armDReranker, fusionWeights, notesFloor, notesKindArm);
 
         String url = required("BENCH_JDBC_URL");
         String user = required("BENCH_JDBC_USER");
@@ -176,7 +194,7 @@ public final class Run005C {
 
         Result result = run(jdbc, snapshotDir, snapshot, gold, goldDir, artifactDir, runOut,
                 coreCommit, runDate, run003b, run004a, run002a0, perArmLimit, runId,
-                notesFloor, armDReranker, fusionWeights);
+                notesFloor, notesKindArm, armDReranker, fusionWeights);
         System.out.println(runId + " recorded");
         System.out.println("C served overall: " + result.servedOverall());
         System.out.println("C compliant overall: " + result.compliantOverall());
@@ -197,7 +215,7 @@ public final class Run005C {
                       Path goldDir, Path artifactDir, Path runOut, String coreCommit,
                       String runDate, Path run003bResults, Path run004aResults,
                       Path run002a0Results, int perArmLimit, String runId,
-                      int notesFloor, EvidenceReranker armDReranker,
+                      int notesFloor, int notesKindArm, EvidenceReranker armDReranker,
                       Map<EvidenceItem.EvidenceSource, Double> fusionWeights) throws Exception {
 
         // ── 0. verify the frozen artifact against the exact frozen inputs ────
@@ -268,6 +286,25 @@ public final class Run005C {
             lexical = NotesFloorRetrieval.maybeWrap(lexical, notesFloor, kindByRef);
         }
 
+        // Dedicated EXTERNAL_NOTES kind-arm (T-C72, charter tranche 6): a THIRD
+        // fusion input — arm A's production vector SQL shape (same distance
+        // operator <=>, same embedding column, same embed_rev stamp) kind-scoped
+        // over the same embedded corpus, LIMIT K, fully ordered (distance ASC,
+        // then the deterministic document_id/chunk_index tiebreak), the same
+        // frozen query vector. The existing arms' lists are byte-unchanged; the
+        // boundary applies exactly as shipped (pre-fusion): the compliant view's
+        // central VALIDATED gate excludes the kind-arm's SUGGESTED-paper refs
+        // exactly as recorded, while the SERVED pool grows by construction.
+        // Pre-registered in ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run.
+        // A kindArm <= 0 creates NOTHING: the arm list stays the recorded
+        // two-provider list — the recorded path is byte-identical by
+        // construction (absent-path identity).
+        RetrievalProvider notesKindArmProvider =
+                NotesArmRetrieval.maybeCreate(jdbc, frozen, notesKindArm);
+        List<RetrievalProvider> arms = notesKindArmProvider == null
+                ? List.of(semantic, lexical)
+                : List.of(semantic, lexical, notesKindArmProvider);
+
         ReciprocalRankFusion fusion = new ReciprocalRankFusion(60);
 
         // Fusion-weights posture (T-C65, charter tranche 3): the shipped 4-arg
@@ -276,14 +313,14 @@ public final class Run005C {
         // 3-arg ctor: the recorded unweighted posture, byte-identical by
         // construction (absent-path identity).
         RetrievalFabric rawServedFabric = fusionWeights == null
-                ? new RetrievalFabric(List.of(semantic, lexical), fusion,
+                ? new RetrievalFabric(arms, fusion,
                         BoundaryPolicy.allowAll())
-                : new RetrievalFabric(List.of(semantic, lexical), fusion,
+                : new RetrievalFabric(arms, fusion,
                         BoundaryPolicy.allowAll(), fusionWeights);
         RetrievalFabric rawCompliantFabric = fusionWeights == null
-                ? new RetrievalFabric(List.of(semantic, lexical), fusion,
+                ? new RetrievalFabric(arms, fusion,
                         candidate -> "VALIDATED".equals(paperState.get(candidate.documentId())))
-                : new RetrievalFabric(List.of(semantic, lexical), fusion,
+                : new RetrievalFabric(arms, fusion,
                         candidate -> "VALIDATED".equals(paperState.get(candidate.documentId())),
                         fusionWeights);
         // Arm D (T-C63): the reranker sits DOWNSTREAM of fusion (registry row D)
@@ -403,7 +440,7 @@ public final class Run005C {
         context.put("B_run_003", overallOf(run003bResults, "chunk_axis", "validated_only_served"));
         context.put("A_run_004_served", overallOf(run004aResults, "chunk_axis", "served_view"));
         context.put("A_run_004_compliant", overallOf(run004aResults, "chunk_axis", "compliant_view"));
-        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor)
+        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
                 + " = fabric over the recorded arms A+B; same frozen gold, "
                 + "same formulas; A0 chunk axis is the zero baseline");
 
@@ -423,7 +460,11 @@ public final class Run005C {
                         + ", zero API calls at run time"
                 : armDReranker == null
                 ? "C hybrid — PRODUCTION retrieval fabric (com.syllabai.retrieval."
-                        + "RetrievalFabric: explicit arms [pgvector, bm25], central BoundaryPolicy, "
+                        + "RetrievalFabric: explicit arms "
+                        + (notesKindArm > 0
+                                ? "[pgvector, bm25, " + NotesArmRetrieval.ARM_ID + "]"
+                                : "[pgvector, bm25]")
+                        + ", central BoundaryPolicy, "
                         + "shipped ReciprocalRankFusion k=60, rank-only, NoReranker) over arm A's "
                         + "production vector path and arm B's production lexical path"
                         + (notesFloor > 0
@@ -431,6 +472,13 @@ public final class Run005C {
                                         + " appended beyond each arm's cut, PRE-boundary (the "
                                         + "T-C69 per-kind quota lever, floor form — pure-additive "
                                         + "admission, pre-registered BEFORE this run)"
+                                : "")
+                        + (notesKindArm > 0
+                                ? " with the dedicated EXTERNAL_NOTES kind-arm K=" + notesKindArm
+                                        + " as a third fusion input (the T-C72 arm-composition lever, "
+                                        + "KIND-ARM form — notes compete only against notes, the "
+                                        + "pre-registered reach lever; pre-registered in "
+                                        + "ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run)"
                                 : "")
                         + "; chunk+query vectors replayed from the frozen artifact "
                         + manifest.path("run_id").asText()
@@ -469,9 +517,16 @@ public final class Run005C {
                                 + ") runs as a pure pre-boundary arm extension (deterministic "
                                 + "probe doubling, zero API calls, no boundary interaction; "
                                 + "pre-registered in POOL-COMPOSITION-PREREGISTRATION.md "
-                                + "BEFORE this run)"));
+                                + "BEFORE this run)")
+                + (notesKindArm == 0 ? ""
+                        : "; the dedicated EXTERNAL_NOTES kind-arm (K=" + notesKindArm
+                                + ") runs as a third fusion input (arm A's production vector SQL "
+                                + "shape — the same distance operator, embedding column and "
+                                + "embed_rev stamp — kind-scoped, fully ordered, zero API calls, "
+                                + "no boundary interaction; pre-registered in "
+                                + "ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run)"));
         results.put("fabric", Map.of(
-                "providers", List.of(semantic.id(), lexical.id()),
+                "providers", arms.stream().map(RetrievalProvider::id).toList(),
                 "fusion", "ReciprocalRankFusion k=60 (the shipped serving fuser)",
                 "fusion_weights", fusionWeights == null
                         ? "unweighted (null map — the recorded r9/d-r1 posture; the 3-arg ctor)"
@@ -480,6 +535,7 @@ public final class Run005C {
                                 + "CARD 0.3; absent sources 1.0; contribution weight/(k+rank+1), k=60)",
                 "per_arm_limit", perArmLimit,
                 "notes_floor", notesFloor,
+                "notes_kind_arm", notesKindArm,
                 "served_boundary", "BoundaryPolicy.allowAll() — production-truth components as "
                         + "they stand (vector surface predates T-C05: the T-C20 registered gap)",
                 "compliant_boundary", "central VALIDATED-only policy applied PRE-fusion (the "
@@ -509,12 +565,12 @@ public final class Run005C {
                         + "call, so a deployed hybrid adds one embedding round-trip to these "
                         + "numbers (recorded as the §8(e) caveat)",
                 "spec_resolution_axis", hvPresent
-                        ? "SCORED for " + armLabel(armDReranker, fusionWeights, notesFloor)
+                        ? "SCORED for " + armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
                         + " on BOTH views (see spec_resolution_hv): the snapshot "
                         + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
                         + "the served ALL-denominator view per §10 ruling 1, the compliant view "
                         + "reported alongside"
-                        : "NOT SCOREABLE for " + armLabel(armDReranker, fusionWeights, notesFloor)
+                        : "NOT SCOREABLE for " + armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
                         + ": zero HUMAN_VALIDATED "
                         + "chunk→spec mapping rows in the snapshot (concept_attachments = 0, "
                         + "the T-C06/F-168 mapping substrate is pending) — a resolution number "
@@ -638,7 +694,8 @@ public final class Run005C {
                 report(runDate, results, servedOverall, compliantOverall, servedPerClass,
                         compliantPerClass, labeled.size(), noLabelIds.size(), zeroResultQueries,
                         compliantStarved, violations, dbChunks, validatedCorpus, context,
-                        manifest, gate, perArmLimit, notesFloor, armDReranker, fusionWeights),
+                        manifest, gate, perArmLimit, notesFloor, notesKindArm, armDReranker,
+                        fusionWeights),
                 StandardCharsets.UTF_8);
         StringBuilder sums = new StringBuilder();
         for (String name : List.of("results.json", "RUN_REPORT.md")) {
@@ -807,14 +864,19 @@ public final class Run005C {
     /** The registry-facing arm label for the postures this orchestrator measures. */
     private static String armLabel(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
-                                   int notesFloor) {
+                                   int notesFloor, int notesKindArm) {
         if (reranker != null) {
             return "arm D (arm C + reranker)";
         }
         if (fusionWeights != null) {
             return "arm C (plan-v2 weighted fusion posture)";
         }
-        return notesFloor > 0 ? "arm C (per-arm notes floor N=" + notesFloor + ")" : "arm C";
+        if (notesFloor > 0) {
+            return "arm C (per-arm notes floor N=" + notesFloor + ")";
+        }
+        return notesKindArm > 0
+                ? "arm C (EXTERNAL_NOTES kind-arm K=" + notesKindArm + ")"
+                : "arm C";
     }
 
     /**
@@ -846,16 +908,25 @@ public final class Run005C {
         requireSingleLever(reranker, fusionWeights, 0);
     }
 
-    /** Three-way one-lever guard (T-C65 pair extended by the T-C69 floor). */
+    /** Three-way one-lever guard (T-C65 pair extended by the T-C69 floor) — the
+     * recorded T-C69 test contract, now a delegation to the four-way guard. */
     static void requireSingleLever(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
                                    int notesFloor) {
+        requireSingleLever(reranker, fusionWeights, notesFloor, 0);
+    }
+
+    /** Four-way one-lever guard (T-C65 pair + the T-C69 floor + the T-C72 kind-arm). */
+    static void requireSingleLever(EvidenceReranker reranker,
+                                   Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
+                                   int notesFloor, int notesKindArm) {
         int active = (reranker != null ? 1 : 0) + (fusionWeights != null ? 1 : 0)
-                + (notesFloor > 0 ? 1 : 0);
+                + (notesFloor > 0 ? 1 : 0) + (notesKindArm > 0 ? 1 : 0);
         if (active > 1) {
-            throw new IllegalStateException("BENCH_ARM_D_RERANKER, BENCH_FUSION_WEIGHTS and "
-                    + "BENCH_NOTES_FLOOR are mutually exclusive (one lever at a time — the "
-                    + "T-C65/T-C69 pre-registrations' attribution guard)");
+            throw new IllegalStateException("BENCH_ARM_D_RERANKER, BENCH_FUSION_WEIGHTS, "
+                    + "BENCH_NOTES_FLOOR and BENCH_NOTES_KIND_ARM are mutually exclusive "
+                    + "(one lever at a time — the T-C65/T-C69/T-C72 pre-registrations' "
+                    + "attribution guard)");
         }
     }
 
@@ -869,7 +940,7 @@ public final class Run005C {
                                  int violations, int corpusN, long validatedCorpus,
                                  Map<String, Object> context, JsonNode manifest,
                                  Map<String, Object> gate, int perArmLimit, int notesFloor,
-                                 EvidenceReranker armDReranker,
+                                 int notesKindArm, EvidenceReranker armDReranker,
                                  Map<EvidenceItem.EvidenceSource, Double> fusionWeights) {
         String armLetter = armDReranker == null ? "C" : "D";
         StringBuilder md = new StringBuilder();
@@ -879,6 +950,8 @@ public final class Run005C {
                 ? "# Run 005 — C hybrid arm, plan-v2 weighted fusion posture (the shipped PLAN_V2_WEIGHTS lever)\n\n"
                 : notesFloor > 0
                 ? "# Run 005 — C hybrid arm, per-arm notes floor posture (the T-C69 per-kind quota lever, floor form)\n\n"
+                : notesKindArm > 0
+                ? "# Run 005 — C hybrid arm, EXTERNAL_NOTES kind-arm posture (the T-C72 arm-composition lever, KIND-ARM form)\n\n"
                 : "# Run 005 — C hybrid arm, first recorded run (the retrieval fabric orchestrator)\n\n");
         md.append("**Status:** RECORDED — production hybrid arm on record (deterministic, offline ")
                 .append("replay, zero API calls; snapshot ").append(results.get("snapshot")).append(").\n");
@@ -891,10 +964,18 @@ public final class Run005C {
 
         md.append("## Fabric provenance\n\n")
                 .append("- Orchestrator: the registered gap CLOSED — `RetrievalFabric` composes the ")
-                .append("explicit arms [pgvector, bm25] (never injection-implied, E-1 forward note), ")
+                .append("explicit arms ")
+                .append(notesKindArm > 0
+                        ? "[pgvector, bm25, " + NotesArmRetrieval.ARM_ID + "]"
+                        : "[pgvector, bm25]")
+                .append(" (never injection-implied, E-1 forward note), ")
                 .append("applies the serving boundary ONCE centrally pre-fusion, and fuses with the ")
-                .append("shipped `ReciprocalRankFusion` k=60 — no new fusion code, no retrieval SQL ")
-                .append("changed. Per-arm candidate bound ").append(perArmLimit).append(".\n")
+                .append("shipped `ReciprocalRankFusion` k=60 — no new fusion code, no ")
+                .append(notesKindArm > 0
+                        ? "PRODUCTION retrieval SQL changed (the kind-arm's own candidate SQL "
+                                + "is bench-scoped, mirroring arm A's production shape). "
+                        : "retrieval SQL changed. ")
+                .append("Per-arm candidate bound ").append(perArmLimit).append(".\n")
                 .append(armDReranker == null ? "" : "- Reranker: `"
                         + armDReranker.getClass().getSimpleName()
                         + "` applied DOWNSTREAM of fusion behind the production EvidenceReranker "
@@ -913,6 +994,16 @@ public final class Run005C {
                         + "the recorded cut is untouched, the union can only grow, the boundary "
                         + "and the fusion are unchanged; deterministic probe doubling; "
                         + "pre-registered in POOL-COMPOSITION-PREREGISTRATION.md BEFORE this run).\n")
+                .append(notesKindArm == 0 ? "" : "- Notes kind-arm: a dedicated EXTERNAL_NOTES fusion arm K="
+                        + notesKindArm + " as a THIRD fusion input (the T-C72 arm-composition "
+                        + "lever, KIND-ARM form): arm A's production vector SQL shape — the same "
+                        + "distance operator, embedding column and embed_rev stamp — kind-scoped "
+                        + "over the same embedded corpus, the same frozen query vector, fully "
+                        + "ordered (distance ASC, document_id ASC, chunk_index ASC), under-fill "
+                        + "at universe exhaustion recorded honestly; the existing arms' lists are "
+                        + "byte-unchanged and the boundary applies exactly as shipped "
+                        + "(pre-fusion); pre-registered in ARM-COMPOSITION-PREREGISTRATION.md "
+                        + "BEFORE this run.\n")
                 .append("- Frozen artifact `").append(manifest.path("run_id").asText()).append("`: model `")
                 .append(manifest.path("model").asText()).append("` @ ").append(manifest.path("dimension").asInt())
                 .append(" dims; verified fail-closed against this run's frozen inputs before anything ran; ")
