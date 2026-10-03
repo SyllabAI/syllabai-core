@@ -21,7 +21,7 @@ import reactor.core.publisher.Flux;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "6";
+    public static final String PROMPT_VERSION = "7";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
@@ -215,6 +215,12 @@ public class GroundedTutorGenerator implements TutorGenerator {
                   repeat the fence markers in your answer.
                 - If the SOURCES are insufficient to answer safely, say exactly what is
                   missing and stop. Never fill gaps from general knowledge.
+                - When the QUESTION names a specific exam-paper question and the SOURCES
+                  carry its question text and/or mark scheme, answer part by part in the
+                  paper's own order and label each part exactly as the paper labels it
+                  (e.g. "(a)", "(b)(ii)"). If a part's answer is not in the SOURCES,
+                  state that for that part specifically — never drop a part silently
+                  and never merge parts into one unlabelled block.
                 - Never invent spec references, page numbers or topic codes.
                 - Do not reveal internal probabilities, model names, diagnostic rules, or
                   private learner-state details to the learner.

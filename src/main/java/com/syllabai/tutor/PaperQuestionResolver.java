@@ -92,13 +92,27 @@ public class PaperQuestionResolver {
 
     private static final Logger LOG = LoggerFactory.getLogger(PaperQuestionResolver.class);
 
-    /** Pinned evidence per tier — lead items must leave room for KG+vector evidence. */
+    /** Pinned evidence per tier — lead items must leave room for KG+vector evidence.
+     *  (The bank tier pins MS chunks only on mark-scheme-seeking asks, so its MS
+     *  cap lives in {@code MAX_MS_ITEMS_SEEKING}; there is no non-seeking MS cap.) */
     private static final int MAX_QP_ITEMS = 2;
-    private static final int MAX_MS_ITEMS = 1;
     private static final int MAX_CARD_ITEMS = 2;
     /** Content-store companion caps (card ≤2 + QP ≤2 + MS ≤2 ≤ the pool limit of 6). */
     private static final int MAX_STORE_QP_ITEMS = 2;
     private static final int MAX_STORE_MS_ITEMS = 2;
+
+    /** Mark-scheme-seeking allocation (2026-10-03 live finding): a multi-part
+     *  question's mark scheme spans several chunks and the old flat caps (bank MS
+     *  1, store MS 2) pinned only the first parts — later parts (e.g. graphite in
+     *  4CH1 Jan-2023 1C Q9) were left to survive fusion on their own, where the
+     *  paper's own front-matter chunks (vector-similar to the title tokens in the
+     *  ask) outcompete them. When the ask seeks answers, the QP stem shrinks (the
+     *  card already carries marks + a truncated stem) and the MS grows, keeping
+     *  the same worst-case bound: card ≤2 + QP ≤1 + MS ≤3 ≤ the pool limit of 6.
+     *  Non-seeking asks keep the old allocation byte-identically. */
+    private static final int MAX_MS_ITEMS_SEEKING = 2;
+    private static final int MAX_STORE_QP_ITEMS_SEEKING = 1;
+    private static final int MAX_STORE_MS_ITEMS_SEEKING = 3;
 
     /** "paper 1" / "paper 2" (optionally "paper number 1") — the parser does not bind this phrasing. */
     private static final Pattern PAPER_HINT = Pattern.compile("\\bpaper\\s*(?:number\\s*)?([12])\\b",
@@ -287,7 +301,7 @@ public class PaperQuestionResolver {
         }
         if (parsed.msSeeking() && paper.msDocumentId() != null) {
             items.addAll(documentQuestionChunks(paper.msDocumentId(), parsed.qnum(),
-                    Document.Kind.MARK_SCHEME, MAX_MS_ITEMS));
+                    Document.Kind.MARK_SCHEME, MAX_MS_ITEMS_SEEKING));
         }
         return List.copyOf(items);
     }
@@ -427,8 +441,10 @@ public class PaperQuestionResolver {
                     .filter(d -> unitOf(matchedCode.get(d.id())).equals(boundUnit))
                     .toList();
             List<EvidenceItem> items = new ArrayList<>();
-            pinKind(bound, Document.Kind.QUESTION_PAPER, parsed.qnum(), MAX_STORE_QP_ITEMS, items);
-            pinKind(bound, Document.Kind.MARK_SCHEME, parsed.qnum(), MAX_STORE_MS_ITEMS, items);
+            pinKind(bound, Document.Kind.QUESTION_PAPER, parsed.qnum(),
+                    parsed.msSeeking() ? MAX_STORE_QP_ITEMS_SEEKING : MAX_STORE_QP_ITEMS, items);
+            pinKind(bound, Document.Kind.MARK_SCHEME, parsed.qnum(),
+                    parsed.msSeeking() ? MAX_STORE_MS_ITEMS_SEEKING : MAX_STORE_MS_ITEMS, items);
             return List.copyOf(items);
         } catch (RuntimeException e) {
             LOG.warn("paper-question resolver: content-store anchor failed ({}); keeping the "
