@@ -346,7 +346,7 @@ class PaperQuestionResolverTest {
     }
 
     @Test
-    @DisplayName("non-seeking ask keeps the flat allocation: QP ≤2, no MS pins")
+    @DisplayName("non-seeking ask keeps the flat allocation: QP ≤2 + MS ≤2 byte-identically")
     void nonSeekingAskKeepsFlatAllocation() {
         ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
                 null, false, "explain question 10 from june 2019 paper 2");
@@ -368,16 +368,20 @@ class PaperQuestionResolverTest {
                 chunk(4, "10 (a) two Q10 stem chunks", "10"),
                 chunk(5, "10 (b) the second Q10 stem chunk", "10")));
         when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
-                chunk(9, "10 | (a) an answer row that must NOT pin on a non-seeking ask", "10")));
+                chunk(9, "10 | (a) an answer row the walkthrough source still pins", "10")));
 
         List<EvidenceItem> pinned = resolver.resolve(
                 "explain question 10 from june 2019 paper 2", SCOPE);
 
-        assertThat(pinned).hasSize(2);   // QP stem both chunks; MS never pins
-        assertThat(pinned).allSatisfy(item ->
-                assertThat(item.source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER));
+        // flat allocation unchanged: QP both chunks + the MS walkthrough row —
+        // the seeking rebalance only fires on mark-scheme-seeking asks
+        assertThat(pinned).hasSize(3);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         assertThat(pinned.get(0).chunkIndex()).isEqualTo(4);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         assertThat(pinned.get(1).chunkIndex()).isEqualTo(5);
+        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(2).chunkIndex()).isEqualTo(9);
     }
 
     @Test
