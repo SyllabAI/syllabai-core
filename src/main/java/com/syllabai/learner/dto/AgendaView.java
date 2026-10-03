@@ -33,8 +33,9 @@ import java.util.UUID;
  *       serves for this learner (V51: null class target = the whole enabled
  *       cohort; a class target = its members only), with the learner's
  *       latest hand-in beside each (null until they submit); ordered
- *       due-soonest-first, undated last — an agenda, not a newest-first
- *       feed. Same 50-row bound as the teacher/learner lists.</li>
+ *       due-soonest-first — an agenda, not a newest-first feed (every row
+ *       is dated: due_at is NOT NULL per V49). Same 50-row bound as the
+ *       teacher/learner lists.</li>
  *   <li>{@code actions} — the full {@link NextBestActionsView} for the
  *       requested subject root (advice, not facts — a failure of the NBA
  *       call surfaces as a real error, never silently dropped advice), or

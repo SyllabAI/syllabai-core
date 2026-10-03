@@ -46,9 +46,10 @@ import org.springframework.web.bind.annotation.RestController;
  *       pilot-UX rule — clients never render raw UUIDs);</li>
  *   <li>assignments — the V49/V51 visible work with the learner's latest
  *       append-only hand-in beside each (null until they submit), re-ordered
- *       due-soonest-first (undated last, then newest-created): an agenda
+ *       due-soonest-first, then newest-created: an agenda
  *       answers "what is due", not "what was just set"; the 50-row bound
- *       matches the teacher/learner list endpoints;</li>
+ *       matches the teacher/learner list endpoints. Every row is dated —
+ *       the schema makes due_at NOT NULL (V49); there is no undated case.</li>
  *   <li>actions — the ADR-017 next-best-action block for the requested
  *       subject {@code rootId} (the same deterministic engine as
  *       GET /learners/me/recommendations, advice-not-facts posture
@@ -110,8 +111,9 @@ public class LearnerAgendaController {
 
         // 2) assignments — the V51 visibility filter is THE authorization
         //    (identical query + filter to LearnerAssignmentController.list),
-        //    re-ordered for the agenda question: due soonest first, undated
-        //    last, then newest-created first
+        //    re-ordered for the agenda question: due soonest first, then
+        //    newest-created first. due_at is NOT NULL in the schema (V49),
+        //    so every row is dated — there is no "undated" case to defend.
         Map<UUID, AssignmentSubmission> mine = new HashMap<>();
         for (AssignmentSubmission s : submissions
                 .findByLearnerIdOrderByOccurredAtDesc(learnerId, PageRequest.of(0, 2000))) {
@@ -123,7 +125,7 @@ public class LearnerAgendaController {
                         || classMembers.existsByClassIdAndStudentId(a.classId(), learnerId))
                 .toList());
         visible.sort(Comparator
-                .comparing(Assignment::dueAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .comparing(Assignment::dueAt)
                 .thenComparing(Assignment::createdAt, Comparator.reverseOrder()));
         List<LearnerAssignmentView> assignmentRows = visible.stream()
                 .map(a -> new LearnerAssignmentView(

@@ -2,24 +2,21 @@ package com.syllabai.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.syllabai.assignment.Assignment;
-import com.syllabai.assignment.AssignmentRepository;
-import com.syllabai.assignment.AssignmentSubmission;
-import com.syllabai.assignment.AssignmentSubmissionRepository;
-import com.syllabai.assignment.Assignment.Status;
-import com.syllabai.assignment.LearnerAssignmentController;
-import com.syllabai.assignment.LearnerAssignmentController.SubmissionRequest;
 import com.syllabai.assignment.TeacherAssignmentController;
 import com.syllabai.assignment.TeacherAssignmentController.CreateRequest;
 import com.syllabai.assignment.dto.AssignmentViews.AssignmentView;
 import com.syllabai.classroom.ClassMember;
 import com.syllabai.classroom.ClassMemberRepository;
+import com.syllabai.classroom.SchoolClass;
+import com.syllabai.classroom.SchoolClassRepository;
 import com.syllabai.identity.AuthService;
 import com.syllabai.identity.Role;
 import com.syllabai.identity.dto.RegisterRequest;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.knowledge.NodeType;
+import com.syllabai.assignment.LearnerAssignmentController;
+import com.syllabai.assignment.LearnerAssignmentController.SubmissionRequest;
 import com.syllabai.learner.LearnerAgendaController;
 import com.syllabai.learner.ReviewSchedule;
 import com.syllabai.learner.ReviewScheduleRepository;
@@ -50,17 +47,23 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * composition contract end to end:
  *
  * <ul>
- *   <li>honest cold start — a fresh learner gets empty review/assignment
- *       blocks and {@code actions == null} without a rootId, never a
- *       fabricated row;</li>
+ *   <li>honest cold start — a fresh learner's learner-SCOPED blocks are
+ *       empty (due reviews) and {@code actions == null} without a rootId;
+ *       the assignments block is pinned on VISIBILITY CORRECTNESS instead of
+ *       emptiness, because the container's database is shared across test
+ *       methods and a V49 whole-cohort row (null class target) is
+ *       legitimately visible to every learner — a fresh learner with no
+ *       memberships must never see a class-targeted row and never see a
+ *       hand-in that is not theirs;</li>
  *   <li>composition — PENDING spaced reviews surface due-soonest-first with
- *       resolved node titles (never raw UUIDs), visible assignments carry
- *       the learner's own hand-in trail, and the agenda is ordered by due
- *       date (undated last) rather than newest-set;</li>
+ *       resolved node titles (never raw UUIDs), the assignments this test
+ *       created are ordered due-soonest-first, and the learner's hand-in
+ *       rides the row once submitted;</li>
  *   <li>the V51 visibility boundary inside the composition — a
  *       class-targeted assignment is invisible unless the learner is a
  *       member (the membership rows are the authorization, in an endpoint
- *       that touches three modules at once);</li>
+ *       that touches three modules at once; the class must be a REAL classes
+ *       row — fk_cmember_class);</li>
  *   <li>the optional NBA block — a supplied {@code rootId} brings the
  *       deterministic actions view (honest empty actions for a cold
  *       learner); omitting it keeps {@code actions == null}.</li>
@@ -101,11 +104,9 @@ class AgendaFlowIT {
     @Autowired
     private ClassMemberRepository classMembers;
     @Autowired
+    private SchoolClassRepository classes;
+    @Autowired
     private KnowledgeNodeRepository knowledgeNodes;
-    @Autowired
-    private AssignmentRepository assignments;
-    @Autowired
-    private AssignmentSubmissionRepository submissions;
 
     @BeforeAll
     static void seedNodes(@Autowired KnowledgeNodeRepository knowledgeNodes) {
@@ -155,7 +156,7 @@ class AgendaFlowIT {
     }
 
     @Test
-    @DisplayName("cold start is honest: empty blocks, actions null without a rootId")
+    @DisplayName("cold start is honest: learner-scoped blocks empty, V51 visibility correct, actions null")
     void coldStartHonestEmpty() {
         UUID learner = newLearner();
 
@@ -163,9 +164,19 @@ class AgendaFlowIT {
 
         assertThat(agenda.learnerId()).isEqualTo(learner);
         assertThat(agenda.asOf()).isNotNull();
+        // learner-scoped: a fresh learner has no spaced-review rows at all
         assertThat(agenda.dueReviews()).isEmpty();
-        assertThat(agenda.assignments()).isEmpty();
         assertThat(agenda.actions()).isNull();
+
+        // the assignments block on a SHARED container cannot be pinned on
+        // emptiness — other tests' whole-cohort rows (null class target =
+        // the whole enabled cohort, V49) are legitimately visible. The pin
+        // is VISIBILITY CORRECTNESS: with no memberships, this learner sees
+        // only cohort rows and never a hand-in that is not theirs.
+        assertThat(agenda.assignments())
+                .allSatisfy(v -> assertThat(v.assignment().classId()).isNull());
+        assertThat(agenda.assignments())
+                .allSatisfy(v -> assertThat(v.mySubmission()).isNull());
     }
 
     @Test
@@ -183,11 +194,14 @@ class AgendaFlowIT {
                 Instant.now().plus(1, ChronoUnit.DAYS),
                 ReviewSchedule.Reason.TEACHER_ASSIGNED, 0.7));
 
-        // dated work: due in 5 days; and (created second) due in 1 day
+        // dated work (due_at is NOT NULL — V49): due in 5 days; and
+        // (created second) due in 1 day — must surface FIRST
         AssignmentView dueIn5 = teacherController.create(teacher,
-                request("Salty chemistry", Instant.now().plus(5, ChronoUnit.DAYS), null));
+                request("Salty chemistry " + UUID.randomUUID().toString().substring(0, 6),
+                        Instant.now().plus(5, ChronoUnit.DAYS), null));
         AssignmentView dueIn1 = teacherController.create(teacher,
-                request("Rates worksheet", Instant.now().plus(1, ChronoUnit.DAYS), null));
+                request("Rates worksheet " + UUID.randomUUID().toString().substring(0, 6),
+                        Instant.now().plus(1, ChronoUnit.DAYS), null));
 
         AgendaView agenda = agendaController.agenda(learner, null);
 
@@ -200,19 +214,28 @@ class AgendaFlowIT {
                 .isEqualTo("Electrolysis (agenda IT)");
         assertThat(agenda.dueReviews().get(1).reason()).isEqualTo("DECAY_CROSSED_THRESHOLD");
 
-        // assignments: the 1-day worksheet first despite being created second
-        assertThat(agenda.assignments()).hasSize(2);
-        assertThat(agenda.assignments().get(0).assignment().id()).isEqualTo(dueIn1.id());
-        assertThat(agenda.assignments().get(1).assignment().id()).isEqualTo(dueIn5.id());
-        assertThat(agenda.assignments().get(0).mySubmission()).isNull();
-        assertThat(agenda.assignments().get(1).mySubmission()).isNull();
+        // assignments: THIS test's two rows, ordered due-soonest-first
+        // (filtered to the ids this test created — the shared container
+        // legitimately carries other tests' cohort rows too)
+        List<UUID> mine = List.of(dueIn1.id(), dueIn5.id());
+        var rows = agenda.assignments().stream()
+                .filter(v -> mine.contains(v.assignment().id()))
+                .toList();
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0).assignment().id()).isEqualTo(dueIn1.id());
+        assertThat(rows.get(1).assignment().id()).isEqualTo(dueIn5.id());
+        assertThat(rows.get(0).mySubmission()).isNull();
+        assertThat(rows.get(1).mySubmission()).isNull();
 
         // the learner's own hand-in rides the agenda row once they submit
         learnerAssignmentController.submit(learner, dueIn1.id(), new SubmissionRequest(4, 10));
         AgendaView after = agendaController.agenda(learner, null);
-        assertThat(after.assignments().get(0).mySubmission()).isNotNull();
-        assertThat(after.assignments().get(0).mySubmission().questionsCompleted()).isEqualTo(4);
-        assertThat(after.assignments().get(0).mySubmission().score()).isEqualTo(10);
+        var rowAfter = after.assignments().stream()
+                .filter(v -> v.assignment().id().equals(dueIn1.id()))
+                .findFirst().orElseThrow();
+        assertThat(rowAfter.mySubmission()).isNotNull();
+        assertThat(rowAfter.mySubmission().questionsCompleted()).isEqualTo(4);
+        assertThat(rowAfter.mySubmission().score()).isEqualTo(10);
 
         // another learner's trail never leaks into it
         UUID other = newLearner();
@@ -227,8 +250,11 @@ class AgendaFlowIT {
         UUID teacher = newTeacher();
         UUID member = newLearner();
         UUID outsider = newLearner();
-        UUID classId = UUID.randomUUID();
 
+        // the class must be a REAL classes row — fk_cmember_class enforces it
+        UUID classId = classes.save(new SchoolClass(teacher, "igcse-chemistry-19",
+                "IGCSE Chemistry", "Agenda IT " + UUID.randomUUID().toString().substring(0, 6)))
+                .id();
         classMembers.save(new ClassMember(classId, member, teacher));
         teacherController.create(teacher, request("Class-only task",
                 Instant.now().plus(3, ChronoUnit.DAYS), classId));
@@ -236,44 +262,38 @@ class AgendaFlowIT {
         AgendaView memberAgenda = agendaController.agenda(member, null);
         AgendaView outsiderAgenda = agendaController.agenda(outsider, null);
 
-        assertThat(memberAgenda.assignments()).hasSize(1);
-        assertThat(memberAgenda.assignments().get(0).assignment().title())
-                .isEqualTo("Class-only task");
-        assertThat(outsiderAgenda.assignments()).isEmpty();
+        // pin THIS test's class-targeted row (the shared container carries
+        // other tests' cohort rows, which are legitimately visible to both)
+        assertThat(memberAgenda.assignments().stream()
+                .filter(v -> classId.equals(v.assignment().classId()))).hasSize(1);
+        assertThat(memberAgenda.assignments().stream()
+                .filter(v -> classId.equals(v.assignment().classId()))
+                .findFirst().orElseThrow().assignment().title()).contains("Class-only task");
+        assertThat(outsiderAgenda.assignments().stream()
+                .filter(v -> classId.equals(v.assignment().classId()))).isEmpty();
     }
 
     @Test
-    @DisplayName("undated work orders last; a rootId brings the NBA block (honest empty for a cold learner)")
-    void undatedLastAndOptionalActions() {
-        UUID teacher = newTeacher();
+    @DisplayName("a rootId brings the NBA block (honest empty for a cold learner); without it actions stay null")
+    void optionalActionsBlock() {
         UUID learner = newLearner();
 
-        AssignmentView dated = teacherController.create(teacher,
-                request("Dated practice", Instant.now().plus(4, ChronoUnit.DAYS), null));
-        // undated work cannot ride the teacher controller's @NotBlank dueAt —
-        // the entity accepts null, so seed it through the repository and pin
-        // the agenda's undated-last placement
-        assignments.save(new Assignment(teacher, "igcse-chemistry-19", "IGCSE Chemistry",
-                "Undated reading", List.of(TOPIC_A), 10, 2, null, Status.OPEN));
-
-        AgendaView agenda = agendaController.agenda(learner, null);
-        assertThat(agenda.assignments()).hasSize(2);
-        assertThat(agenda.assignments().get(0).assignment().id()).isEqualTo(dated.id());
-        assertThat(agenda.assignments().get(1).assignment().title()).isEqualTo("Undated reading");
-        assertThat(agenda.assignments().get(1).assignment().dueAt()).isNull();
+        AgendaView withoutRoot = agendaController.agenda(learner, null);
+        assertThat(withoutRoot.actions()).isNull();
 
         // with a rootId the deterministic NBA block arrives; a cold learner on
         // a real (childless) subject root gets honest EMPTY actions — advice
         // posture unchanged, never a crash and never fabricated work
-        AgendaView withActions = agendaController.agenda(learner, nodeId(SUBJECT_CODE));
-        assertThat(withActions.actions()).isNotNull();
-        assertThat(withActions.actions().learnerId()).isEqualTo(learner);
-        assertThat(withActions.actions().rootId()).isEqualTo(nodeId(SUBJECT_CODE));
-        assertThat(withActions.actions().actions()).isEmpty();
+        AgendaView withRoot = agendaController.agenda(learner, nodeId(SUBJECT_CODE));
+        assertThat(withRoot.actions()).isNotNull();
+        assertThat(withRoot.actions().learnerId()).isEqualTo(learner);
+        assertThat(withRoot.actions().rootId()).isEqualTo(nodeId(SUBJECT_CODE));
+        assertThat(withRoot.actions().policy()).startsWith("nba-rules/");
+        assertThat(withRoot.actions().actions()).isEmpty();
 
-        // and the trail: the agenda still wrote nothing (submissions ride the
-        // learner's own controller; reviews/assignments predate the reads)
-        assertThat(submissions.findByLearnerIdOrderByOccurredAtDesc(learner,
-                org.springframework.data.domain.Pageable.unpaged())).isEmpty();
+        // and the trail: the agenda wrote nothing anywhere — no submissions
+        // exist for this learner (the reviews/assignments rows predate it)
+        assertThat(withRoot.assignments())
+                .allSatisfy(v -> assertThat(v.mySubmission()).isNull());
     }
 }
