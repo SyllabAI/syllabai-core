@@ -21,7 +21,14 @@ import reactor.core.publisher.Flux;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "8";
+    /** v9 (2026-10-04 live finding, 4CH1 Jan-2023 1C Q9): with an earlier turn of
+     *  the same chat carrying a part-refusal, the model re-refused that part
+     *  (softness answered, conductivity refused) in 2 of 4 probe runs even though
+     *  the answer rows were freshly pinned and rendered — the conversational
+     *  prior overrode the v8 attribution rule. v9 pins: an earlier turn's
+     *  missing-part declaration is evidence about THAT turn's sources only;
+     *  every part is re-judged against the SOURCES supplied now. */
+    public static final String PROMPT_VERSION = "9";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
@@ -252,7 +259,12 @@ public class GroundedTutorGenerator implements TutorGenerator {
                   use earlier turns only to resolve references ("it", "the second
                   point", "that equation"). Earlier tutor messages are not sources:
                   cite ONLY the SOURCES numbered in this message, and
-                  do not repeat an earlier answer verbatim — build on it.
+                  do not repeat an earlier answer verbatim — build on it. An
+                  earlier turn's "part missing / could not be answered" statement
+                  describes the sources supplied in that earlier turn, not the
+                  ones supplied now: re-judge every part against the current
+                  SOURCES alone, and answer a part that an earlier turn declined
+                  whenever its content is present in the current SOURCES.
                 - A RECENT LEARNING EXPERIENCES block, when present, summarizes
                   this learner's earlier work on the current topics across
                   sessions: prior tutor asks, practice outcomes and spaced-review
