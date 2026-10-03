@@ -286,16 +286,102 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve(
                 "give me the answer of jan 2022 question 4 paper 1", SCOPE);
 
-        assertThat(pinned).hasSize(5);
+        // mark-scheme-seeking allocation: QP stem shrinks to its first chunk
+        // (the card carries marks + a truncated stem), MS keeps both answer chunks
+        assertThat(pinned).hasSize(4);
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
         assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         assertThat(pinned.get(1).documentId()).isEqualTo("qp-doc-9");
-        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(1).chunkIndex()).isEqualTo(4);
+        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(2).documentId()).isEqualTo("ms-doc-9");
+        assertThat(pinned.get(2).content()).contains("copper(II) oxide");
         assertThat(pinned.get(3).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
-        assertThat(pinned.get(3).documentId()).isEqualTo("ms-doc-9");
-        assertThat(pinned.get(3).content()).contains("copper(II) oxide");
-        assertThat(pinned.get(4).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
-        assertThat(pinned.get(4).content()).contains("7.9%");
+        assertThat(pinned.get(3).content()).contains("7.9%");
+    }
+
+    @Test
+    @DisplayName("multi-part mark scheme: a three-part question's answer chunks ALL pin on a "
+            + "mark-scheme-seeking ask (QP stem yields its slot; the 2026-10-03 live finding)")
+    void multiPartMsPinsAllPartsWhenSeeking() {
+        // production parse shape for "... paper 1c ...": FetchQueryParser binds the
+        // BARE_UNIT "1C" into parsed.unit (PAPER_CODE needs the 4CH1/1C full form)
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2023, 9,
+                null, true, "give me the answer paper 1c january 2023 question 9");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2023,
+                List.of("4CH1/1C", "4CH0/1C")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-23", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-23", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-23")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-23")).thenReturn(Optional.of(ms));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(0, "9 (a) Explain the forces of attraction in a covalent bond", "9"),
+                chunk(1, "9 (b) Explain the trend in boiling points down Group 7", "9"),
+                chunk(2, "9 (c) Explain why graphite is soft and conducts electricity", "9")));
+        // three answer chunks — the old flat store cap (2) dropped the third part,
+        // leaving it to outcompete front-matter chunks in fusion (and lose)
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(10, "9 | (a) electrostatic attraction between nuclei and shared pairs", "9"),
+                chunk(11, "9 | (b) boiling points increase down the group", "9"),
+                chunk(12, "9 | (c) layers slide / delocalised electrons conduct", "9")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "give me the answer paper 1c january 2023 question 9", SCOPE);
+
+        assertThat(pinned).hasSize(4);   // QP 1 (stem) + MS 3 (all parts) ≤ pool 6
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(0).chunkIndex()).isEqualTo(0);
+        for (int i = 1; i <= 3; i++) {
+            assertThat(pinned.get(i).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+            assertThat(pinned.get(i).chunkIndex()).isEqualTo(9 + i);
+        }
+        assertThat(pinned.get(3).content()).contains("delocalised electrons");
+    }
+
+    @Test
+    @DisplayName("non-seeking ask keeps the flat allocation: QP ≤2 + MS ≤2 byte-identically")
+    void nonSeekingAskKeepsFlatAllocation() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
+                null, false, "explain question 10 from june 2019 paper 2");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        // "paper 2" hint → home unit then regional variant → these paper codes
+        when(chunks.findRowIdsByPaperIdentity("JUN", 2019,
+                List.of("4CH1/2C", "4CH1/2CR", "4CH0/2C", "4CH0/2CR")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/2C"}, new Object[]{msRow, "4CH1/2C"}));
+        Document qp = document(qpRow, "qp-doc-19", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-19", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-19")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-19")).thenReturn(Optional.of(ms));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(4, "10 (a) two Q10 stem chunks", "10"),
+                chunk(5, "10 (b) the second Q10 stem chunk", "10")));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(9, "10 | (a) an answer row the walkthrough source still pins", "10")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "explain question 10 from june 2019 paper 2", SCOPE);
+
+        // flat allocation unchanged: QP both chunks + the MS walkthrough row —
+        // the seeking rebalance only fires on mark-scheme-seeking asks
+        assertThat(pinned).hasSize(3);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(0).chunkIndex()).isEqualTo(4);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(1).chunkIndex()).isEqualTo(5);
+        assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(2).chunkIndex()).isEqualTo(9);
     }
 
     @Test
@@ -330,7 +416,7 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve(
                 "give me the answer of jan 2022 question 4 paper 1", SCOPE);
 
-        assertThat(pinned).hasSize(3);   // card + 2 QP; the SUGGESTED MS is invisible
+        assertThat(pinned).hasSize(2);   // card + 1 QP (seeking stem cap); the SUGGESTED MS is invisible
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.CARD);
         assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
         verify(chunks, never()).findByDocumentRowIdOrderByChunkIndexAsc(msRow);
@@ -390,8 +476,10 @@ class PaperQuestionResolverTest {
         List<EvidenceItem> pinned = resolver.resolve(
                 "give me the answer of jan 2022 question 4 paper 1", SCOPE);
 
-        assertThat(pinned).hasSize(4);
+        assertThat(pinned).hasSize(3);   // seeking: QP 1 (first stem chunk) + MS 2
         assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(0).chunkIndex()).isEqualTo(4);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
         assertThat(pinned.get(2).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
     }
 

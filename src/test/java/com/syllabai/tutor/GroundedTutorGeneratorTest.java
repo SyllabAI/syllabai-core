@@ -109,7 +109,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v6");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v7");
     }
 
     @Test
@@ -123,6 +123,17 @@ class GroundedTutorGeneratorTest {
         // the v2 grounding rules survive verbatim inside v3
         assertThat(system).contains("Answer ONLY from the numbered SOURCES");
         assertThat(system).contains("at most 200 words plus citations");
+    }
+
+    @Test
+    @DisplayName("v7 pins the paper-question part-labelling rule (2026-10-03 live finding: "
+            + "multi-part paper answers arrived unlabelled with parts dropped silently)")
+    void paperQuestionPartLabellingPinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("answer part by part in the");
+        assertThat(system).contains("paper's own order");
+        assertThat(system).contains("label each part exactly as the paper labels it");
+        assertThat(system).contains("never drop a part silently");
     }
 
     @Test
