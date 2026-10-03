@@ -282,7 +282,7 @@ class ClaServiceTest {
         assertThat(event.evidenceCount()).isGreaterThanOrEqualTo(1);
         assertThat(event.refused()).isFalse();
         assertThat(event.answerModel()).isEqualTo("stub-model");
-        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v8");
+        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v9");
         assertThat(event.responseMode()).isEqualTo("EXPLAIN");
         assertThat(event.contextKind()).isEqualTo("KG_TOPIC");
         assertThat(event.contextReference()).isEqualTo(TOPIC);

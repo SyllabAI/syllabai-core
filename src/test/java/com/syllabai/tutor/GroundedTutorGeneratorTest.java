@@ -109,7 +109,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v8");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v9");
     }
 
     @Test
@@ -146,6 +146,18 @@ class GroundedTutorGeneratorTest {
         assertThat(system).contains("attribute such rows");
         assertThat(system).contains("to parts by their content and marks");
         assertThat(system).contains("unlabelled rows are a corpus shape");
+    }
+
+    @Test
+    @DisplayName("v9 pins the history-refusal re-judgement rule (2026-10-04 live finding: "
+            + "with an earlier turn of the same chat carrying a part-refusal, the model "
+            + "re-refused that part even though its answer rows were freshly supplied — "
+            + "2 of 4 probe runs reproduced the learner's partial refusal verbatim)")
+    void priorRefusalDoesNotBindCurrentSourcesPinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("describes the sources supplied in that earlier turn");
+        assertThat(system).contains("re-judge every part against the current");
+        assertThat(system).contains("answer a part that an earlier turn declined");
     }
 
     @Test
