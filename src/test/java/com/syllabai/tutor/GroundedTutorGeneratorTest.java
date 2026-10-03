@@ -109,7 +109,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v7");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v8");
     }
 
     @Test
@@ -134,6 +134,44 @@ class GroundedTutorGeneratorTest {
         assertThat(system).contains("paper's own order");
         assertThat(system).contains("label each part exactly as the paper labels it");
         assertThat(system).contains("never drop a part silently");
+    }
+
+    @Test
+    @DisplayName("v8 pins the unlabelled-MS-rows attribution rule (2026-10-04 live finding: "
+            + "flattened mark-scheme rows carried no part labels and the model refused "
+            + "a part whose answer rows were pinned but unattributable)")
+    void unlabelledMarkSchemeRowsPinned() {
+        String system = generator.systemPrompt();
+        assertThat(system).contains("WITHOUT their part labels");
+        assertThat(system).contains("attribute such rows");
+        assertThat(system).contains("to parts by their content and marks");
+        assertThat(system).contains("unlabelled rows are a corpus shape");
+    }
+
+    @Test
+    @DisplayName("mark-scheme and question-paper evidence renders past the 600-char "
+            + "generic bound (2026-10-04 live finding: the 600-char cut severed the "
+            + "mark-scheme table mid-row — the (c) conductivity rows never reached "
+            + "the model and the part was refused as missing)")
+    void paperEvidenceRendersPastGenericBound() {
+        String ms = "x".repeat(1000) + " MS-TAIL-MARKER";
+        String qp = "y".repeat(1000) + " QP-TAIL-MARKER";
+        String other = "z".repeat(1000) + " OTHER-TAIL-CUT";
+        ContextAssembler.TutorContext context = new ContextAssembler.TutorContext(
+                "brief", "kb", List.of(
+                        EvidenceItem.fromChunk(UUID.randomUUID(), "ms-doc", 1, UUID.randomUUID(),
+                                0, "MARK_SCHEME", ms, 12, 12, List.of(), "m", 0.9),
+                        EvidenceItem.fromChunk(UUID.randomUUID(), "qp-doc", 1, UUID.randomUUID(),
+                                1, "QUESTION_PAPER", qp, 18, 19, List.of(), "m", 0.8),
+                        EvidenceItem.fromChunk(UUID.randomUUID(), "other-doc", 1, UUID.randomUUID(),
+                                2, "OTHER", other, 1, 1, List.of(), "m", 0.7)));
+        generator.generate("q", context);
+        String prompt = provider.lastRequest().userPrompt();
+        // paper evidence (answer-key material) renders past 600 chars whole
+        assertThat(prompt).contains("MS-TAIL-MARKER");
+        assertThat(prompt).contains("QP-TAIL-MARKER");
+        // generic evidence keeps the 600-char budget — its tail is cut
+        assertThat(prompt).doesNotContain("OTHER-TAIL-CUT");
     }
 
     @Test

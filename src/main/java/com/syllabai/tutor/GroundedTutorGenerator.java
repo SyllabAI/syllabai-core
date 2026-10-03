@@ -21,11 +21,20 @@ import reactor.core.publisher.Flux;
 public class GroundedTutorGenerator implements TutorGenerator {
 
     public static final String PROMPT_REGISTRY_KEY = "tutor-grounded";
-    public static final String PROMPT_VERSION = "7";
+    public static final String PROMPT_VERSION = "8";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
-    private static final int MAX_TOTAL_EVIDENCE_CHARS = 4000;
+    /** Mark-scheme/question-paper items are the resolved ask's own answer key.
+     *  2026-10-04 live finding (4CH1 Jan-2023 1C Q9): the question's mark-scheme
+     *  page rendered as two pinned chunks of ~815 chars each — the 600-char cut
+     *  severed the table mid-row and the tail rows (the (c) conductivity points:
+     *  delocalised electrons / electrons flow) never reached the model, which
+     *  then honestly refused the part as "missing" while naming exactly the cut
+     *  content. Paper evidence renders to this larger bound; generic evidence
+     *  keeps the tight 600 budget. */
+    private static final int MAX_PAPER_EVIDENCE_CHARS = 1200;
+    private static final int MAX_TOTAL_EVIDENCE_CHARS = 7000;
 
     /** v6 prompt-injection fencing (deep-audit 09-28 H2): every untrusted
      *  block — the learner's question, their conversation turns, source
@@ -221,6 +230,12 @@ public class GroundedTutorGenerator implements TutorGenerator {
                   (e.g. "(a)", "(b)(ii)"). If a part's answer is not in the SOURCES,
                   state that for that part specifically — never drop a part silently
                   and never merge parts into one unlabelled block.
+                - Mark-scheme evidence may arrive as flattened table rows or examiner
+                  notes ("note: M1 ...") WITHOUT their part labels. The part stems and
+                  mark descriptors in the SOURCES define the parts: attribute such rows
+                  to parts by their content and marks, and refuse a part only when no
+                  row's content corresponds to it — unlabelled rows are a corpus shape,
+                  not missing evidence.
                 - Never invent spec references, page numbers or topic codes.
                 - Do not reveal internal probabilities, model names, diagnostic rules, or
                   private learner-state details to the learner.
@@ -285,7 +300,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
         int rendered = 0;
         for (int i = 0; i < context.evidence().size(); i++) {
             EvidenceItem evidence = context.evidence().get(i);
-            String content = bound(evidence.content(), MAX_EVIDENCE_CHARS);
+            String content = bound(evidence.content(), evidenceCharBound(evidence));
             if (rendered + content.length() > MAX_TOTAL_EVIDENCE_CHARS) {
                 log.debug("evidence block truncated at {} items", i);
                 break;
@@ -299,6 +314,16 @@ public class GroundedTutorGenerator implements TutorGenerator {
                     .append(content.replace('\n', ' ')).append(close).append('\n');
         }
         return sb.toString();
+    }
+
+    /** Paper evidence (mark scheme / question paper) renders to the larger
+     *  bound — see {@link #MAX_PAPER_EVIDENCE_CHARS}; every other source keeps
+     *  the generic budget. */
+    private static int evidenceCharBound(EvidenceItem item) {
+        return item.source() == EvidenceItem.EvidenceSource.MARK_SCHEME
+                || item.source() == EvidenceItem.EvidenceSource.QUESTION_PAPER
+                ? MAX_PAPER_EVIDENCE_CHARS
+                : MAX_EVIDENCE_CHARS;
     }
 
     /**
