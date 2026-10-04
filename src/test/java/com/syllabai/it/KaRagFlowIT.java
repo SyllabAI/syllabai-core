@@ -204,7 +204,7 @@ class KaRagFlowIT {
         assertThat(((Number) last.payload().get("evidenceCount")).intValue())
                 .isEqualTo(answer.evidenceCount());
         assertThat(last.payload().get("refused")).isEqualTo(false);
-        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v9");
+        assertThat(last.payload().get("promptVersion")).isEqualTo("tutor-grounded/v10");
         // D2 (s145): a grounded answer carries the generator's provider name
         assertThat(last.payload().get("answerProvider")).isEqualTo("stub");
         // s139: the direct service call is single-turn — historyTurns reads 0

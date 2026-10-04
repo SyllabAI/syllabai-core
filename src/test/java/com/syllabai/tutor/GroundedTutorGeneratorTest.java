@@ -109,7 +109,7 @@ class GroundedTutorGeneratorTest {
         assertThat(answer.answer()).isEqualTo("stub answer");
         assertThat(answer.model()).isEqualTo("llama-3.3-70b-versatile");
         assertThat(answer.provider()).isEqualTo("groq");
-        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v9");
+        assertThat(GroundedTutorGenerator.promptIdentity()).isEqualTo("tutor-grounded/v10");
     }
 
     @Test
@@ -158,6 +158,60 @@ class GroundedTutorGeneratorTest {
         assertThat(system).contains("describes the sources supplied in that earlier turn");
         assertThat(system).contains("re-judge every part against the current");
         assertThat(system).contains("answer a part that an earlier turn declined");
+    }
+
+    @Test
+    @DisplayName("v10 renders the re-judge note at recency position — after the "
+            + "conversation block, before the QUESTION (n=8 probe on the v9 pod: the "
+            + "system-bullet rule alone left 3/8 poisoned-history runs copying the "
+            + "refusal verbatim; the rule must override the template adjacent to itself)")
+    void conversationRejudgeNoteRidesRecencyPosition() {
+        ContextAssembler.TutorContext context = new ContextAssembler.TutorContext("b", "k",
+                List.of(EvidenceItem.fromNode(UUID.randomUUID(), "C", "TOPIC", "T", null, 0.5)));
+        List<ConversationTurn> history = List.of(
+                new ConversationTurn(ConversationTurn.ROLE_USER,
+                        "Give me the answer Paper 1C January 2023 question 9"),
+                new ConversationTurn(ConversationTurn.ROLE_ASSISTANT,
+                        "The supplied sources do not contain a description of the "
+                                + "delocalised electrons, so that part cannot be answered."),
+                new ConversationTurn(ConversationTurn.ROLE_USER, "Give me the answer again?"));
+
+        generator.generate("Give me the answer again?", history, context);
+
+        String prompt = provider.lastRequest().userPrompt();
+        String open = openOf(prompt);
+        String close = closeOf(prompt);
+        int noteAt = prompt.indexOf("NOTE ON THE CONVERSATION ABOVE:");
+        // the final rendered turn precedes the note (indexOf = first occurrence;
+        // the same text reappears later inside the QUESTION fence)
+        int lastTurnAt = prompt.indexOf("LEARNER: " + open + "Give me the answer again?" + close);
+        int questionAt = prompt.indexOf("QUESTION:\n");
+        assertThat(noteAt).isGreaterThanOrEqualTo(0);
+        assertThat(lastTurnAt).isGreaterThanOrEqualTo(0);
+        assertThat(noteAt).isGreaterThan(lastTurnAt);
+        assertThat(questionAt).isGreaterThan(noteAt);
+        // names the copied template and replaces the copy source with the only
+        // valid refusal ground
+        assertThat(prompt).contains(
+                "made that statement about the sources supplied in that earlier turn");
+        assertThat(prompt).contains(
+                "Re-judge every part of the QUESTION against the current SOURCES alone");
+        assertThat(prompt).contains("Never reuse an earlier turn's refusal wording");
+        assertThat(prompt).contains("no row in the current SOURCES corresponds to it");
+    }
+
+    @Test
+    @DisplayName("no conversation block ⇒ no re-judge note (single-turn shape untouched)")
+    void noRejudgeNoteWithoutConversation() {
+        generator.generate("single turn?",
+                new ContextAssembler.TutorContext("b", "k", List.of()));
+        assertThat(provider.lastRequest().userPrompt())
+                .doesNotContain("NOTE ON THE CONVERSATION ABOVE:");
+
+        generator.generate("empty list?", List.<ConversationTurn>of(),
+                new ContextAssembler.TutorContext("b", "k", List.of()));
+        assertThat(provider.lastRequest().userPrompt())
+                .doesNotContain("NOTE ON THE CONVERSATION ABOVE:");
     }
 
     @Test
@@ -259,10 +313,12 @@ class GroundedTutorGeneratorTest {
         assertThat(prompt).doesNotContain("turn 0 ");
         // …while the newest turns survive whole
         assertThat(prompt).contains("turn 9 ");
-        // and the block stays inside its budget (plus labels/newlines)
+        // and the block stays inside its budget (plus labels/newlines and the
+        // fixed v10 re-judge note that renders between the block and QUESTION)
         int from = prompt.indexOf("CONVERSATION SO FAR");
         int to = prompt.indexOf("QUESTION:");
-        assertThat(to - from).isLessThanOrEqualTo(2400 + 400);
+        assertThat(to - from).isLessThanOrEqualTo(
+                2400 + 400 + GroundedTutorGenerator.CONVERSATION_REJUDGE_NOTE.length());
     }
 
     @Test

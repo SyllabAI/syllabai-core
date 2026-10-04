@@ -105,7 +105,7 @@ class KaRagServiceTest {
         assertThat(event.answerModel()).isEqualTo("model-x");
         // D2: a grounded answer carries the generator's provider identity
         assertThat(event.answerProvider()).isEqualTo("groq");
-        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v9");
+        assertThat(event.promptVersion()).isEqualTo("tutor-grounded/v10");
         // the single-turn overload is an unpersisted ask (s140: no session)
         assertThat(event.sessionId()).isNull();
 

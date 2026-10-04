@@ -27,8 +27,16 @@ public class GroundedTutorGenerator implements TutorGenerator {
      *  the answer rows were freshly pinned and rendered — the conversational
      *  prior overrode the v8 attribution rule. v9 pins: an earlier turn's
      *  missing-part declaration is evidence about THAT turn's sources only;
-     *  every part is re-judged against the SOURCES supplied now. */
-    public static final String PROMPT_VERSION = "9";
+     *  every part is re-judged against the SOURCES supplied now.
+     *  <p>v10 (same day, n=8 poisoned-history probe on the deployed v9 pod): the
+     *  system-bullet rule alone did NOT move the class — 3/8 runs still re-refused
+     *  the part VERBATIM (one truncated run cut mid-way into the refusal
+     *  sentence), statistically identical to the pre-v9 2/4. gpt-oss-120b copies
+     *  the template from the rendered history block itself; a global rule loses
+     *  the attention contest to adjacent text. v10 therefore ALSO renders the
+     *  re-judge rule at recency position — directly after the conversation block,
+     *  before the QUESTION (see {@link #CONVERSATION_REJUDGE_NOTE}). */
+    public static final String PROMPT_VERSION = "10";
 
     private static final Logger log = LoggerFactory.getLogger(GroundedTutorGenerator.class);
     private static final int MAX_EVIDENCE_CHARS = 600;
@@ -42,6 +50,29 @@ public class GroundedTutorGenerator implements TutorGenerator {
      *  keeps the tight 600 budget. */
     private static final int MAX_PAPER_EVIDENCE_CHARS = 1200;
     private static final int MAX_TOTAL_EVIDENCE_CHARS = 7000;
+
+    /** v10 (2026-10-04 live finding, 4CH1 Jan-2023 1C Q9): with the v9 rule riding
+     *  only in the system bullet, an n=8 poisoned-history probe on the deployed pod
+     *  (one prior turn carrying the part refusal) still reproduced the refusal
+     *  VERBATIM in 3 of 8 runs — statistically identical to the pre-v9 2/4
+     *  baseline; one truncated run even cut mid-way into the refusal sentence.
+     *  gpt-oss-120b copies the template from the rendered history block itself:
+     *  a global rule loses the attention contest to adjacent text. v10 adds the
+     *  same rule at recency position — rendered directly AFTER the conversation
+     *  block and BEFORE the QUESTION — naming the template and replacing the copy
+     *  source with the only valid ground for refusal (no corresponding row in the
+     *  current SOURCES). Deterministic: rendered whenever the block rendered,
+     *  never pattern-matches turn content. */
+    public static final String CONVERSATION_REJUDGE_NOTE =
+            "NOTE ON THE CONVERSATION ABOVE: an earlier tutor message that declared a part "
+          + "\"missing\", \"could not be answered\" or \"the supplied sources do not contain\" "
+          + "something made that statement about the sources supplied in that earlier turn — "
+          + "not about the SOURCES in this message. Re-judge every part of the QUESTION "
+          + "against the current SOURCES alone, and answer a part that an earlier turn "
+          + "declined whenever any row in the current SOURCES corresponds to it. Never "
+          + "reuse an earlier turn's refusal wording as the reason a part fails now: the "
+          + "only valid ground for refusing a part is that no row in the current SOURCES "
+          + "corresponds to it.";
 
     /** v6 prompt-injection fencing (deep-audit 09-28 H2): every untrusted
      *  block — the learner's question, their conversation turns, source
@@ -288,7 +319,13 @@ public class GroundedTutorGenerator implements TutorGenerator {
         String open = fenceOpen(nonce);
         String close = fenceClose(nonce);
         StringBuilder sb = new StringBuilder();
-        appendConversation(sb, history, open, close);
+        boolean conversationRendered = appendConversation(sb, history, open, close);
+        if (conversationRendered) {
+            // v10: the re-judge rule rides at recency position — directly after the
+            // turns it governs, before the QUESTION — because the system-bullet rule
+            // alone left 3/8 poisoned-history runs copying the refusal verbatim
+            sb.append(CONVERSATION_REJUDGE_NOTE).append("\n\n");
+        }
         // the learner's raw question is data, not instructions (H2) — fenced
         sb.append("QUESTION:\n").append(open).append(query.strip()).append(close).append("\n\n");
         sb.append("LEARNER CONTEXT:\n").append(context.learnerBrief()).append("\n\n");
@@ -349,11 +386,15 @@ public class GroundedTutorGenerator implements TutorGenerator {
      * to the immediately preceding exchange far more often than to the first.
      * History arrives pre-sanitized ({@link ConversationTurn#sanitize}); this
      * method only bounds what reaches the prompt.</p>
+     *
+     * @return whether the block rendered; the caller renders
+     *         {@link #CONVERSATION_REJUDGE_NOTE} directly after it exactly then
+     *         (v10 recency rule)
      */
-    private static void appendConversation(StringBuilder sb, List<ConversationTurn> history,
-                                           String open, String close) {
+    private static boolean appendConversation(StringBuilder sb, List<ConversationTurn> history,
+                                              String open, String close) {
         if (history == null || history.isEmpty()) {
-            return;
+            return false;
         }
         // select newest-first until the budget is spent, then render oldest-first
         List<String> kept = new ArrayList<>(history.size());
@@ -371,7 +412,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
             }
         }
         if (kept.isEmpty()) {
-            return;
+            return false;
         }
         sb.append("CONVERSATION SO FAR (earlier turns, citation markers removed):\n");
         for (int i = kept.size() - 1; i >= 0; i--) {
@@ -382,6 +423,7 @@ public class GroundedTutorGenerator implements TutorGenerator {
                     .append(open).append(kept.get(i)).append(close).append('\n');
         }
         sb.append('\n');
+        return true;
     }
 
     private String sourceLabel(EvidenceItem evidence) {
