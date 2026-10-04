@@ -1,6 +1,7 @@
 package com.syllabai.learner.dto;
 
 import com.syllabai.assignment.dto.AssignmentViews.LearnerAssignmentView;
+import com.syllabai.learner.exam.CourseExamTargetView;
 import com.syllabai.recommendation.dto.NextBestActionsView;
 import java.time.Instant;
 import java.util.List;
@@ -41,6 +42,10 @@ import java.util.UUID;
  *       call surfaces as a real error, never silently dropped advice), or
  *       {@code null} when no {@code rootId} was supplied: the agenda stays
  *       one call, the caller decides whether it needs recommendations.</li>
+ *   <li>{@code examTargets} (T-C79, ADR-035) — the courses this learner
+ *       declared an exam series for, with the countdown derived on this
+ *       read (never stored); an empty list is the honest "no series
+ *       declared" state. Absent here == nothing to count down to.</li>
  * </ul>
  */
 public record AgendaView(
@@ -48,10 +53,21 @@ public record AgendaView(
         Instant asOf,
         List<LearnerStateView.ReviewView> dueReviews,
         List<LearnerAssignmentView> assignments,
-        NextBestActionsView actions) {
+        NextBestActionsView actions,
+        List<CourseExamTargetView> examTargets) {
 
     public AgendaView {
         dueReviews = List.copyOf(dueReviews);
         assignments = List.copyOf(assignments);
+        examTargets = examTargets == null ? List.of() : List.copyOf(examTargets);
+    }
+
+    /** pre-T-C79 callers: the agenda composes honestly without exam targets */
+    public AgendaView(UUID learnerId,
+                      Instant asOf,
+                      List<LearnerStateView.ReviewView> dueReviews,
+                      List<LearnerAssignmentView> assignments,
+                      NextBestActionsView actions) {
+        this(learnerId, asOf, dueReviews, assignments, actions, List.of());
     }
 }

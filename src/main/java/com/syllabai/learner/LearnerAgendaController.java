@@ -13,6 +13,7 @@ import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
 import com.syllabai.learner.dto.AgendaView;
 import com.syllabai.learner.dto.LearnerStateView.ReviewView;
+import com.syllabai.learner.exam.ExamTargetReader;
 import com.syllabai.recommendation.NextBestActionService;
 import com.syllabai.recommendation.dto.NextBestActionsView;
 import java.time.Instant;
@@ -75,19 +76,22 @@ public class LearnerAgendaController {
     private final ClassMemberRepository classMembers;
     private final KnowledgeNodeRepository knowledgeNodes;
     private final NextBestActionService nextBestActions;
+    private final ExamTargetReader examTargets;
 
     public LearnerAgendaController(ReviewScheduleRepository reviewSchedules,
                                    AssignmentRepository assignments,
                                    AssignmentSubmissionRepository submissions,
                                    ClassMemberRepository classMembers,
                                    KnowledgeNodeRepository knowledgeNodes,
-                                   NextBestActionService nextBestActions) {
+                                   NextBestActionService nextBestActions,
+                                   ExamTargetReader examTargets) {
         this.reviewSchedules = reviewSchedules;
         this.assignments = assignments;
         this.submissions = submissions;
         this.classMembers = classMembers;
         this.knowledgeNodes = knowledgeNodes;
         this.nextBestActions = nextBestActions;
+        this.examTargets = examTargets;
     }
 
     @GetMapping("/agenda")
@@ -141,6 +145,11 @@ public class LearnerAgendaController {
         NextBestActionsView actions = rootId == null
                 ? null : nextBestActions.actionsFor(learnerId, rootId);
 
-        return new AgendaView(learnerId, now, dueReviews, assignmentRows, actions);
+        // 4) exam targets (T-C79, ADR-035) — the declared series' countdown,
+        //    derived on THIS read against the server clock (ADR-031: derived
+        //    is recomputed, never stored). Empty when nothing is declared —
+        //    the honest "add your exam series" state downstream.
+        return new AgendaView(learnerId, now, dueReviews, assignmentRows, actions,
+                examTargets.targetsFor(learnerId));
     }
 }
