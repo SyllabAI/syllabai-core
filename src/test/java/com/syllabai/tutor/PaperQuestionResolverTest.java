@@ -346,6 +346,90 @@ class PaperQuestionResolverTest {
     }
 
     @Test
+    @DisplayName("part-level ask 9(b)(ii): chunks atomed exactly 9-b-ii pin alone — question-level "
+            + "chunks yield to the part (2026-10-04 part-level ask parser)")
+    void partAtomPinsExactlyThePartChunks() {
+        // production parse shape for "answer question 9(b)(ii) jan 2023 paper 1C":
+        // BARE_UNIT binds 1C, the letter+roman bind under QNUM's letter branch
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2023, 9, "b", true,
+                "answer question 9(b)(ii) jan 2023 paper 1c", "ii");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2023,
+                List.of("4CH1/1C", "4CH0/1C")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-23p", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-23p", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-23p")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-23p")).thenReturn(Optional.of(ms));
+        // a corpus with part-level atoms (future part-aware ingestion): the asked
+        // part's chunks carry 9-b-ii; sibling parts stay question-level ("9")
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(0, "9 (b)(ii) the harder sub-part stem", "9-b-ii"),
+                chunk(1, "9 (c) Explain why graphite is soft", "9")));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(10, "9 | (a) electrostatic attraction between nuclei", "9"),
+                chunk(11, "9 | (b)(ii) the (b)(ii) answer rows", "9-b-ii"),
+                chunk(12, "9 | (c) layers slide", "9")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "answer question 9(b)(ii) jan 2023 paper 1c", SCOPE);
+
+        // only the exact-part chunks pin; the sibling parts do not come along
+        assertThat(pinned).hasSize(2);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        assertThat(pinned.get(0).chunkIndex()).isEqualTo(0);
+        assertThat(pinned.get(1).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+        assertThat(pinned.get(1).chunkIndex()).isEqualTo(11);
+        assertThat(pinned.get(1).content()).contains("(b)(ii)");
+    }
+
+    @Test
+    @DisplayName("part-level ask falls back to question-level pins when no chunk carries the "
+            + "part atom (today's corpus: the parser emits q9-style group keys only)")
+    void partAtomMissFallsBackToQuestionLevel() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2023, 9, "c", true,
+                "answer question 9(c) jan 2023 paper 1c", null);
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, true, false, List.of()));
+        UUID qpRow = UUID.randomUUID();
+        UUID msRow = UUID.randomUUID();
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2023,
+                List.of("4CH1/1C", "4CH0/1C")))
+                .thenReturn(List.<Object[]>of(new Object[]{qpRow, "4CH1/1C"}, new Object[]{msRow, "4CH1/1C"}));
+        Document qp = document(qpRow, "qp-doc-23f", Document.Kind.QUESTION_PAPER, "VALIDATED", "qp.pdf");
+        Document ms = document(msRow, "ms-doc-23f", Document.Kind.MARK_SCHEME, "VALIDATED", "ms.pdf");
+        when(documents.findById(qpRow)).thenReturn(Optional.of(qp));
+        when(documents.findById(msRow)).thenReturn(Optional.of(ms));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("qp-doc-23f")).thenReturn(Optional.of(qp));
+        when(documents.findTopByDocumentIdOrderByDocVersionDesc("ms-doc-23f")).thenReturn(Optional.of(ms));
+        // the production shape: question-level atoms only — the part ref 9-c misses
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(qpRow)).thenReturn(List.of(
+                chunk(0, "9 (a) Explain the forces of attraction in a covalent bond", "9"),
+                chunk(1, "9 (b) Explain the trend in boiling points down Group 7", "9"),
+                chunk(2, "9 (c) Explain why graphite is soft and conducts electricity", "9")));
+        when(chunks.findByDocumentRowIdOrderByChunkIndexAsc(msRow)).thenReturn(List.of(
+                chunk(10, "9 | (a) electrostatic attraction between nuclei and shared pairs", "9"),
+                chunk(11, "9 | (b) boiling points increase down the group", "9"),
+                chunk(12, "9 | (c) layers slide / delocalised electrons conduct", "9")));
+
+        List<EvidenceItem> pinned = resolver.resolve(
+                "answer question 9(c) jan 2023 paper 1c", SCOPE);
+
+        // identical to the letter-less seek: QP 1 (seeking stem cap) + MS 3 (all parts)
+        assertThat(pinned).hasSize(4);
+        assertThat(pinned.get(0).source()).isEqualTo(EvidenceItem.EvidenceSource.QUESTION_PAPER);
+        for (int i = 1; i <= 3; i++) {
+            assertThat(pinned.get(i).source()).isEqualTo(EvidenceItem.EvidenceSource.MARK_SCHEME);
+            assertThat(pinned.get(i).chunkIndex()).isEqualTo(9 + i);
+        }
+    }
+
+    @Test
     @DisplayName("non-seeking ask keeps the flat allocation: QP ≤2 + MS ≤2 byte-identically")
     void nonSeekingAskKeepsFlatAllocation() {
         ParsedFetchQuery parsed = new ParsedFetchQuery(null, null, "JUN", 2019, 10,
@@ -531,6 +615,26 @@ class PaperQuestionResolverTest {
         assertThat(resolution.identityParsed()).isTrue();
         assertThat(resolution.identityLabel())
                 .isEqualTo("question 10 from the June 2019 paper 2");
+    }
+
+    @Test
+    @DisplayName("identity label echoes the bound part: question 9(b)(ii) from the January 2023 paper 1C")
+    void identityLabelEchoesPart() {
+        ParsedFetchQuery parsed = new ParsedFetchQuery(null, "1C", "JAN", 2023, 9, "b", true,
+                "answer question 9(b)(ii) jan 2023 paper 1c", "ii");
+        when(fetchService.fetch(anyString(), org.mockito.ArgumentMatchers.eq(SCOPE)))
+                .thenReturn(new FetchResult(parsed, false, false, List.of()));
+        when(documents.findTopByFileNameOrderByDocVersionDesc(anyString()))
+                .thenReturn(Optional.empty());
+        when(chunks.findRowIdsByPaperIdentity("JAN", 2023, List.of("4CH1/1C", "4CH0/1C")))
+                .thenReturn(List.of());
+
+        PaperQuestionResolver.Resolution resolution = resolver.resolveWithVerdict(
+                "answer question 9(b)(ii) jan 2023 paper 1c", SCOPE);
+
+        assertThat(resolution.identityParsed()).isTrue();
+        assertThat(resolution.identityLabel())
+                .isEqualTo("question 9(b)(ii) from the January 2023 paper 1C");
     }
 
     @Test

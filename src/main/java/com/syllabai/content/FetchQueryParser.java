@@ -60,10 +60,21 @@ import java.util.stream.Collectors;
  */
 public final class FetchQueryParser {
 
-    /** One parsed Fetch query — every field optional, filled only from the query text. */
+    /** One parsed Fetch query — every field optional, filled only from the query text.
+     *
+     *  @param partRoman the roman sub-part numeral ("ii"), bound ONLY when a part
+     *                   letter also bound (Edexcel prints romans under a letter:
+     *                   "(b)(ii)") — see {@link #QNUM}. Null when absent/unbound. */
     public record ParsedFetchQuery(String paperCode, String unit, String series,
                                    Integer year, Integer qnum, String part,
-                                   boolean msSeeking, String normalized) {
+                                   boolean msSeeking, String normalized, String partRoman) {
+
+        /** Old arity kept for existing callers and tests — roman unbound. */
+        public ParsedFetchQuery(String paperCode, String unit, String series,
+                                Integer year, Integer qnum, String part,
+                                boolean msSeeking, String normalized) {
+            this(paperCode, unit, series, year, qnum, part, msSeeking, normalized, null);
+        }
 
         /** True when the query pinned a paper identity itself (strict resolution). */
         public boolean hasExplicitPaper() {
@@ -74,6 +85,15 @@ public final class FetchQueryParser {
         public boolean isEmpty() {
             return paperCode == null && unit == null && series == null
                     && year == null && qnum == null;
+        }
+
+        /** The full part atom ref ("9-b-ii"), or the letter ref ("9-b"), or null —
+         *  the filterable identity shape the resolver's atom column can carry. */
+        public String partAtom() {
+            if (qnum == null || part == null) {
+                return null;
+            }
+            return qnum + "-" + part + (partRoman == null ? "" : "-" + partRoman);
         }
     }
 
@@ -128,14 +148,27 @@ public final class FetchQueryParser {
     /**
      * Question number led by the keyword: "question 10", "q4", "Q7b",
      * "question number 3", "question no. 10", "question 10th", "question ten",
-     * "question tenth part b". Group 1 captures ASCII digits (ordinal suffix
-     * tolerated outside the group), group 2 a word number, group 3 the part
-     * letter a–h.
+     * "question tenth part b", "9(b)", "9(b)(ii)". Group 1 captures ASCII
+     * digits (ordinal suffix tolerated outside the group), group 2 a word
+     * number, group 3 the part letter a–h (optionally parenthesized — the
+     * paper prints "(b)"), groups 4/5 an optional roman sub-part numeral
+     * bound ONLY as an extension of the letter — parenthesized with a
+     * mandatory close ("(ii)", so "(i think" can never bind) or bare after
+     * whitespace ("part b ii"). A bare roman without a letter never binds:
+     * "question 9 (i think)" and "question 9 (ii)" bind the number alone
+     * (Edexcel prints romans under a letter part; the pronoun/false-positive
+     * risk outweighs the shorthand). The code-side guard in {@link #parse}
+     * enforces the letter requirement regardless of what the regex matched,
+     * and the tail lookahead (not a word boundary) keeps the parenthesized
+     * forms from backtracking away.
      */
     static final Pattern QNUM = Pattern.compile(
             "\\b(?:question|q)\\.?\\s*(?:(?:number|no)\\.?\\s*)?"
                     + "(?:(\\d{1,2})(?:st|nd|rd|th)?|(" + WORD_QNUM_ALT + "))"
-                    + "\\s*(?:part\\s*)?([a-h])?\\b",
+                    + "\\s*(?:part\\s*)?(?:[(]?([a-h])[)]?"
+                    + "(?:\\s*\\((i{1,3}|iv|v|vi{1,3}|ix|x)\\)"
+                    + "|\\s+(i{1,3}|iv|v|vi{1,3}|ix|x)\\b)?(?![a-z0-9])"
+                    + "|\\b)",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -198,12 +231,19 @@ public final class FetchQueryParser {
 
         Integer qnum = null;
         String part = null;
+        String partRoman = null;
         Matcher n = QNUM.matcher(q);
         if (n.find()) {
             qnum = n.group(1) != null
                     ? Integer.valueOf(n.group(1))
                     : WORD_QNUMS.get(n.group(2).toLowerCase(Locale.ROOT));
             part = n.group(3) == null ? null : n.group(3).toLowerCase(Locale.ROOT);
+            // letter-gated roman: a roman numeral is a sub-part identity only
+            // under a bound part letter (see QNUM javadoc); the parenthesized
+            // and bare forms land in different groups and coalesce here
+            String romanRaw = n.group(4) != null ? n.group(4) : n.group(5);
+            partRoman = (part != null && romanRaw != null)
+                    ? romanRaw.toLowerCase(Locale.ROOT) : null;
         } else {
             Matcher o = QNUM_LEADING_ORDINAL.matcher(q);
             if (o.find()) {
@@ -219,8 +259,10 @@ public final class FetchQueryParser {
                 Optional.ofNullable(paperCode).orElse(unit == null ? "" : "unit:" + unit),
                 series == null ? "" : series,
                 year == null ? "" : year.toString(),
-                qnum == null ? "" : "Q" + qnum + (part == null ? "" : part))
+                qnum == null ? "" : "Q" + qnum
+                        + (part == null ? "" : part + (partRoman == null ? "" : "-" + partRoman)))
                 .trim();
-        return new ParsedFetchQuery(paperCode, unit, series, year, qnum, part, msSeeking, normalized);
+        return new ParsedFetchQuery(paperCode, unit, series, year, qnum, part, msSeeking,
+                normalized, partRoman);
     }
 }

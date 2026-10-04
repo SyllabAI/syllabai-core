@@ -99,6 +99,53 @@ class FetchQueryParserTest {
     }
 
     @Test
+    @DisplayName("roman sub-parts bind ONLY under a part letter: 9(b)(ii), q9b(ii), 'part b ii'")
+    void romanSubParts() {
+        // the paper's own printed form, parens and all
+        ParsedFetchQuery a = FetchQueryParser.parse("answer question 9(b)(ii) jan 2023 paper 1C");
+        assertThat(a.qnum()).isEqualTo(9);
+        assertThat(a.part()).isEqualTo("b");
+        assertThat(a.partRoman()).isEqualTo("ii");
+        assertThat(a.partAtom()).isEqualTo("9-b-ii");
+        // compact forms
+        ParsedFetchQuery b = FetchQueryParser.parse("q9b(ii) only");
+        assertThat(b.qnum()).isEqualTo(9);
+        assertThat(b.part()).isEqualTo("b");
+        assertThat(b.partRoman()).isEqualTo("ii");
+        ParsedFetchQuery c = FetchQueryParser.parse("question 9 part b ii june 2019");
+        assertThat(c.part()).isEqualTo("b");
+        assertThat(c.partRoman()).isEqualTo("ii");
+        // uppercase folds like the rest of the grammar
+        assertThat(FetchQueryParser.parse("Q7B(II) mark scheme").partRoman()).isEqualTo("ii");
+        // a letter with no roman parses exactly as before
+        ParsedFetchQuery d = FetchQueryParser.parse("mark scheme for Jan 2020 2C Q7b");
+        assertThat(d.part()).isEqualTo("b");
+        assertThat(d.partRoman()).isNull();
+        assertThat(d.partAtom()).isEqualTo("7-b");
+    }
+
+    @Test
+    @DisplayName("roman non-goals: no bare roman without a letter; prose parens never bind")
+    void romanNonGoals() {
+        // "(i think ...)" — the pronoun/prose paren must not become part (i)
+        ParsedFetchQuery a = FetchQueryParser.parse("question 9 (i think it was about bonding)");
+        assertThat(a.qnum()).isEqualTo(9);
+        assertThat(a.part()).isNull();
+        assertThat(a.partRoman()).isNull();
+        assertThat(a.partAtom()).isNull();
+        // a bare "(ii)" without a letter binds the number alone (documented: Edexcel
+        // prints romans under a letter part; the shorthand is not a bindable identity)
+        ParsedFetchQuery b = FetchQueryParser.parse("question 9 (ii) june 2019");
+        assertThat(b.qnum()).isEqualTo(9);
+        assertThat(b.part()).isNull();
+        assertThat(b.partRoman()).isNull();
+        // an unclosed paren can never bind a roman: "9(b (ii" binds the letter only
+        ParsedFetchQuery c = FetchQueryParser.parse("question 9(b (ii was it");
+        assertThat(c.part()).isEqualTo("b");
+        assertThat(c.partRoman()).isNull();
+    }
+
+    @Test
     @DisplayName("H1 non-goals: ordinary prose with numbers must not gain a question number")
     void paraphraseNonGoals() {
         // plain digits without an ordinal suffix never lead a question phrase
