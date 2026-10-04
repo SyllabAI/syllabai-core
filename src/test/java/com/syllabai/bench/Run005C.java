@@ -129,6 +129,25 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * inputs before anything runs, scoring is recomputed twice in-process (both
  * views) and the serialized aggregates must be byte-identical or the run
  * aborts.</p>
+ *
+ * <p>Precision-side mode (T-C83, charter tranche 8): {@code BENCH_MIN_COSINE}
+ * (double in (0, 1], default absent) trims the vector arm's POST-cut
+ * candidates to a minimum cosine — {@link VectorMinCosineRetrieval}: the
+ * PRODUCTION constant's own filter shape ({@code ContentVectorRetriever}
+ * applies {@code MIN_COSINE} as a post-cut stream filter; the candidate's own
+ * native cosine is the signal), REMOVAL-ONLY (the list under-fills and never
+ * backfills — the pre-cut backfill form was rejected, the T-C69 CAP-form
+ * ground: a pre-LIMIT predicate conflates removal with admission), the bm25
+ * arm untouched (bm25 has no cosine), the central boundary pre-fusion as
+ * shipped. Survivors keep their positions, so their fused RRF scores are
+ * byte-identical and the shipped fusion's tie-break (score, source, stableKey)
+ * is position-independent — the whole posture's delta is the removed-ref
+ * ledger, and the run pool is a per-query SUBSET of the recorded pool (the
+ * T-C67 theorem's inverted form: §8(d) monotone non-increasing, by
+ * construction). The default (absent) path stays byte-identical by
+ * construction: the provider stays bare (never wrapped). The one-lever guard
+ * is now six-way: reranker × weights × floor × kind-arm (with its rank-bound)
+ * × min-cosine are mutually exclusive, fail-closed.</p>
  */
 public final class Run005C {
 
@@ -180,7 +199,9 @@ public final class Run005C {
         int notesFloor = NotesFloorRetrieval.floorForSpec(env("BENCH_NOTES_FLOOR", ""));
         int notesKindArm = NotesArmRetrieval.kindArmForSpec(env("BENCH_NOTES_KIND_ARM", ""));
         int notesRankCap = NotesRankCapRetrieval.rankCapForSpec(env("BENCH_NOTES_RANK_CAP", ""));
-        requireSingleLever(armDReranker, fusionWeights, notesFloor, notesKindArm, notesRankCap);
+        double minCosine = VectorMinCosineRetrieval.minCosineForSpec(env("BENCH_MIN_COSINE", ""));
+        requireSingleLever(armDReranker, fusionWeights, notesFloor, notesKindArm, notesRankCap,
+                minCosine);
 
         String url = required("BENCH_JDBC_URL");
         String user = required("BENCH_JDBC_USER");
@@ -194,7 +215,7 @@ public final class Run005C {
 
         Result result = run(jdbc, snapshotDir, snapshot, gold, goldDir, artifactDir, runOut,
                 coreCommit, runDate, run003b, run004a, run002a0, perArmLimit, runId,
-                notesFloor, notesKindArm, notesRankCap, armDReranker, fusionWeights);
+                notesFloor, notesKindArm, notesRankCap, minCosine, armDReranker, fusionWeights);
         System.out.println(runId + " recorded");
         System.out.println("C served overall: " + result.servedOverall());
         System.out.println("C compliant overall: " + result.compliantOverall());
@@ -215,7 +236,7 @@ public final class Run005C {
                       Path goldDir, Path artifactDir, Path runOut, String coreCommit,
                       String runDate, Path run003bResults, Path run004aResults,
                       Path run002a0Results, int perArmLimit, String runId,
-                      int notesFloor, int notesKindArm, int notesRankCap,
+                      int notesFloor, int notesKindArm, int notesRankCap, double minCosine,
                       EvidenceReranker armDReranker,
                       Map<EvidenceItem.EvidenceSource, Double> fusionWeights) throws Exception {
 
@@ -270,6 +291,29 @@ public final class Run005C {
         RetrievalProvider semantic = new PgVectorRetrievalProvider(vectorRetriever);
         RetrievalProvider lexical = new Bm25Retriever(
                 new ChunkLexicalRepository(jdbc));
+
+        // Precision-side cosine trim (T-C83, charter tranche 8): the vector
+        // arm's post-cut candidates filtered to a minimum cosine — the
+        // PRODUCTION CONSTANT'S OWN filter shape (ContentVectorRetriever
+        // applies MIN_COSINE as a post-cut stream filter; this wrapper is
+        // that shape at the bench posture, on the candidate's own native
+        // cosine). REMOVAL-ONLY: the list under-fills, never backfills (the
+        // pre-cut backfill form was rejected — the T-C69 CAP-form ground: a
+        // pre-LIMIT predicate conflates removal with admission). The bm25
+        // arm is untouched (bm25 has no cosine). Survivors keep their
+        // positions, so their fused RRF scores stay byte-identical and the
+        // whole posture's delta is the removed-ref ledger; the run pool is a
+        // per-query SUBSET of the recorded pool — the T-C67 theorem's
+        // inverted form: §8(d) monotone non-increasing, by construction.
+        // Pre-registered in MIN-COSINE-PREREGISTRATION.md BEFORE this run.
+        // A theta <= 0 keeps the bare provider: the recorded path is
+        // byte-identical by construction (absent-path identity).
+        VectorMinCosineRetrieval.MinCosineProvider minCosineProvider = null;
+        if (minCosine > 0) {
+            minCosineProvider = (VectorMinCosineRetrieval.MinCosineProvider)
+                    VectorMinCosineRetrieval.maybeWrap(semantic, minCosine);
+            semantic = minCosineProvider;
+        }
 
         // Per-arm EXTERNAL_NOTES floor (T-C69, charter tranche 5): pure-additive
         // admission at the PROVIDER level — AFTER each arm's recorded limit cut,
@@ -461,7 +505,8 @@ public final class Run005C {
         context.put("B_run_003", overallOf(run003bResults, "chunk_axis", "validated_only_served"));
         context.put("A_run_004_served", overallOf(run004aResults, "chunk_axis", "served_view"));
         context.put("A_run_004_compliant", overallOf(run004aResults, "chunk_axis", "compliant_view"));
-        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm, notesRankCap)
+        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm,
+                notesRankCap, minCosine)
                 + " = fabric over the recorded arms A+B; same frozen gold, "
                 + "same formulas; A0 chunk axis is the zero baseline");
 
@@ -507,6 +552,14 @@ public final class Run005C {
                                         + "STRIPPED of the kind-arm's additive RRF term, "
                                         + "kind-arm-only admissions ordered by kind-arm rank, "
                                         + "chunk_ref ASC tiebreaks, pre-registered BEFORE this run)"
+                                : "")
+                        + (minCosine > 0
+                                ? " with the vector arm's post-cut candidates trimmed to "
+                                        + "cosine >= " + minCosine + " (the T-C83 precision-side "
+                                        + "MIN_COSINE lever, TRIM form — removal-only, the "
+                                        + "production constant's own post-cut filter shape, the "
+                                        + "list under-fills and never backfills, pre-registered "
+                                        + "BEFORE this run)"
                                 : "")
                         + "; chunk+query vectors replayed from the frozen artifact "
                         + manifest.path("run_id").asText()
@@ -558,7 +611,14 @@ public final class Run005C {
                                 + ") runs as a pure post-fusion served-order partition "
                                 + "(deterministic, zero API calls, no boundary interaction; "
                                 + "pre-registered in RANK-BOUNDED-KIND-ADMISSION-PREREGISTRATION.md "
-                                + "BEFORE this run)"));
+                                + "BEFORE this run)")
+                + (minCosine == 0 ? ""
+                        : "; the precision-side cosine trim (theta=" + minCosine
+                                + ") runs as a pure post-cut removal filter on the vector arm's "
+                                + "candidates (the production MIN_COSINE constant's own filter "
+                                + "shape at the bench posture; deterministic, zero API calls, no "
+                                + "boundary interaction; the list under-fills and never backfills; "
+                                + "pre-registered in MIN-COSINE-PREREGISTRATION.md BEFORE this run)"));
         results.put("fabric", Map.of(
                 "providers", notesArm == null
                         ? List.of(semantic.id(), lexical.id())
@@ -573,6 +633,7 @@ public final class Run005C {
                 "notes_floor", notesFloor,
                 "notes_kind_arm", notesKindArm,
                 "notes_rank_cap", notesRankCap,
+                "min_cosine", minCosine,
                 "served_boundary", "BoundaryPolicy.allowAll() — production-truth components as "
                         + "they stand (vector surface predates T-C05: the T-C20 registered gap)",
                 "compliant_boundary", "central VALIDATED-only policy applied PRE-fusion (the "
@@ -603,13 +664,13 @@ public final class Run005C {
                         + "numbers (recorded as the §8(e) caveat)",
                 "spec_resolution_axis", hvPresent
                         ? "SCORED for " + armLabel(armDReranker, fusionWeights, notesFloor,
-                                notesKindArm, notesRankCap)
+                                notesKindArm, notesRankCap, minCosine)
                         + " on BOTH views (see spec_resolution_hv): the snapshot "
                         + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
                         + "the served ALL-denominator view per §10 ruling 1, the compliant view "
                         + "reported alongside"
                         : "NOT SCOREABLE for " + armLabel(armDReranker, fusionWeights, notesFloor,
-                                notesKindArm, notesRankCap)
+                                notesKindArm, notesRankCap, minCosine)
                         + ": zero HUMAN_VALIDATED "
                         + "chunk→spec mapping rows in the snapshot (concept_attachments = 0, "
                         + "the T-C06/F-168 mapping substrate is pending) — a resolution number "
@@ -752,6 +813,22 @@ public final class Run005C {
                             + "idempotent across the determinism double-pass)"));
         }
 
+        // Min-cosine removal ledger (T-C83): recorded honestly AFTER the
+        // determinism pass — the idempotent per-query removal counts (the
+        // tracked set is keyed by stripped query text, so the served view,
+        // the compliant view and the double-pass all reconcile to one
+        // per-query ledger). The under-fill IS the removal — never patched.
+        if (minCosineProvider != null) {
+            results.put("min_cosine_removed", Map.of(
+                    "theta", minCosineProvider.minCosine(),
+                    "affected_queries", minCosineProvider.affectedQueries(),
+                    "removed_total", minCosineProvider.removedTotal(),
+                    "note", "vector-arm candidates removed by the post-cut cosine trim, per "
+                            + "the idempotent per-query ledger (distinct queries affected + "
+                            + "total removals; the list under-fills and never backfills — "
+                            + "the T-C83 pre-registration's removal-only shape)"));
+        }
+
         // ── 8. write evidence (results.json + RUN_REPORT.md + SHA256SUMS) ────
         Files.createDirectories(runOut);
         String pretty = stable.writerWithDefaultPrettyPrinter().writeValueAsString(results);
@@ -766,6 +843,8 @@ public final class Run005C {
                         (servedRankCap == null ? 0 : servedRankCap.underFilledQueries())
                                 + (compliantRankCap == null ? 0
                                         : compliantRankCap.underFilledQueries()),
+                        minCosine,
+                        minCosineProvider == null ? 0L : minCosineProvider.removedTotal(),
                         armDReranker, fusionWeights),
                 StandardCharsets.UTF_8);
         StringBuilder sums = new StringBuilder();
@@ -935,7 +1014,8 @@ public final class Run005C {
     /** The registry-facing arm label for the postures this orchestrator measures. */
     private static String armLabel(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
-                                   int notesFloor, int notesKindArm, int notesRankCap) {
+                                   int notesFloor, int notesKindArm, int notesRankCap,
+                                   double minCosine) {
         if (reranker != null) {
             return "arm D (arm C + reranker)";
         }
@@ -948,6 +1028,9 @@ public final class Run005C {
         if (notesRankCap > 0) {
             return "arm C (per-kind notes arm K=" + notesKindArm
                     + ", rank-bounded H=" + notesRankCap + ")";
+        }
+        if (minCosine > 0) {
+            return "arm C (precision-side cosine trim theta=" + minCosine + ")";
         }
         return notesKindArm > 0
                 ? "arm C (per-kind notes arm K=" + notesKindArm + ")"
@@ -1008,6 +1091,21 @@ public final class Run005C {
     static void requireSingleLever(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
                                    int notesFloor, int notesKindArm, int notesRankCap) {
+        requireSingleLever(reranker, fusionWeights, notesFloor, notesKindArm, notesRankCap, 0);
+    }
+
+    /**
+     * Six-way one-lever guard (T-C65 pair + T-C69 floor + T-C72 kind-arm +
+     * T-C77 rank-bound + T-C83 min-cosine): the min-cosine trim is a lever
+     * with its own mechanism (candidate REMOVAL from the vector arm) and is
+     * mutually exclusive with every other posture — a trim composed with any
+     * other lever would confound the attribution the harness exists to
+     * record. Fail-closed (the T-C83 pre-registration, §4).
+     */
+    static void requireSingleLever(EvidenceReranker reranker,
+                                   Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
+                                   int notesFloor, int notesKindArm, int notesRankCap,
+                                   double minCosine) {
         if (notesRankCap > 0 && notesKindArm <= 0) {
             throw new IllegalStateException("BENCH_NOTES_RANK_CAP requires BENCH_NOTES_KIND_ARM "
                     + "(a bound with no bounded arm is a composition error — fail-closed, "
@@ -1015,12 +1113,14 @@ public final class Run005C {
         }
         int active = (reranker != null ? 1 : 0) + (fusionWeights != null ? 1 : 0)
                 + (notesFloor > 0 ? 1 : 0)
-                + ((notesKindArm > 0 || notesRankCap > 0) ? 1 : 0);
+                + ((notesKindArm > 0 || notesRankCap > 0) ? 1 : 0)
+                + (minCosine > 0 ? 1 : 0);
         if (active > 1) {
             throw new IllegalStateException("BENCH_ARM_D_RERANKER, BENCH_FUSION_WEIGHTS, "
-                    + "BENCH_NOTES_FLOOR and BENCH_NOTES_KIND_ARM (with its T-C77 rank-bound "
-                    + "BENCH_NOTES_RANK_CAP) are mutually exclusive (one lever at a time — "
-                    + "the T-C65/T-C69/T-C72/T-C77 pre-registrations' attribution guard)");
+                    + "BENCH_NOTES_FLOOR, BENCH_NOTES_KIND_ARM (with its T-C77 rank-bound "
+                    + "BENCH_NOTES_RANK_CAP) and BENCH_MIN_COSINE (the T-C83 precision-side "
+                    + "trim) are mutually exclusive (one lever at a time — "
+                    + "the T-C65/T-C69/T-C72/T-C77/T-C83 pre-registrations' attribution guard)");
         }
     }
 
@@ -1049,6 +1149,7 @@ public final class Run005C {
                                  Map<String, Object> gate, int perArmLimit, int notesFloor,
                                  int notesKindArm, int kindArmUnderfilled, int notesRankCap,
                                  int rankCapUnderfill,
+                                 double minCosine, long minCosineRemoved,
                                  EvidenceReranker armDReranker,
                                  Map<EvidenceItem.EvidenceSource, Double> fusionWeights) {
         String armLetter = armDReranker == null ? "C" : "D";
@@ -1062,6 +1163,9 @@ public final class Run005C {
                 : notesRankCap > 0
                 ? "# Run 005 — C hybrid arm, per-kind notes arm posture, rank-bounded horizon "
                         + "(the T-C77 rank-bound lever, RANK-CAP form)\n\n"
+                : minCosine > 0
+                ? "# Run 005 — C hybrid arm, precision-side cosine trim posture "
+                        + "(the T-C83 MIN_COSINE lever, TRIM form)\n\n"
                 : notesKindArm > 0
                 ? "# Run 005 — C hybrid arm, per-kind notes arm posture (the T-C72 kind-arm lever, KIND-ARM form)\n\n"
                 : "# Run 005 — C hybrid arm, first recorded run (the retrieval fabric orchestrator)\n\n");
@@ -1117,6 +1221,15 @@ public final class Run005C {
                         + "SET contribution, the pool all unchanged; under-fill "
                         + rankCapUnderfill + " query-views shorter than H; pre-registered in "
                         + "RANK-BOUNDED-KIND-ADMISSION-PREREGISTRATION.md BEFORE this run).\n")
+                .append(minCosine == 0 ? "" : "- Min-cosine trim: the vector arm's post-cut candidates "
+                        + "filtered to cosine >= " + minCosine + " (the T-C83 precision-side "
+                        + "MIN_COSINE lever, TRIM form — the production constant's own post-cut "
+                        + "filter shape at the bench posture; REMOVAL-ONLY: the list under-fills "
+                        + "and never backfills, the bm25 arm untouched — bm25 has no cosine; "
+                        + "survivors' fused scores byte-identical, the whole posture's delta is "
+                        + "the removed-ref ledger; " + minCosineRemoved + " candidates removed "
+                        + "per the idempotent per-query ledger; pre-registered in "
+                        + "MIN-COSINE-PREREGISTRATION.md BEFORE this run).\n")
                 .append("- Frozen artifact `").append(manifest.path("run_id").asText()).append("`: model `")
                 .append(manifest.path("model").asText()).append("` @ ").append(manifest.path("dimension").asInt())
                 .append(" dims; verified fail-closed against this run's frozen inputs before anything ran; ")
