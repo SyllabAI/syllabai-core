@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -260,6 +261,12 @@ public class PaperQuestionResolver {
             default -> seriesToken;
         };
         StringBuilder label = new StringBuilder("question ").append(parsed.qnum());
+        if (parsed.part() != null) {
+            label.append("(").append(parsed.part()).append(")");
+            if (parsed.partRoman() != null) {
+                label.append("(").append(parsed.partRoman()).append(")");
+            }
+        }
         if (!series.isEmpty()) {
             label.append(" from the ").append(series);
         }
@@ -295,19 +302,21 @@ public class PaperQuestionResolver {
             return List.of();   // serving law: SUGGESTED bank rows never serve to learners
         }
         List<EvidenceItem> items = new ArrayList<>();
+        String partAtom = parsed.partAtom();
         if (paper.qpDocumentId() != null) {
-            items.addAll(documentQuestionChunks(paper.qpDocumentId(), parsed.qnum(),
+            items.addAll(documentQuestionChunks(paper.qpDocumentId(), parsed.qnum(), partAtom,
                     Document.Kind.QUESTION_PAPER, MAX_QP_ITEMS));
         }
         if (parsed.msSeeking() && paper.msDocumentId() != null) {
-            items.addAll(documentQuestionChunks(paper.msDocumentId(), parsed.qnum(),
+            items.addAll(documentQuestionChunks(paper.msDocumentId(), parsed.qnum(), partAtom,
                     Document.Kind.MARK_SCHEME, MAX_MS_ITEMS_SEEKING));
         }
         return List.copyOf(items);
     }
 
     private List<EvidenceItem> documentQuestionChunks(String canonicalDocumentId, int qnum,
-                                                      Document.Kind expectedKind, int cap) {
+                                                      String partAtom, Document.Kind expectedKind,
+                                                      int cap) {
         if (canonicalDocumentId == null) {
             return List.of();
         }
@@ -322,7 +331,7 @@ public class PaperQuestionResolver {
             return List.of();
         }
         List<DocumentChunk> rows = chunks.findByDocumentRowIdOrderByChunkIndexAsc(doc.get().id());
-        return matchQuestion(rows, qnum).stream()
+        return matchQuestion(rows, qnum, partAtom).stream()
                 .limit(cap)
                 .map(chunk -> evidence(doc.get(), chunk))
                 .toList();
@@ -351,7 +360,7 @@ public class PaperQuestionResolver {
                     continue;
                 }
                 List<DocumentChunk> rows = chunks.findByDocumentRowIdOrderByChunkIndexAsc(card.get().id());
-                List<DocumentChunk> matched = matchQuestion(rows, parsed.qnum());
+                List<DocumentChunk> matched = matchQuestion(rows, parsed.qnum(), parsed.partAtom());
                 if (!matched.isEmpty()) {
                     return matched.stream()
                             .limit(MAX_CARD_ITEMS)
@@ -441,9 +450,10 @@ public class PaperQuestionResolver {
                     .filter(d -> unitOf(matchedCode.get(d.id())).equals(boundUnit))
                     .toList();
             List<EvidenceItem> items = new ArrayList<>();
-            pinKind(bound, Document.Kind.QUESTION_PAPER, parsed.qnum(),
+            String partAtom = parsed.partAtom();
+            pinKind(bound, Document.Kind.QUESTION_PAPER, parsed.qnum(), partAtom,
                     parsed.msSeeking() ? MAX_STORE_QP_ITEMS_SEEKING : MAX_STORE_QP_ITEMS, items);
-            pinKind(bound, Document.Kind.MARK_SCHEME, parsed.qnum(),
+            pinKind(bound, Document.Kind.MARK_SCHEME, parsed.qnum(), partAtom,
                     parsed.msSeeking() ? MAX_STORE_MS_ITEMS_SEEKING : MAX_STORE_MS_ITEMS, items);
             return List.copyOf(items);
         } catch (RuntimeException e) {
@@ -468,7 +478,7 @@ public class PaperQuestionResolver {
     }
 
     /** Match the question's chunks in each document of one kind, capped in total. */
-    private void pinKind(List<Document> docs, Document.Kind kind, int qnum,
+    private void pinKind(List<Document> docs, Document.Kind kind, int qnum, String partAtom,
                          int cap, List<EvidenceItem> items) {
         int pinned = 0;
         for (Document doc : docs) {
@@ -476,7 +486,7 @@ public class PaperQuestionResolver {
                 continue;
             }
             for (DocumentChunk chunk : matchQuestion(
-                    chunks.findByDocumentRowIdOrderByChunkIndexAsc(doc.id()), qnum)) {
+                    chunks.findByDocumentRowIdOrderByChunkIndexAsc(doc.id()), qnum, partAtom)) {
                 if (pinned >= cap) {
                     break;
                 }
@@ -549,8 +559,31 @@ public class PaperQuestionResolver {
      * number: the {@code atomNumber} column first (authoritative when
      * populated), question-number markers in the text as the fallback. Never
      * more than a few rows — the pool must keep room for the retrieval arms.
+     *
+     * <p>Part-level asks (2026-10-04 parser feature): when the ask bound a
+     * part — {@code partAtom} like "9-b" or "9-b-ii" — chunks whose atom
+     * equals the ref exactly are preferred, narrowing the pins to that
+     * printed sub-part. The store's atom column is question-level today (the
+     * parser emits "q9"-style group keys only), so the exact-part match
+     * usually misses and selection falls back to the question-level result —
+     * a part-level ask refines pins ONLY where part atoms exist, never
+     * starves them (honouring the PR #72 contract: every part of a resolved
+     * question's mark scheme pins). Part-aware re-ingestion lights the
+     * exact-match lane up corpus-wide without another resolver change.</p>
      */
-    private static List<DocumentChunk> matchQuestion(List<DocumentChunk> rows, int qnum) {
+    private static List<DocumentChunk> matchQuestion(List<DocumentChunk> rows, int qnum,
+                                                     String partAtom) {
+        if (partAtom != null) {
+            String ref = partAtom.strip().toLowerCase(Locale.ROOT);
+            List<DocumentChunk> byPart = rows.stream()
+                    .filter(c -> c.atomNumber() != null
+                            && ref.equals(c.atomNumber().strip().toLowerCase(Locale.ROOT)))
+                    .toList();
+            if (!byPart.isEmpty()) {
+                return byPart;
+            }
+            // no part-level atoms in this document — question-level selection below
+        }
         List<DocumentChunk> byAtom = rows.stream()
                 .filter(c -> atomMatches(c.atomNumber(), qnum))
                 .toList();
