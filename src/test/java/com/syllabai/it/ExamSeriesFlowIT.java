@@ -97,6 +97,18 @@ class ExamSeriesFlowIT {
         SecurityContextHolder.clearContext();
     }
 
+    @AfterEach
+    void removeImportFixtureRows() {
+        // the re-import test writes its "-it" fixture row into the SAME
+        // calendar table the V63 seed occupies; without this cleanup the row
+        // leaks into seededCalendarIsTheCitedSet's strict hasSize(5) pin
+        // whenever JUnit method order puts the import test first (observed in
+        // core-ci run 37201075670)
+        examSeries.findByBoardAndQualificationAndSeriesCode(
+                "PEARSON_EDEXCEL", "INTERNATIONAL_GCSE", "2028-may-june-it")
+                .ifPresent(examSeries::delete);
+    }
+
     private UUID newLearner() {
         return authService.register(new RegisterRequest(
                 "it-exam-" + UUID.randomUUID().toString().substring(0, 8) + "@syllabai.test",
@@ -165,8 +177,10 @@ class ExamSeriesFlowIT {
         assertThat(target.courseSlug()).isEqualTo("igcse-chemistry-19");
         assertThat(target.seriesCode()).isEqualTo("2027-january");
         // the countdown is DERIVED: window length arithmetic must hold
-        // (2027-01-08 → 2027-01-25 = 17 days between the two horizons)
-        assertThat(target.daysToWindowStart() - target.daysToWindowEnd()).isEqualTo(17);
+        // (2027-01-08 → 2027-01-25 = 17 days — both horizons are measured
+        // from the same read-day clock, so end − start is the window length;
+        // the start horizon itself is negative iff the window has opened)
+        assertThat(target.daysToWindowEnd() - target.daysToWindowStart()).isEqualTo(17);
         assertThat(target.entryDeadlinePassed()).isFalse();
 
         // both read models carry the block, with the same derived facts
