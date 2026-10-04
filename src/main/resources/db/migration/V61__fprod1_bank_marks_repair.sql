@@ -26,7 +26,7 @@
 -- in-tx marks-sum delta (+26 there); census pins unchanged.
 --
 -- Fresh-database safety: on an empty questions table the census block is skipped and
--- the UPDATEs match nothing.
+-- the census block is skipped and the UPDATEs match nothing.
 
 DO $$
 DECLARE
@@ -35,8 +35,10 @@ DECLARE
     q_marks_before int;
     audit_floor constant int := 5586;  -- probe max 2026-10-04; monotonic floor, not exact
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM questions) THEN
-        RETURN;  -- fresh database: nothing to repair
+    IF NOT EXISTS (SELECT 1 FROM campaign_db_identity WHERE campaign_label = 'T-C04-CAMPAIGN') THEN
+        RETURN;  -- fresh/test databases never claim campaign identity (V15 discipline:
+                 -- the identity row is a claim act, never a migration side effect),
+                 -- so the census-gated repair is a no-op there by construction
     END IF;
 
     -- ── census pins (exact; any drift aborts the deploy) ─────────────────────
