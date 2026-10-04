@@ -1,0 +1,38 @@
+name: Safe-merge pre-verifier (advisory)
+
+# T-COORD-2 P5. Posts/updates ONE advisory comment per PR summarizing
+# merge-safety facts (packet, CI, mergeability, base freshness, leases).
+# Never a required check, never blocks — the operator's merge word is the
+# gate. Comment is updated in place on every push to avoid spam.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Verify (advisory comment)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >
+          python3 .syllabai/tools/safe_merge_check.py
+          --repo-root . --post
