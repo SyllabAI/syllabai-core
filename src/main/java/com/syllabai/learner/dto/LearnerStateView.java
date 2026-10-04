@@ -11,7 +11,30 @@ public record LearnerStateView(
         List<ReviewView> pendingReviews,
         List<TutorEngagementView> tutorEngagements,
         List<FlashcardRatingView> flashcardRatings,
-        List<NoteVoteView> noteVotes) {
+        List<NoteVoteView> noteVotes,
+        List<com.syllabai.learner.exam.CourseExamTargetView> examTargets) {
+
+    public LearnerStateView {
+        skillStates = skillStates == null ? List.of() : List.copyOf(skillStates);
+        misconceptionStates = misconceptionStates == null ? List.of() : List.copyOf(misconceptionStates);
+        pendingReviews = pendingReviews == null ? List.of() : List.copyOf(pendingReviews);
+        tutorEngagements = tutorEngagements == null ? List.of() : List.copyOf(tutorEngagements);
+        flashcardRatings = flashcardRatings == null ? List.of() : List.copyOf(flashcardRatings);
+        noteVotes = noteVotes == null ? List.of() : List.copyOf(noteVotes);
+        examTargets = examTargets == null ? List.of() : List.copyOf(examTargets);
+    }
+
+    /** pre-T-C79 callers: the state view composes honestly without exam targets */
+    public LearnerStateView(UUID learnerId,
+                            List<SkillStateView> skillStates,
+                            List<MisconceptionStateView> misconceptionStates,
+                            List<ReviewView> pendingReviews,
+                            List<TutorEngagementView> tutorEngagements,
+                            List<FlashcardRatingView> flashcardRatings,
+                            List<NoteVoteView> noteVotes) {
+        this(learnerId, skillStates, misconceptionStates, pendingReviews, tutorEngagements,
+                flashcardRatings, noteVotes, List.of());
+    }
 
     public record ReviewView(UUID nodeId, Instant dueAt, String reason, String nodeName) {
     }

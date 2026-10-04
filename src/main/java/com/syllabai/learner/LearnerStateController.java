@@ -8,6 +8,7 @@ import com.syllabai.learner.dto.MisconceptionStateView;
 import com.syllabai.learner.dto.SkillStateView;
 import com.syllabai.learner.dto.FlashcardRatingView;
 import com.syllabai.learner.dto.NoteVoteView;
+import com.syllabai.learner.exam.ExamTargetReader;
 import com.syllabai.identity.CurrentUserId;
 import com.syllabai.knowledge.KnowledgeNode;
 import com.syllabai.knowledge.KnowledgeNodeRepository;
@@ -43,6 +44,7 @@ public class LearnerStateController {
     private final TutorTopicEngagementRepository engagements;
     private final FlashcardRatingRepository flashcardRatings;
     private final NoteVoteRepository noteVotes;
+    private final ExamTargetReader examTargets;
 
     /** the learner-state rating window (same recency posture as tutor asks) */
     private static final int FLASHCARD_RATING_LIMIT = 50;
@@ -59,7 +61,8 @@ public class LearnerStateController {
                                   TutorEngagementReader tutorEngagements,
                                   TutorTopicEngagementRepository engagements,
                                   FlashcardRatingRepository flashcardRatings,
-                                  NoteVoteRepository noteVotes) {
+                                  NoteVoteRepository noteVotes,
+                                  ExamTargetReader examTargets) {
         this.learnerModel = learnerModel;
         this.graphs = graphs;
         this.reviewSchedules = reviewSchedules;
@@ -70,6 +73,7 @@ public class LearnerStateController {
         this.engagements = engagements;
         this.flashcardRatings = flashcardRatings;
         this.noteVotes = noteVotes;
+        this.examTargets = examTargets;
     }
 
     @GetMapping("/state")
@@ -157,8 +161,11 @@ public class LearnerStateController {
                 .map(v -> NoteVoteView.from(v, null))
                 .toList();
 
+        // T-C79 (ADR-035): the declared exam targets with their countdowns,
+        // derived on this read (ADR-031 — recomputed, never stored). Empty
+        // when nothing is declared: the honest "add your exam series" state.
         return new LearnerStateView(learnerId, skillViews, misconceptionViews, reviewViews,
-                engagementViews, flashcardViews, noteVoteViews);
+                engagementViews, flashcardViews, noteVoteViews, examTargets.targetsFor(learnerId));
     }
 
     /**
