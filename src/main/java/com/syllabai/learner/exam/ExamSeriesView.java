@@ -2,6 +2,7 @@ package com.syllabai.learner.exam;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * One published sitting in the picker calendar (T-C79). Provenance travels

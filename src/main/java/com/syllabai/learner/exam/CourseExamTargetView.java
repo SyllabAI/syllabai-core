@@ -2,6 +2,7 @@ package com.syllabai.learner.exam;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 /**
  * One declared exam target with its countdown, derived at READ on the server
