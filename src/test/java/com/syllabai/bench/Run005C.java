@@ -179,7 +179,8 @@ public final class Run005C {
                 fusionWeightsForSpec(env("BENCH_FUSION_WEIGHTS", ""));
         int notesFloor = NotesFloorRetrieval.floorForSpec(env("BENCH_NOTES_FLOOR", ""));
         int notesKindArm = NotesArmRetrieval.kindArmForSpec(env("BENCH_NOTES_KIND_ARM", ""));
-        requireSingleLever(armDReranker, fusionWeights, notesFloor, notesKindArm);
+        int notesRankCap = NotesRankCapRetrieval.rankCapForSpec(env("BENCH_NOTES_RANK_CAP", ""));
+        requireSingleLever(armDReranker, fusionWeights, notesFloor, notesKindArm, notesRankCap);
 
         String url = required("BENCH_JDBC_URL");
         String user = required("BENCH_JDBC_USER");
@@ -193,7 +194,7 @@ public final class Run005C {
 
         Result result = run(jdbc, snapshotDir, snapshot, gold, goldDir, artifactDir, runOut,
                 coreCommit, runDate, run003b, run004a, run002a0, perArmLimit, runId,
-                notesFloor, notesKindArm, armDReranker, fusionWeights);
+                notesFloor, notesKindArm, notesRankCap, armDReranker, fusionWeights);
         System.out.println(runId + " recorded");
         System.out.println("C served overall: " + result.servedOverall());
         System.out.println("C compliant overall: " + result.compliantOverall());
@@ -214,7 +215,8 @@ public final class Run005C {
                       Path goldDir, Path artifactDir, Path runOut, String coreCommit,
                       String runDate, Path run003bResults, Path run004aResults,
                       Path run002a0Results, int perArmLimit, String runId,
-                      int notesFloor, int notesKindArm, EvidenceReranker armDReranker,
+                      int notesFloor, int notesKindArm, int notesRankCap,
+                      EvidenceReranker armDReranker,
                       Map<EvidenceItem.EvidenceSource, Double> fusionWeights) throws Exception {
 
         // ── 0. verify the frozen artifact against the exact frozen inputs ────
@@ -308,17 +310,15 @@ public final class Run005C {
         // serving posture's map, zero new fusion code. A null map keeps the
         // 3-arg ctor: the recorded unweighted posture, byte-identical by
         // construction (absent-path identity).
+        BoundaryPolicy servedBoundary = BoundaryPolicy.allowAll();
+        BoundaryPolicy compliantBoundary =
+                candidate -> "VALIDATED".equals(paperState.get(candidate.documentId()));
         RetrievalFabric rawServedFabric = fusionWeights == null
-                ? new RetrievalFabric(arms, fusion,
-                        BoundaryPolicy.allowAll())
-                : new RetrievalFabric(arms, fusion,
-                        BoundaryPolicy.allowAll(), fusionWeights);
+                ? new RetrievalFabric(arms, fusion, servedBoundary)
+                : new RetrievalFabric(arms, fusion, servedBoundary, fusionWeights);
         RetrievalFabric rawCompliantFabric = fusionWeights == null
-                ? new RetrievalFabric(arms, fusion,
-                        candidate -> "VALIDATED".equals(paperState.get(candidate.documentId())))
-                : new RetrievalFabric(arms, fusion,
-                        candidate -> "VALIDATED".equals(paperState.get(candidate.documentId())),
-                        fusionWeights);
+                ? new RetrievalFabric(arms, fusion, compliantBoundary)
+                : new RetrievalFabric(arms, fusion, compliantBoundary, fusionWeights);
         // Arm D (T-C63): the reranker sits DOWNSTREAM of fusion (registry row D)
         // — the boundary stays pre-fusion inside the raw fabrics, untouched. A
         // null reranker keeps the bare fabric method reference: the recorded
@@ -327,6 +327,31 @@ public final class Run005C {
                 RerankedRetrieval.maybeWrap(rawServedFabric, armDReranker);
         RerankedRetrieval.FusedRetriever compliantFabric =
                 RerankedRetrieval.maybeWrap(rawCompliantFabric, armDReranker);
+
+        // Rank-bounded kind-admission (T-C77, charter tranche 7): the
+        // post-fusion TWO-ARM HORIZON PARTITION — the fused pool re-partitioned
+        // per view: prefix = refs with an arm A/B contribution ordered by the
+        // STRIPPED two-arm RRF score (the kind-arm's additive term removed),
+        // tail = kind-arm-only refs ordered by kind-arm rank, chunk_ref ASC
+        // tiebreaks; the kind-arm admits exactly as recorded (its list, its SET
+        // contribution, the pool all unchanged), its exclusive mass serving
+        // below the entire two-arm surface. Applied identically to BOTH
+        // fabrics, each wrapper carrying its own view boundary so the strip
+        // mirrors term-for-term the ranks that view's fusion consumed. Absent
+        // gate -> no wrapper: the run-005-h path byte-identical by
+        // construction. Pre-registered in
+        // RANK-BOUNDED-KIND-ADMISSION-PREREGISTRATION.md BEFORE this run.
+        Set<String> twoArmIds = Set.of(semantic.id(), lexical.id());
+        NotesRankCapRetrieval servedRankCap = NotesRankCapRetrieval.maybeWrap(
+                servedFabric, notesArm, notesRankCap, servedBoundary, twoArmIds);
+        if (servedRankCap != null) {
+            servedFabric = servedRankCap::retrieve;
+        }
+        NotesRankCapRetrieval compliantRankCap = NotesRankCapRetrieval.maybeWrap(
+                compliantFabric, notesArm, notesRankCap, compliantBoundary, twoArmIds);
+        if (compliantRankCap != null) {
+            compliantFabric = compliantRankCap::retrieve;
+        }
 
         // ── 4. per-query scoring: served view (ALL) + compliant view (gate-on)
         List<BenchMetrics.ChunkRow> servedRows = new ArrayList<>();
@@ -436,7 +461,7 @@ public final class Run005C {
         context.put("B_run_003", overallOf(run003bResults, "chunk_axis", "validated_only_served"));
         context.put("A_run_004_served", overallOf(run004aResults, "chunk_axis", "served_view"));
         context.put("A_run_004_compliant", overallOf(run004aResults, "chunk_axis", "compliant_view"));
-        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
+        context.put("note", armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm, notesRankCap)
                 + " = fabric over the recorded arms A+B; same frozen gold, "
                 + "same formulas; A0 chunk axis is the zero baseline");
 
@@ -473,6 +498,15 @@ public final class Run005C {
                                         + "kind-arm lever, KIND-ARM form — notes compete only "
                                         + "against notes, the existing arms' lists untouched, "
                                         + "pre-registered BEFORE this run)"
+                                : "")
+                        + (notesRankCap > 0
+                                ? " with the kind-arm's exclusive mass rank-bounded below the "
+                                        + "two-arm surface H=" + notesRankCap + " (the T-C77 "
+                                        + "rank-bound lever, RANK-CAP form — the fused pool "
+                                        + "re-partitioned post-fusion: two-arm contributions "
+                                        + "STRIPPED of the kind-arm's additive RRF term, "
+                                        + "kind-arm-only admissions ordered by kind-arm rank, "
+                                        + "chunk_ref ASC tiebreaks, pre-registered BEFORE this run)"
                                 : "")
                         + "; chunk+query vectors replayed from the frozen artifact "
                         + manifest.path("run_id").asText()
@@ -518,7 +552,13 @@ public final class Run005C {
                                 + "production candidate SQL + deterministic chunk_ref ASC "
                                 + "tiebreak through the production EmbeddingProvider port, "
                                 + "zero API calls, no boundary interaction; pre-registered in "
-                                + "ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run)"));
+                                + "ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run)")
+                + (notesRankCap == 0 ? ""
+                        : "; the kind-arm horizon rank-bound (H=" + notesRankCap
+                                + ") runs as a pure post-fusion served-order partition "
+                                + "(deterministic, zero API calls, no boundary interaction; "
+                                + "pre-registered in RANK-BOUNDED-KIND-ADMISSION-PREREGISTRATION.md "
+                                + "BEFORE this run)"));
         results.put("fabric", Map.of(
                 "providers", notesArm == null
                         ? List.of(semantic.id(), lexical.id())
@@ -532,6 +572,7 @@ public final class Run005C {
                 "per_arm_limit", perArmLimit,
                 "notes_floor", notesFloor,
                 "notes_kind_arm", notesKindArm,
+                "notes_rank_cap", notesRankCap,
                 "served_boundary", "BoundaryPolicy.allowAll() — production-truth components as "
                         + "they stand (vector surface predates T-C05: the T-C20 registered gap)",
                 "compliant_boundary", "central VALIDATED-only policy applied PRE-fusion (the "
@@ -561,12 +602,14 @@ public final class Run005C {
                         + "call, so a deployed hybrid adds one embedding round-trip to these "
                         + "numbers (recorded as the §8(e) caveat)",
                 "spec_resolution_axis", hvPresent
-                        ? "SCORED for " + armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
+                        ? "SCORED for " + armLabel(armDReranker, fusionWeights, notesFloor,
+                                notesKindArm, notesRankCap)
                         + " on BOTH views (see spec_resolution_hv): the snapshot "
                         + "carries the HUMAN_VALIDATED chunk→SP projection (SNAP5-H1); gate input = "
                         + "the served ALL-denominator view per §10 ruling 1, the compliant view "
                         + "reported alongside"
-                        : "NOT SCOREABLE for " + armLabel(armDReranker, fusionWeights, notesFloor, notesKindArm)
+                        : "NOT SCOREABLE for " + armLabel(armDReranker, fusionWeights, notesFloor,
+                                notesKindArm, notesRankCap)
                         + ": zero HUMAN_VALIDATED "
                         + "chunk→spec mapping rows in the snapshot (concept_attachments = 0, "
                         + "the T-C06/F-168 mapping substrate is pending) — a resolution number "
@@ -694,6 +737,21 @@ public final class Run005C {
                             + "across the determinism double-pass"));
         }
 
+        // Rank-cap under-fill (T-C77): recorded honestly AFTER the determinism
+        // pass — queries whose two-arm surface came up shorter than the
+        // protected horizon (kind-arm-only refs then serve inside 1..H; the
+        // partition's guarantee is conditional, the recording is not).
+        if (servedRankCap != null) {
+            results.put("notes_rank_cap_underfill", Map.of(
+                    "horizon", notesRankCap,
+                    "served_queries", servedRankCap.underFilledQueries(),
+                    "compliant_queries", compliantRankCap.underFilledQueries(),
+                    "note", "queries whose two-arm surface came up shorter than the protected "
+                            + "horizon H (kind-arm-only refs then serve inside 1..H — recorded "
+                            + "honestly, never patched; tracked by stripped query text, "
+                            + "idempotent across the determinism double-pass)"));
+        }
+
         // ── 8. write evidence (results.json + RUN_REPORT.md + SHA256SUMS) ────
         Files.createDirectories(runOut);
         String pretty = stable.writerWithDefaultPrettyPrinter().writeValueAsString(results);
@@ -704,6 +762,10 @@ public final class Run005C {
                         compliantStarved, violations, dbChunks, validatedCorpus, context,
                         manifest, gate, perArmLimit, notesFloor, notesKindArm,
                         notesArm == null ? 0 : notesArm.underFilledQueries(),
+                        notesRankCap,
+                        (servedRankCap == null ? 0 : servedRankCap.underFilledQueries())
+                                + (compliantRankCap == null ? 0
+                                        : compliantRankCap.underFilledQueries()),
                         armDReranker, fusionWeights),
                 StandardCharsets.UTF_8);
         StringBuilder sums = new StringBuilder();
@@ -873,7 +935,7 @@ public final class Run005C {
     /** The registry-facing arm label for the postures this orchestrator measures. */
     private static String armLabel(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
-                                   int notesFloor, int notesKindArm) {
+                                   int notesFloor, int notesKindArm, int notesRankCap) {
         if (reranker != null) {
             return "arm D (arm C + reranker)";
         }
@@ -882,6 +944,10 @@ public final class Run005C {
         }
         if (notesFloor > 0) {
             return "arm C (per-arm notes floor N=" + notesFloor + ")";
+        }
+        if (notesRankCap > 0) {
+            return "arm C (per-kind notes arm K=" + notesKindArm
+                    + ", rank-bounded H=" + notesRankCap + ")";
         }
         return notesKindArm > 0
                 ? "arm C (per-kind notes arm K=" + notesKindArm + ")"
@@ -928,13 +994,33 @@ public final class Run005C {
     static void requireSingleLever(EvidenceReranker reranker,
                                    Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
                                    int notesFloor, int notesKindArm) {
+        requireSingleLever(reranker, fusionWeights, notesFloor, notesKindArm, 0);
+    }
+
+    /**
+     * Five-way one-lever guard (T-C65 pair + T-C69 floor + T-C72 kind-arm +
+     * T-C77 rank-bound): the tranche's lever is the BOUND on the recorded
+     * kind-arm posture, so the kind-arm and its rank-bound count as ONE lever
+     * — but a bound with no bounded arm is a composition error, and the bound
+     * remains mutually exclusive with the floor x reranker x weights levers.
+     * Fail-closed (the T-C77 pre-registration, §4).
+     */
+    static void requireSingleLever(EvidenceReranker reranker,
+                                   Map<EvidenceItem.EvidenceSource, Double> fusionWeights,
+                                   int notesFloor, int notesKindArm, int notesRankCap) {
+        if (notesRankCap > 0 && notesKindArm <= 0) {
+            throw new IllegalStateException("BENCH_NOTES_RANK_CAP requires BENCH_NOTES_KIND_ARM "
+                    + "(a bound with no bounded arm is a composition error — fail-closed, "
+                    + "the T-C77 pre-registration)");
+        }
         int active = (reranker != null ? 1 : 0) + (fusionWeights != null ? 1 : 0)
-                + (notesFloor > 0 ? 1 : 0) + (notesKindArm > 0 ? 1 : 0);
+                + (notesFloor > 0 ? 1 : 0)
+                + ((notesKindArm > 0 || notesRankCap > 0) ? 1 : 0);
         if (active > 1) {
             throw new IllegalStateException("BENCH_ARM_D_RERANKER, BENCH_FUSION_WEIGHTS, "
-                    + "BENCH_NOTES_FLOOR and BENCH_NOTES_KIND_ARM are mutually exclusive "
-                    + "(one lever at a time — the T-C65/T-C69/T-C72 pre-registrations' "
-                    + "attribution guard)");
+                    + "BENCH_NOTES_FLOOR and BENCH_NOTES_KIND_ARM (with its T-C77 rank-bound "
+                    + "BENCH_NOTES_RANK_CAP) are mutually exclusive (one lever at a time — "
+                    + "the T-C65/T-C69/T-C72/T-C77 pre-registrations' attribution guard)");
         }
     }
 
@@ -961,7 +1047,8 @@ public final class Run005C {
                                  int violations, int corpusN, long validatedCorpus,
                                  Map<String, Object> context, JsonNode manifest,
                                  Map<String, Object> gate, int perArmLimit, int notesFloor,
-                                 int notesKindArm, int kindArmUnderfilled,
+                                 int notesKindArm, int kindArmUnderfilled, int notesRankCap,
+                                 int rankCapUnderfill,
                                  EvidenceReranker armDReranker,
                                  Map<EvidenceItem.EvidenceSource, Double> fusionWeights) {
         String armLetter = armDReranker == null ? "C" : "D";
@@ -972,6 +1059,9 @@ public final class Run005C {
                 ? "# Run 005 — C hybrid arm, plan-v2 weighted fusion posture (the shipped PLAN_V2_WEIGHTS lever)\n\n"
                 : notesFloor > 0
                 ? "# Run 005 — C hybrid arm, per-arm notes floor posture (the T-C69 per-kind quota lever, floor form)\n\n"
+                : notesRankCap > 0
+                ? "# Run 005 — C hybrid arm, per-kind notes arm posture, rank-bounded horizon "
+                        + "(the T-C77 rank-bound lever, RANK-CAP form)\n\n"
                 : notesKindArm > 0
                 ? "# Run 005 — C hybrid arm, per-kind notes arm posture (the T-C72 kind-arm lever, KIND-ARM form)\n\n"
                 : "# Run 005 — C hybrid arm, first recorded run (the retrieval fabric orchestrator)\n\n");
@@ -1017,6 +1107,16 @@ public final class Run005C {
                         + "central boundary as shipped; under-fill " + kindArmUnderfilled
                         + " queries at kind-universe exhaustion; pre-registered in "
                         + "ARM-COMPOSITION-PREREGISTRATION.md BEFORE this run).\n")
+                .append(notesRankCap == 0 ? "" : "- Notes rank cap: kind-arm horizon rank-bound H="
+                        + notesRankCap + " applied POST-fusion to BOTH fabrics (the T-C77 "
+                        + "rank-bound lever, RANK-CAP form — the two-arm horizon partition: "
+                        + "every pool ref carrying an arm A/B contribution orders by its "
+                        + "STRIPPED two-arm RRF score, kind-arm-only admissions serve below "
+                        + "the entire two-arm surface ordered by kind-arm rank, chunk_ref ASC "
+                        + "tiebreaks; the kind-arm admits exactly as recorded — its list, its "
+                        + "SET contribution, the pool all unchanged; under-fill "
+                        + rankCapUnderfill + " query-views shorter than H; pre-registered in "
+                        + "RANK-BOUNDED-KIND-ADMISSION-PREREGISTRATION.md BEFORE this run).\n")
                 .append("- Frozen artifact `").append(manifest.path("run_id").asText()).append("`: model `")
                 .append(manifest.path("model").asText()).append("` @ ").append(manifest.path("dimension").asInt())
                 .append(" dims; verified fail-closed against this run's frozen inputs before anything ran; ")
